@@ -30,6 +30,13 @@ namespace Wonderland
         private IEnumerator Start()
         {
             WonderlandLighting.Apply();
+            // Fixed foveated rendering: the periphery shades at lower resolution (the terrain's per-pixel grass is the
+            // heaviest shader); dynamic, so the runtime only raises it when the GPU needs headroom.
+            try { OVRManager.foveatedRenderingLevel = OVRManager.FoveatedRenderingLevel.High; OVRManager.useDynamicFoveatedRendering = true; }
+            catch (System.Exception e) { Debug.LogWarning("Wonderland: foveation unavailable: " + e.Message); }
+            var perf = gameObject.AddComponent<PerfLog>();
+            perf.Context = () => World == null || World.Terrain == null ? "" :
+                $"{World.Forest.Trees.Count} trees, {World.Buildings.Houses.Count} houses, land {World.Terrain.LandArea():0.0} m2, tool {Tools?.Tool}";
             if (Rig == null) Rig = FindAnyObjectByType<OVRCameraRig>();
             // Let head tracking settle so "in front of you" means something.
             for (int i = 0; i < 30; i++) yield return null;
@@ -72,7 +79,8 @@ namespace Wonderland
             });
             Palette.AddGlobal("Move", () => { Tools.PlacingWorld = true; Tools.Say("Point where the world should grow"); });
             Palette.AddGlobal("New", Tools.RequestReset);
-            Tools.Say(restored ? "Welcome back - your world was restored" : roomNote ?? "Sculpt some hills to begin", 6f);
+            string note = World.RoomStatus.Contains("ignored") ? World.RoomStatus : roomNote;
+            Tools.Say(restored ? "Welcome back - your world was restored" + (note != null ? " · " + note : "") : note ?? "Sculpt some hills to begin", 8f);
         }
 
         private void Save()
@@ -140,15 +148,26 @@ namespace Wonderland
             result(head.position + forward * 1.0f, yaw);
         }
 
-        /// <summary>Floor outline and furniture footprints (volumes standing on the floor) from the MRUK room scan.</summary>
+        /// <summary>Scene volumes that are real furniture standing in the room (not the scanned room mesh, walls etc.).</summary>
+        private const MRUKAnchor.SceneLabels Furniture = MRUKAnchor.SceneLabels.TABLE | MRUKAnchor.SceneLabels.COUCH |
+            MRUKAnchor.SceneLabels.STORAGE | MRUKAnchor.SceneLabels.BED | MRUKAnchor.SceneLabels.SCREEN |
+            MRUKAnchor.SceneLabels.LAMP | MRUKAnchor.SceneLabels.PLANT | MRUKAnchor.SceneLabels.OTHER;
+
+        /// <summary>
+        /// Floor outline and furniture footprints from the MRUK room scan. Only furniture labels count: the scanned room
+        /// mesh (GLOBAL_MESH) also carries a volume - the whole room's bounding box - which would otherwise cover the
+        /// entire floor and forbid all growth. Implausibly large volumes (over 40 % of the floor) are ignored too.
+        /// </summary>
         private static RoomFootprint FromRoomScan(MRUKRoom room, float floorY)
         {
             var footprint = new RoomFootprint { Source = "room scan" };
             var floor = room.FloorAnchor;
             foreach (var p in floor.PlaneBoundary2D) footprint.Floor.Add(floor.transform.TransformPoint(new Vector3(p.x, p.y, 0f)));
+            float floorArea = Mathf.Abs(Area(footprint.Floor));
             foreach (var anchor in room.Anchors)
             {
                 if (!anchor.VolumeBounds.HasValue) continue;
+                if (!anchor.HasAnyLabel(Furniture)) { Debug.Log($"Wonderland room: ignoring volume {anchor.Label} (not furniture)"); continue; }
                 var b = anchor.VolumeBounds.Value;
                 var corners = new System.Collections.Generic.List<Vector3>();
                 float lowest = float.MaxValue;
@@ -158,9 +177,22 @@ namespace Wonderland
                     var w = anchor.transform.TransformPoint(c);
                     corners.Add(w); lowest = Mathf.Min(lowest, w.y);
                 }
-                if (lowest < floorY + 0.35f) footprint.Obstacles.Add(corners);   // stands on the floor (not a wall shelf)
+                if (lowest >= floorY + 0.35f) continue;   // a wall shelf or hanging lamp, not on the floor
+                float area = Mathf.Abs(Area(RoomFootprint.ConvexHull(corners.ConvertAll(c => new Vector2(c.x, c.z))).Select3()));
+                if (floorArea > 0f && area > floorArea * 0.4f) { Debug.Log($"Wonderland room: ignoring volume {anchor.Label} ({area:0.0} m2 of {floorArea:0.0} m2 floor)"); continue; }
+                footprint.Obstacles.Add(corners);
+                Debug.Log($"Wonderland room: furniture {anchor.Label} ({area:0.00} m2)");
             }
+            Debug.Log($"Wonderland room: floor {footprint.Floor.Count} points, {floorArea:0.0} m2, {footprint.Obstacles.Count} furniture footprints");
             return footprint.Floor.Count >= 3 ? footprint : null;
+        }
+
+        /// <summary>Signed area of a polygon in the XZ plane.</summary>
+        private static float Area(System.Collections.Generic.List<Vector3> poly)
+        {
+            float a = 0f;
+            for (int i = 0, j = poly.Count - 1; i < poly.Count; j = i++) a += (poly[j].x + poly[i].x) * (poly[j].z - poly[i].z);
+            return a * 0.5f;
         }
 
         /// <summary>The guardian play area, when there is no room scan (may be unavailable under OpenXR).</summary>

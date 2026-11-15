@@ -3,6 +3,16 @@ using UnityEngine;
 
 namespace Wonderland
 {
+    public static class FootprintExtensions
+    {
+        public static List<Vector3> Select3(this Vector2[] pts)
+        {
+            var list = new List<Vector3>(pts.Length);
+            foreach (var p in pts) list.Add(new Vector3(p.x, 0f, p.y));
+            return list;
+        }
+    }
+
     /// <summary>
     /// The free floor of the real room, in world space: the floor outline (from the room scan, or the guardian play area)
     /// and the footprints of furniture standing on it. Land may grow inside the outline, a little away from the walls,

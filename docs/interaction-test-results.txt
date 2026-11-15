@@ -6,9 +6,9 @@ PASS  A switches Raise -> Lower
 PASS  Grow chip selects the land brush
 PASS  Aiming at the floor beyond the shore grows land (2.73 -> 3.00 m2)
 PASS  Clicking the Forest tile selects the forest brush
-PASS  Painting with the trigger grows trees (35)
+PASS  Painting with the trigger grows trees (30)
 PASS  Track tool selected
-PASS  Drawing a loop with the trigger lays a closed railway (2.78 m)
+PASS  Drawing a loop with the trigger lays a closed railway (2.79 m)
 PASS  Trigger on the railway places the train
 PASS  Start option sets the train running
 PASS  Train moves (0.27 m)

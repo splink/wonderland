@@ -39,6 +39,7 @@ Shader "Wonderland/Lit"
                 float4 positionOS : POSITION;
                 float3 normalOS : NORMAL;
                 half4 color : COLOR;
+                float2 uv : TEXCOORD0;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
@@ -58,7 +59,7 @@ Shader "Wonderland/Lit"
                 UNITY_SETUP_INSTANCE_ID(v);
                 UNITY_TRANSFER_INSTANCE_ID(v, o);
                 UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
-                o.positionWS = TransformObjectToWorld(v.positionOS.xyz);
+                o.positionWS = WL_Wind(TransformObjectToWorld(v.positionOS.xyz), v.uv.x);
                 o.positionCS = TransformWorldToHClip(o.positionWS);
                 o.normalWS = TransformObjectToWorldNormal(v.normalOS);
                 o.color = v.color;

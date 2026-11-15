@@ -74,12 +74,12 @@ namespace Wonderland
     public static class TrackPlanner
     {
         public const float MinRadius = 0.18f;
-        public const float MaxGrade = 0.045f;
+        public const float MaxGrade = 0.09f;   // steep for real railways, fine for a storybook train; lets track follow the land
         public const float CloseDistance = 0.3f;
         public const float Spacing = 0.01f;
         public const float Coarse = 0.03f;
         public const float MinLength = 0.6f;
-        public const float MinLoopLength = 1.1f;
+        public const float MinLoopLength = 0.9f;
 
         public static float Length(IReadOnlyList<Vector3> pts)
         {
@@ -88,57 +88,167 @@ namespace Wonderland
             return l;
         }
 
-        /// <summary>Whether releasing now would close the loop (end near start, long enough).</summary>
-        public static bool WouldClose(IReadOnlyList<Vector3> drawn) =>
-            drawn.Count > 2 && Length(drawn) > MinLoopLength && Flat(drawn[^1] - drawn[0]).magnitude < CloseDistance;
+        /// <summary>
+        /// Whether releasing now would close the loop: the stroke is long enough and its end region comes back within
+        /// <see cref="CloseDistance"/> of its start region (ending short of the start or overshooting past it).
+        /// </summary>
+        public static bool WouldClose(IReadOnlyList<Vector3> drawn)
+        {
+            if (drawn.Count < 3 || Length(drawn) < MinLoopLength) return false;
+            var pts = new List<Vector2>(drawn.Count);
+            foreach (var p in drawn) pts.Add(new Vector2(p.x, p.z));
+            return FindLoop(pts, out _, out _);
+        }
 
-        public static TrackPlan Plan(IReadOnlyList<Vector3> drawn, TerrainField terrain)
+        /// <summary>
+        /// Turns a stroke into a railway, as forgivingly as possible: a stroke that comes back to its start becomes a loop
+        /// (overlapping tails are trimmed), small accidental loops from hand jitter are snipped out, curves are smoothed
+        /// until the train can take them, and <paramref name="ensureLand"/> may grow land under any part drawn over bare
+        /// floor. Only a genuine figure-8 (it would need a bridge) or a too-short stroke is refused.
+        /// </summary>
+        public static TrackPlan Plan(IReadOnlyList<Vector3> drawn, TerrainField terrain, System.Func<List<Vector2>, bool> ensureLand = null,
+            System.Func<Vector2, float> waterLevel = null)
         {
             var plan = new TrackPlan();
             var raw = new List<Vector2>();
             foreach (var p in drawn)
                 if (raw.Count == 0 || (new Vector2(p.x, p.z) - raw[^1]).magnitude > 0.004f) raw.Add(new Vector2(p.x, p.z));
             if (raw.Count < 3 || Length(drawn) < MinLength) { plan.Error = "Draw a longer track"; return plan; }
-            bool closed = WouldClose(drawn);
 
-            var pts = Resample(raw, Coarse, closed);
+            bool closed = FindLoop(raw, out int from, out int to);
+            var path = closed ? raw.GetRange(from, to - from + 1) : raw;
+            var pts = Resample(path, Coarse, closed);
             if (closed)
                 while (pts.Count > 4 && (pts[^1] - pts[0]).magnitude < Coarse * 0.6f) pts.RemoveAt(pts.Count - 1);
-            // Denoise the hand jitter without shrinking, then round only the spots that are still too tight.
+            pts = RemoveSmallLoops(pts, closed);
+
+            // Denoise the hand jitter without shrinking, round the spots that are still too tight, and if that is not
+            // enough, smooth the whole line (a loop shrinks a little, but it always becomes drivable).
             for (int iter = 0; iter < 24; iter++) Taubin(pts, closed);
-            for (int iter = 0; iter < 1500; iter++)
+            bool ok = false;
+            for (int iter = 0; iter < 1500 && !ok; iter++)
             {
-                if (iter % 10 == 0)
-                {
-                    pts = Resample(pts, Coarse, closed);
-                    if (MinRadiusOf(pts, closed) >= MinRadius * 1.03f) break;
-                }
+                if (iter % 10 == 0) { pts = Resample(pts, Coarse, closed); ok = MinRadiusOf(pts, closed) >= MinRadius * 1.03f; if (ok) break; }
                 SmoothTightSpots(pts, closed, MinRadius * 1.08f);
             }
+            for (int iter = 0; iter < 800 && !ok; iter++)
+            {
+                if (iter % 10 == 0) { pts = Resample(pts, Coarse, closed); pts = RemoveSmallLoops(pts, closed); ok = MinRadiusOf(pts, closed) >= MinRadius * 1.03f; if (ok) break; }
+                Laplace(pts, closed, 0.5f);
+            }
             pts = Resample(pts, Coarse, closed);
+            pts = RemoveSmallLoops(pts, closed);
             plan.Smoothed = pts.ConvertAll(p => terrain.PointAt(p.x, p.y) + Vector3.up * 0.006f);
 
             if (closed && Perimeter(pts, true) < MinLoopLength) { plan.Error = "Make the loop a little bigger"; return plan; }
-            if (SelfIntersects(pts, closed)) { plan.Error = "The track crosses itself - no bridges yet, try a simple loop"; return plan; }
+            if (SelfIntersects(pts, closed)) { plan.Error = "The track crosses itself like a figure 8 - no bridges yet"; return plan; }
             float radius = MinRadiusOf(pts, closed);
-            if (radius < MinRadius * 0.9f) { plan.Error = $"A curve is too tight for the train ({radius * 100f:0} cm)"; return plan; }
+            if (radius < MinRadius * 0.85f) { plan.Error = $"A curve is too tight for the train ({radius * 100f:0} cm)"; return plan; }
 
             var dense = CatmullRom(pts, Spacing, closed);
+            bool offLand = false;
+            foreach (var p in dense) if (terrain.EdgeAt(p.x, p.y) < 0.4f) { offLand = true; break; }
+            if (offLand && ensureLand != null) ensureLand(dense);
             foreach (var p in dense)
-                if (terrain.EdgeAt(p.x, p.y) < 0.4f) { plan.Error = "Keep the railway on the landscape"; return plan; }
+                if (terrain.EdgeAt(p.x, p.y) < 0.4f) { plan.Error = "Part of the railway is too far out to build"; return plan; }
 
-            var heights = Profile(dense, terrain, closed);
+            var heights = Profile(dense, terrain, closed, waterLevel);
             var points = new List<Vector3>(dense.Count);
             for (int i = 0; i < dense.Count; i++) points.Add(new Vector3(dense[i].x, heights[i], dense[i].y));
             plan.Layout = new TrackLayout(points, closed);
             return plan;
         }
 
+        /// <summary>
+        /// Finds where a stroke closes on itself: the nearest pair of points between its first quarter and its last
+        /// 40 %, at least a loop's length apart along the stroke. Within <see cref="CloseDistance"/> it is a loop from
+        /// <paramref name="from"/> to <paramref name="to"/> (tails beyond are overshoot and get trimmed).
+        /// </summary>
+        private static bool FindLoop(List<Vector2> raw, out int from, out int to)
+        {
+            from = 0; to = raw.Count - 1;
+            var cum = new float[raw.Count];
+            for (int i = 1; i < raw.Count; i++) cum[i] = cum[i - 1] + (raw[i] - raw[i - 1]).magnitude;
+            float total = cum[^1];
+            if (total < MinLoopLength) return false;
+            float best = float.MaxValue;
+            int step = Mathf.Max(1, raw.Count / 400);
+            for (int i = 0; i < raw.Count && cum[i] <= total * 0.25f; i += step)
+            for (int j = raw.Count - 1; j > i && cum[j] >= total * 0.6f; j -= step)
+            {
+                if (cum[j] - cum[i] < MinLoopLength * 0.9f) continue;
+                float d = (raw[j] - raw[i]).sqrMagnitude;
+                if (d < best) { best = d; from = i; to = j; }
+            }
+            return best < CloseDistance * CloseDistance;
+        }
+
+        /// <summary>
+        /// Snips out accidental small loops (a hand that wobbled back over its own line): at a crossing, the shorter part
+        /// is dropped when it is under 40 % of the line. A crossing of two big parts (a figure 8) is left alone.
+        /// </summary>
+        public static List<Vector2> RemoveSmallLoops(List<Vector2> p, bool closed)
+        {
+            for (int pass = 0; pass < 12; pass++)
+            {
+                int n = p.Count, segs = closed ? n : n - 1;
+                bool changed = false;
+                float total = Perimeter(p, closed);
+                for (int i = 0; i < segs && !changed; i++)
+                for (int j = i + 2; j < segs && !changed; j++)
+                {
+                    if (closed && i == 0 && j == segs - 1) continue;
+                    var a = p[i]; var b = p[(i + 1) % n]; var c = p[j]; var d = p[(j + 1) % n];
+                    if (!SegmentsCross(a, b, c, d)) continue;
+                    var x = Intersection(a, b, c, d);
+                    float inner = 0f;
+                    for (int k = i + 1; k < j; k++) inner += (p[k + 1] - p[k]).magnitude;
+                    float outer = total - inner;
+                    if (inner <= total * 0.4f)
+                    {
+                        // Drop the little loop between the crossing segments.
+                        var next = new List<Vector2>(n);
+                        for (int k = 0; k <= i; k++) next.Add(p[k]);
+                        next.Add(x);
+                        for (int k = j + 1; k < n; k++) next.Add(p[k]);
+                        p = next; changed = true;
+                    }
+                    else if (closed && outer <= total * 0.4f)
+                    {
+                        var next = new List<Vector2> { x };
+                        for (int k = i + 1; k <= j; k++) next.Add(p[k]);
+                        p = next; changed = true;
+                    }
+                }
+                if (!changed) break;
+            }
+            return p;
+        }
+
+        private static Vector2 Intersection(Vector2 a, Vector2 b, Vector2 c, Vector2 d)
+        {
+            var r = b - a; var s = d - c;
+            float den = r.x * s.y - r.y * s.x;
+            if (Mathf.Abs(den) < 1e-9f) return (a + b) * 0.5f;
+            float t = ((c.x - a.x) * s.y - (c.y - a.y) * s.x) / den;
+            return a + r * t;
+        }
+
         /// <summary>Smooth bed heights following the terrain, grade-limited, never below the floor margin.</summary>
-        private static float[] Profile(List<Vector2> pts, TerrainField terrain, bool closed)
+        /// <summary>Clearance of the rail bed above water where the railway crosses it on a bridge.</summary>
+        public const float BridgeClearance = 0.032f;
+
+        public static float[] Profile(List<Vector2> pts, TerrainField terrain, bool closed, System.Func<Vector2, float> waterLevel = null)
         {
             int n = pts.Count;
             var h = new float[n];
+            // Over water the bed must clear it (a bridge); everywhere else there is no lower bound.
+            var minH = new float[n];
+            for (int i = 0; i < n; i++)
+            {
+                float lvl = waterLevel != null ? waterLevel(pts[i]) : -1f;
+                minH[i] = lvl >= 0f ? lvl + BridgeClearance : float.MinValue;
+            }
             for (int i = 0; i < n; i++)
             {
                 var a = pts[(i - 1 + n) % n]; var b = pts[(i + 1) % n];
@@ -163,18 +273,19 @@ namespace Wonderland
                 System.Array.Copy(tmp, h, n);
             }
             float maxStep = MaxGrade * Spacing;
-            for (int pass = 0; pass < 4; pass++)
+            for (int i = 0; i < n; i++) h[i] = Mathf.Max(h[i], minH[i]);
+            for (int pass = 0; pass < 6; pass++)
             {
                 for (int i = 1; i < n + (closed ? n / 2 : 0); i++)
                 {
                     int cur = i % n, prev = (i - 1) % n;
-                    h[cur] = Mathf.Clamp(h[cur], h[prev] - maxStep, h[prev] + maxStep);
+                    h[cur] = Mathf.Max(Mathf.Clamp(h[cur], h[prev] - maxStep, h[prev] + maxStep), minH[cur]);
                 }
                 for (int i = n - 2 + (closed ? n / 2 : 0); i >= 0; i--)
                 {
                     int cur = ((i % n) + n) % n, next = (cur + 1) % n;
                     if (!closed && cur == n - 1) continue;
-                    h[cur] = Mathf.Clamp(h[cur], h[next] - maxStep, h[next] + maxStep);
+                    h[cur] = Mathf.Max(Mathf.Clamp(h[cur], h[next] - maxStep, h[next] + maxStep), minH[cur]);
                 }
             }
             for (int i = 0; i < n; i++) h[i] = Mathf.Max(h[i], TerrainField.MinHeight + 0.006f);

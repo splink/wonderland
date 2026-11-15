@@ -21,7 +21,7 @@ namespace Wonderland
     /// </summary>
     public sealed class ForestSystem : MonoBehaviour
     {
-        public const int MaxTrees = 1400;
+        public const int MaxTrees = 450;
         private const float ChunkSize = 0.25f;
 
         public readonly List<TreeInstance> Trees = new();
@@ -55,23 +55,37 @@ namespace Wonderland
             foreach (var t in Trees) dirty.Add(ChunkKey(t.x, t.z));
         }
 
-        private void LateUpdate() => RebuildDirty();
+        private readonly MeshBuilder builder = new();
+        private readonly Dictionary<int, float> lastBuilt = new();
+        private readonly List<int> ready = new();
 
-        public void RebuildDirty()
+        // While the player paints or sculpts, the same chunks are dirtied every frame. Rebuild each chunk at most every
+        // 0.12 s and at most two chunks per frame, so editing never stalls the main thread; the rest waits a frame.
+        private void LateUpdate() => RebuildDirty(2, 0.12f);
+
+        /// <summary>Rebuilds dirty chunks (all of them by default: tests, loading).</summary>
+        public void RebuildDirty(int maxChunks = int.MaxValue, float minInterval = 0f)
         {
             if (dirty.Count == 0) return;
-            var byChunk = new Dictionary<int, List<TreeInstance>>();
-            foreach (var t in Trees)
-            {
-                int k = ChunkKey(t.x, t.z);
-                if (!dirty.Contains(k)) continue;
-                if (!byChunk.TryGetValue(k, out var list)) byChunk[k] = list = new List<TreeInstance>();
-                list.Add(t);
-            }
+            float now = Time.realtimeSinceStartup;
+            ready.Clear();
             foreach (int k in dirty)
             {
-                byChunk.TryGetValue(k, out var list);
-                if (list == null || list.Count == 0)
+                if (ready.Count >= maxChunks) break;
+                if (minInterval > 0f && lastBuilt.TryGetValue(k, out float t) && now - t < minInterval) continue;
+                ready.Add(k);
+            }
+            if (ready.Count == 0) return;
+            var byChunk = new Dictionary<int, List<TreeInstance>>();
+            foreach (int k in ready) byChunk[k] = new List<TreeInstance>();
+            foreach (var t in Trees)
+                if (byChunk.TryGetValue(ChunkKey(t.x, t.z), out var list)) list.Add(t);
+            foreach (int k in ready)
+            {
+                dirty.Remove(k);
+                lastBuilt[k] = now;
+                var list = byChunk[k];
+                if (list.Count == 0)
                 {
                     if (chunks.TryGetValue(k, out var empty)) { Release(empty.go); Release(empty.mesh); chunks.Remove(k); }
                     continue;
@@ -87,17 +101,16 @@ namespace Wonderland
                     go.GetComponent<MeshFilter>().sharedMesh = chunk.mesh;
                     chunks[k] = chunk;
                 }
-                var b = new MeshBuilder();
+                builder.Clear();
                 foreach (var t in list)
                 {
                     float y = terrain.SurfaceAt(t.x, t.z) - 0.003f * t.scale;
-                    var m = Matrix4x4.TRS(new Vector3(t.x, y, t.z), Quaternion.Euler(0f, t.rotation, 0f), Vector3.one * t.scale);
-                    b.Append(Data((TreeKind)t.kind, t.variant), m, new Color(t.tint, t.tint, t.tint * 0.97f));
+                    builder.AppendFast(Data((TreeKind)t.kind, t.variant), new Vector3(t.x, y, t.z), Quaternion.Euler(0f, t.rotation, 0f), t.scale,
+                        new Color(t.tint, t.tint, t.tint * 0.97f));
                 }
-                b.ToMesh(chunk.go.name, chunk.mesh);
+                builder.ToMesh(chunk.go.name, chunk.mesh);
                 chunk.mesh.RecalculateBounds();
             }
-            dirty.Clear();
         }
 
         private static void Release(UnityEngine.Object o)
@@ -154,7 +167,7 @@ namespace Wonderland
                 Trees.Add(new TreeInstance
                 {
                     x = p.x, z = p.y, scale = scale, rotation = rng.Range(0f, 360f), kind = (byte)kind,
-                    variant = (byte)rng.Range(0, TreeFactory.VariantCount), tint = rng.Range(0.88f, 1.1f),
+                    variant = (byte)TreeFactory.PickVariant(kind, ref rng), tint = rng.Range(0.88f, 1.1f),
                 });
                 MarkDirty(p.x, p.y);
                 added++;

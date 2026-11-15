@@ -15,6 +15,10 @@ namespace Wonderland
         public readonly List<Vector3> Normals = new();
         public readonly List<Color32> Colors = new();
         public readonly List<int> Triangles = new();
+        /// <summary>UV0.x = wind sway weight (0 rigid, 1 a leafy canopy); read by Wonderland/Lit.</summary>
+        public readonly List<Vector2> Uvs = new();
+        /// <summary>Sway weight given to vertices added from now on.</summary>
+        public float Sway;
         private readonly Stack<Matrix4x4> stack = new();
         private Matrix4x4 matrix = Matrix4x4.identity, normalMatrix = Matrix4x4.identity;
 
@@ -34,7 +38,7 @@ namespace Wonderland
 
         public void Clear()
         {
-            Vertices.Clear(); Normals.Clear(); Colors.Clear(); Triangles.Clear(); stack.Clear();
+            Vertices.Clear(); Normals.Clear(); Colors.Clear(); Triangles.Clear(); Uvs.Clear(); stack.Clear(); Sway = 0f;
             Matrix = Matrix4x4.identity;
         }
 
@@ -43,10 +47,17 @@ namespace Wonderland
             Vertices.Add(matrix.MultiplyPoint3x4(position));
             Normals.Add(SafeNormalize(normalMatrix.MultiplyVector(normal)));
             Colors.Add(color);
+            Uvs.Add(new Vector2(Sway, 0f));
             return Vertices.Count - 1;
         }
 
         public void AddTriangle(int a, int b, int c) { Triangles.Add(a); Triangles.Add(b); Triangles.Add(c); }
+
+        /// <summary>Moves every vertex from <paramref name="firstVertex"/> on through <paramref name="warp"/> (hand-made irregularity).</summary>
+        public void Warp(int firstVertex, System.Func<Vector3, Vector3> warp)
+        {
+            for (int i = firstVertex; i < VertexCount; i++) Vertices[i] = warp(Vertices[i]);
+        }
 
         /// <summary>Smooth normals from the faces that use vertices at or after <paramref name="firstVertex"/> (after reshaping).</summary>
         public void RecalculateNormals(int firstVertex)
@@ -134,7 +145,7 @@ namespace Wonderland
             {
                 // Faceted: rebuild the side as flat quads (the smooth ring above is discarded).
                 Vertices.RemoveRange(start, VertexCount - start); Normals.RemoveRange(start, Normals.Count - start);
-                Colors.RemoveRange(start, Colors.Count - start);
+                Colors.RemoveRange(start, Colors.Count - start); Uvs.RemoveRange(start, Uvs.Count - start);
                 for (int i = 0; i < segments; i++)
                 {
                     float a0 = phase + i * Mathf.PI * 2f / segments, a1 = phase + (i + 1) * Mathf.PI * 2f / segments;
@@ -232,9 +243,31 @@ namespace Wonderland
             var mesh = reuse != null ? reuse : new Mesh { name = name };
             mesh.Clear();
             mesh.indexFormat = VertexCount > 65000 ? IndexFormat.UInt32 : IndexFormat.UInt16;
-            mesh.SetVertices(Vertices); mesh.SetNormals(Normals); mesh.SetColors(Colors);
+            mesh.SetVertices(Vertices); mesh.SetNormals(Normals); mesh.SetColors(Colors); mesh.SetUVs(0, Uvs);
             mesh.SetTriangles(Triangles, 0, true);
             return mesh;
+        }
+
+        /// <summary>
+        /// Fast batching path for rigid, uniformly scaled copies (trees, ground cover): normals only need the rotation,
+        /// so there is no matrix inverse and no per-vertex normalisation.
+        /// </summary>
+        public void AppendFast(MeshData source, Vector3 position, Quaternion rotation, float scale, Color tint)
+        {
+            int start = VertexCount;
+            var v = source.Vertices; var n = source.Normals; var c = source.Colors; var uv = source.Uvs;
+            bool hasUv = uv.Length == v.Length;
+            Vertices.Capacity = Mathf.Max(Vertices.Capacity, start + v.Length);
+            for (int i = 0; i < v.Length; i++)
+            {
+                Vertices.Add(position + rotation * (v[i] * scale));
+                Normals.Add(rotation * n[i]);
+                var col = c[i];
+                Colors.Add(new Color32((byte)Mathf.Min(255f, col.r * tint.r), (byte)Mathf.Min(255f, col.g * tint.g), (byte)Mathf.Min(255f, col.b * tint.b), col.a));
+                Uvs.Add(hasUv ? uv[i] : Vector2.zero);
+            }
+            var t = source.Triangles;
+            for (int i = 0; i < t.Length; i++) Triangles.Add(start + t[i]);
         }
 
         /// <summary>Appends cached geometry transformed by <paramref name="transform"/>, tinted (used to batch trees per chunk).</summary>
@@ -248,6 +281,7 @@ namespace Wonderland
                 Normals.Add(SafeNormalize(normalTransform.MultiplyVector(source.Normals[i])));
                 var c = source.Colors[i];
                 Colors.Add(new Color32((byte)Mathf.Min(255f, c.r * tint.r), (byte)Mathf.Min(255f, c.g * tint.g), (byte)Mathf.Min(255f, c.b * tint.b), c.a));
+                Uvs.Add(source.Uvs.Length == source.Vertices.Length ? source.Uvs[i] : Vector2.zero);
             }
             foreach (int t in source.Triangles) Triangles.Add(start + t);
         }
@@ -270,8 +304,9 @@ namespace Wonderland
     {
         public readonly Vector3[] Vertices, Normals;
         public readonly Color32[] Colors;
+        public readonly Vector2[] Uvs;
         public readonly int[] Triangles;
-        public MeshData(Mesh mesh) { Vertices = mesh.vertices; Normals = mesh.normals; Colors = mesh.colors32; Triangles = mesh.triangles; }
+        public MeshData(Mesh mesh) { Vertices = mesh.vertices; Normals = mesh.normals; Colors = mesh.colors32; Uvs = mesh.uv; Triangles = mesh.triangles; }
     }
 
     /// <summary>Unit icospheres, cached per subdivision level, wound outwards.</summary>

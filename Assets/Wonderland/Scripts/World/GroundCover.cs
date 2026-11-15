@@ -29,8 +29,8 @@ namespace Wonderland
         public void Init(TerrainField field, Material lit, int seed, Func<Vector2, bool> isBlocked)
         {
             terrain = field; material = lit; blocked = isBlocked; this.seed = seed;
-            meshes = new[] { new MeshData(GrassTuft(0)), new MeshData(GrassTuft(1)), new MeshData(FlowerClump(Pal.FlowerYellow)),
-                new MeshData(FlowerClump(Pal.FlowerWhite)), new MeshData(FlowerClump(Pal.FlowerPink)), new MeshData(FlowerClump(Pal.FlowerLilac)), new MeshData(Pebbles()) };
+            meshes = new MeshData[14];
+            for (int k = 0; k < meshes.Length; k++) meshes[k] = new MeshData(Detail(k));
             Scatter();
             MarkAllDirty();
         }
@@ -54,7 +54,12 @@ namespace Wonderland
                 float meadow = Noise.Fbm2(p.x * 3f + seed, p.y * 3f, 2);
                 if (rng.Value > 0.35f + meadow * 0.5f) continue;
                 float r = rng.Value;
-                byte kind = r < 0.72f ? (byte)rng.Range(0, 2) : r < 0.94f ? (byte)rng.Range(2, 6) : (byte)6;
+                // Mostly grass; flowers, daisies, lavender and tulips in drifts; pebbles; a rare ring of toadstools.
+                float drift = Noise.Value2(p.x * 5f - seed, p.y * 5f + 11f);
+                byte kind = r < 0.62f ? (byte)rng.Range(0, 2)
+                    : r < 0.8f ? (byte)(drift > 0.5f ? rng.Range(2, 6) : rng.Range(7, 9))
+                    : r < 0.92f ? (byte)(drift > 0.62f ? 9 : rng.Range(2, 6))
+                    : r < 0.985f ? (byte)6 : (byte)10;
                 int key = ChunkKey(p.x, p.y);
                 if (!tufts.TryGetValue(key, out var list)) tufts[key] = list = new List<Tuft>();
                 list.Add(new Tuft { x = p.x, z = p.y, scale = rng.Range(0.75f, 1.3f), rotation = rng.Range(0f, 360f), kind = kind, tint = rng.Range(0.85f, 1.1f) });
@@ -80,31 +85,53 @@ namespace Wonderland
                 dirty.Add(ChunkKey(x, z));
         }
 
-        private void LateUpdate() => RebuildDirty();
+        private readonly MeshBuilder builder = new();
+        private readonly Dictionary<int, float> lastBuilt = new();
+        private readonly List<int> ready = new();
 
-        public void RebuildDirty()
+        // Same budget as the forest: editing re-dirties chunks every frame; rebuild each at most every 0.15 s, two per frame.
+        private void LateUpdate() => RebuildDirty(2, 0.15f);
+
+        public void RebuildDirty(int maxChunks = int.MaxValue, float minInterval = 0f)
         {
             if (dirty.Count == 0 || terrain == null) return;
-            var builders = new Dictionary<int, MeshBuilder>();
+            float now = Time.realtimeSinceStartup;
+            ready.Clear();
             foreach (int k in dirty)
             {
-            if (!tufts.TryGetValue(k, out var list)) continue;
-            foreach (var t in list)
-            {
-                var p = new Vector2(t.x, t.z);
-                if (terrain.EdgeAt(t.x, t.z) < 0.3f || terrain.LockAt(t.x, t.z) > 0.1f || blocked(p)) continue;
-                if (!builders.TryGetValue(ChunkKey(t.x, t.z), out var b)) builders[ChunkKey(t.x, t.z)] = b = new MeshBuilder();
-                var normal = terrain.NormalAt(t.x, t.z);
-                if (normal.y < 0.6f && t.kind < 6) continue;   // no tufts on steep banks
-                var rot = Quaternion.FromToRotation(Vector3.up, Vector3.Lerp(Vector3.up, normal, 0.6f)) * Quaternion.Euler(0f, t.rotation, 0f);
-                var m = Matrix4x4.TRS(new Vector3(t.x, terrain.SurfaceAt(t.x, t.z) - 0.0008f, t.z), rot, Vector3.one * t.scale);
-                b.Append(meshes[t.kind], m, new Color(t.tint, t.tint, t.tint));
+                if (ready.Count >= maxChunks) break;
+                if (minInterval > 0f && lastBuilt.TryGetValue(k, out float t) && now - t < minInterval) continue;
+                ready.Add(k);
             }
-            }
-            foreach (int k in dirty)
+            foreach (int k in ready)
             {
-                builders.TryGetValue(k, out var b);
-                if (b == null || b.VertexCount == 0)
+                dirty.Remove(k);
+                lastBuilt[k] = now;
+                builder.Clear();
+                if (tufts.TryGetValue(k, out var list))
+                    foreach (var t in list)
+                    {
+                        // By the water: reeds on the bank, lily pads floating on the pond.
+                        float wet = terrain.WaterAt(t.x, t.z);
+                        if (wet > 0.5f)
+                        {
+                            float level = terrain.WaterLevelAt(t.x, t.z);
+                            if (level > 0f && t.kind % 3 == 0 && level - terrain.SurfaceAt(t.x, t.z) > 0.006f)
+                                builder.AppendFast(meshes[t.kind % 2 == 0 ? 12 : 13], new Vector3(t.x, level, t.z), Quaternion.Euler(0f, t.rotation, 0f), t.scale, Color.white);
+                            continue;
+                        }
+                        if (wet > 0.02f || terrain.WaterAt(t.x + 0.03f, t.z) > 0.5f || terrain.WaterAt(t.x - 0.03f, t.z) > 0.5f || terrain.WaterAt(t.x, t.z + 0.03f) > 0.5f || terrain.WaterAt(t.x, t.z - 0.03f) > 0.5f)
+                        {
+                            if (t.kind != 6) builder.AppendFast(meshes[11], new Vector3(t.x, terrain.SurfaceAt(t.x, t.z) - 0.0008f, t.z), Quaternion.Euler(0f, t.rotation, 0f), t.scale, new Color(t.tint, t.tint, t.tint));
+                            continue;
+                        }
+                        if (terrain.EdgeAt(t.x, t.z) < 0.3f || terrain.LockAt(t.x, t.z) > 0.1f || blocked(new Vector2(t.x, t.z))) continue;
+                        var normal = terrain.NormalAt(t.x, t.z);
+                        if (normal.y < 0.6f && t.kind < 6) continue;   // no tufts on steep banks
+                        var rot = Quaternion.FromToRotation(Vector3.up, Vector3.Lerp(Vector3.up, normal, 0.6f)) * Quaternion.Euler(0f, t.rotation, 0f);
+                        builder.AppendFast(meshes[t.kind], new Vector3(t.x, terrain.SurfaceAt(t.x, t.z) - 0.0008f, t.z), rot, t.scale, new Color(t.tint, t.tint, t.tint));
+                    }
+                if (builder.VertexCount == 0)
                 {
                     if (chunks.TryGetValue(k, out var empty)) { Release(empty.go); Release(empty.mesh); chunks.Remove(k); }
                     continue;
@@ -120,10 +147,9 @@ namespace Wonderland
                     go.GetComponent<MeshFilter>().sharedMesh = chunk.mesh;
                     chunks[k] = chunk;
                 }
-                b.ToMesh(chunk.go.name, chunk.mesh);
+                builder.ToMesh(chunk.go.name, chunk.mesh);
                 chunk.mesh.RecalculateBounds();
             }
-            dirty.Clear();
         }
 
         private static void Release(UnityEngine.Object o)
@@ -133,63 +159,37 @@ namespace Wonderland
 
         // ------------------------------------------------------------------ meshes
 
-        /// <summary>Two-sided blade fins leaning outwards; dark at the root, sunlit tips.</summary>
-        private static Mesh GrassTuft(int variant)
+        /// <summary>0-1 grass, 2-5 flower clumps, 6 pebbles, 7 daisies, 8 tulips, 9 lavender, 10 toadstool ring, 11 reeds, 12-13 lily pads.</summary>
+        private static Mesh Detail(int kind)
         {
             var b = new MeshBuilder();
-            var rng = new Rng(300 + variant);
-            int blades = 5 + variant * 2;
-            var root = Pal.Hex(variant == 0 ? "#2F6326" : "#3A6E2A");
-            var tip = Pal.Hex(variant == 0 ? "#8FBF4A" : "#B5C95A");
-            for (int i = 0; i < blades; i++)
+            var rng = new Rng(300 + kind * 17);
+            switch (kind)
             {
-                float a = i / (float)blades * Mathf.PI * 2f + rng.Range(-0.3f, 0.3f);
-                var dir = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
-                var side = Vector3.Cross(Vector3.up, dir) * rng.Range(0.0011f, 0.0016f);
-                var basePos = dir * rng.Range(0f, 0.002f);
-                float h = rng.Range(0.007f, 0.013f);
-                var top = basePos + dir * h * rng.Range(0.35f, 0.6f) + Vector3.up * h;
-                var c = Pal.Jitter(tip, ref rng, 0.25f);
-                foreach (bool front in new[] { true, false })
-                {
-                    int v = b.AddVertex(basePos - side, Vector3.up, root);
-                    b.AddVertex(basePos + side, Vector3.up, root);
-                    b.AddVertex(top, Vector3.up, c);
-                    if (front) b.AddTriangle(v, v + 2, v + 1); else b.AddTriangle(v, v + 1, v + 2);
-                }
+                case 0: case 1: Flora.GrassTuft(b, Vector3.zero, 1f, ref rng, kind); break;
+                case 2: Flora.Flowers(b, Vector3.zero, Pal.FlowerYellow, 1f, ref rng); break;
+                case 3: Flora.Flowers(b, Vector3.zero, Pal.FlowerWhite, 1f, ref rng); break;
+                case 4: Flora.Flowers(b, Vector3.zero, Pal.FlowerPink, 1f, ref rng); break;
+                case 5: Flora.Flowers(b, Vector3.zero, Pal.FlowerLilac, 1f, ref rng); break;
+                case 6: Flora.Pebbles(b, Vector3.zero, ref rng); break;
+                case 7:
+                    Flora.GrassTuft(b, Vector3.zero, 0.8f, ref rng);
+                    Flora.Flowers(b, new Vector3(0.003f, 0f, 0.002f), Pal.FlowerWhite, 0.8f, ref rng, 5);
+                    break;
+                case 8: Flora.Tulips(b, Vector3.zero, rng.Chance(0.5f) ? Pal.FlowerRed : Pal.FlowerYellow, 1f, ref rng); break;
+                case 9: Flora.Lavender(b, Vector3.zero, 1f, ref rng); break;
+                case 11: Flora.Reeds(b, Vector3.zero, ref rng); Flora.Reeds(b, new Vector3(0.005f, 0f, 0.003f), ref rng); break;
+                case 12: Flora.LilyPad(b, Vector3.zero, ref rng, false); Flora.LilyPad(b, new Vector3(0.008f, 0f, 0.004f), ref rng, false); break;
+                case 13: Flora.LilyPad(b, Vector3.zero, ref rng, true); break;
+                default:
+                    for (int i = 0; i < 5; i++)
+                    {
+                        float a = i / 5f * Mathf.PI * 2f + rng.Range(-0.3f, 0.3f);
+                        Flora.Mushroom(b, new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * 0.011f, rng.Range(0.6f, 0.9f), ref rng, true);
+                    }
+                    break;
             }
-            return b.ToMesh("GrassTuft" + variant);
-        }
-
-        private static Mesh FlowerClump(Color flower)
-        {
-            var b = new MeshBuilder();
-            var rng = new Rng(flower.GetHashCode());
-            var leaf = Pal.Hex("#447F2E");
-            b.AddBlob(new Vector3(0f, 0.002f, 0f), new Vector3(0.005f, 0.0028f, 0.005f), 1, 0.25f, 3, (d, _) => Color.Lerp(Pal.Shade(leaf, 0.7f), leaf, d.y * 0.5f + 0.5f));
-            for (int i = 0; i < 4; i++)
-            {
-                var p = new Vector3(rng.Range(-0.004f, 0.004f), rng.Range(0.006f, 0.01f), rng.Range(-0.004f, 0.004f));
-                b.AddCylinder(new Vector3(p.x * 0.5f, 0f, p.z * 0.5f), 0.0004f, 0.0003f, p.y, 3, leaf, leaf, false);
-                var c = Pal.Jitter(flower, ref rng, 0.2f);
-                b.AddBlob(p, new Vector3(0.0019f, 0.0012f, 0.0019f), 0, 0.1f, i, (_, __) => c);
-                b.AddBlob(p + Vector3.up * 0.0008f, Vector3.one * 0.0007f, 0, 0f, i + 9, (_, __) => Pal.FlowerYellow);
-            }
-            return b.ToMesh("Flowers");
-        }
-
-        private static Mesh Pebbles()
-        {
-            var b = new MeshBuilder();
-            var rng = new Rng(77);
-            for (int i = 0; i < 3; i++)
-            {
-                var c = Pal.Jitter(Pal.Stone, ref rng, 0.3f);
-                float r = rng.Range(0.002f, 0.0035f);
-                b.AddBlob(new Vector3(rng.Range(-0.004f, 0.004f), r * 0.3f, rng.Range(-0.004f, 0.004f)), new Vector3(r, r * 0.6f, r * 0.8f), 1, 0.2f, i,
-                    (d, _) => Pal.Shade(c, 0.8f + 0.25f * d.y));
-            }
-            return b.ToMesh("Pebbles");
+            return b.ToMesh("GroundDetail" + kind);
         }
     }
 }

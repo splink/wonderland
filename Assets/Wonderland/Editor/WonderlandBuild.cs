@@ -67,6 +67,7 @@ namespace Wonderland.Editor
             var materials = new WorldMaterials
             {
                 Lit = WonderlandMaterials.Lit, Terrain = WonderlandMaterials.Terrain, UI = WonderlandMaterials.UI, Smoke = WonderlandMaterials.Smoke,
+                Water = WonderlandMaterials.Water,
             };
             AssetDatabase.SaveAssets();
 
@@ -168,7 +169,7 @@ namespace Wonderland.Editor
                 throw new BuildFailedException("Passthrough must be enabled with a transparent camera background.");
             if (UnityEngine.Object.FindObjectsByType<OVRPassthroughLayer>().Length != 1) throw new BuildFailedException("Exactly one passthrough layer expected.");
             var app = UnityEngine.Object.FindAnyObjectByType<WonderlandApp>();
-            if (app == null || app.Materials?.Lit == null || app.Materials.Terrain == null || app.Materials.UI == null || app.Materials.Smoke == null)
+            if (app == null || app.Materials?.Lit == null || app.Materials.Terrain == null || app.Materials.UI == null || app.Materials.Smoke == null || app.Materials.Water == null)
                 throw new BuildFailedException("WonderlandApp with all materials expected.");
             if (UnityEngine.Object.FindAnyObjectByType<MRUK>() == null) throw new BuildFailedException("MRUK missing.");
             string manifest = File.ReadAllText("Assets/Plugins/Android/AndroidManifest.xml");

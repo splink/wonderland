@@ -26,22 +26,50 @@ namespace Wonderland.Editor
             WonderlandLighting.CreateKeyLight();
             CreateFloor(4f);
 
+            var budget = new System.Text.StringBuilder("Wonderland asset vertex budget:\n");
+            for (int k = 0; k < TreeFactory.KindCount; k++)
+            for (int v = 0; v < TreeFactory.Variants((TreeKind)k); v++) budget.AppendLine($"  tree {(TreeKind)k} {v}: {TreeFactory.Get((TreeKind)k, v).vertexCount} verts");
+            for (int v = 0; v < HouseFactory.VariantCount; v++) budget.AppendLine($"  house {HouseFactory.Names[v]}: {HouseFactory.Get(v).vertexCount} verts");
+            budget.AppendLine($"  villager: {PersonFactory.Body(0).vertexCount + 2 * PersonFactory.Arm(0).vertexCount + 2 * PersonFactory.Leg(0).vertexCount} verts");
+            budget.AppendLine($"  sheep: {AnimalFactory.Body(AnimalKind.Sheep).vertexCount + AnimalFactory.Head(AnimalKind.Sheep).vertexCount} verts, cow: {AnimalFactory.Body(AnimalKind.Cow).vertexCount + AnimalFactory.Head(AnimalKind.Cow).vertexCount} verts");
+            Debug.Log(budget.ToString());
+            File.WriteAllText(Path.Combine(Output, "asset-budget.txt"), budget.ToString());
+
             // Trees: kinds in rows, variants in columns.
             var root = new GameObject("Gallery").transform;
             for (int k = 0; k < TreeFactory.KindCount; k++)
-            for (int v = 0; v < TreeFactory.VariantCount; v++)
-                Place(root, TreeFactory.Get((TreeKind)k, v), lit, new Vector3((v - 1) * 0.1f, 0f, (k - 2) * 0.1f), Quaternion.Euler(0f, k * 40f + v * 70f, 0f));
-            var cam = CreateCamera(new Vector3(0.05f, 0.42f, -0.55f), new Vector3(0f, 0.03f, 0.02f), 32f);
-            Capture(cam, "editor-trees.png", 1600, 1200);
+            for (int v = 0; v < TreeFactory.Variants((TreeKind)k); v++)
+                Place(root, TreeFactory.Get((TreeKind)k, v), lit, new Vector3((v - 1.5f) * 0.11f, 0f, (k - 2) * 0.11f), Quaternion.Euler(0f, k * 40f + v * 70f, 0f));
+            var cam = CreateCamera(new Vector3(0.0f, 0.46f, -0.62f), new Vector3(0f, 0.03f, 0.02f), 34f);
+            Capture(cam, "warmup.png", 64, 64); File.Delete(Path.Combine(Output, "warmup.png"));
+            Capture(cam, "editor-trees.png", 1800, 1350);
+            cam.transform.position = new Vector3(-0.05f, 0.09f, -0.37f); cam.transform.LookAt(new Vector3(-0.07f, 0.05f, -0.22f)); cam.fieldOfView = 34f;
+            Capture(cam, "editor-trees-closeup.png", 1800, 1100);
             Object.DestroyImmediate(root.gameObject);
 
+            // Houses: types in rows, the four colour styles in columns.
             root = new GameObject("Gallery").transform;
             for (int v = 0; v < HouseFactory.VariantCount; v++)
-                Place(root, HouseFactory.Get(v), lit, new Vector3((v - 1) * 0.16f, 0f, 0f), Quaternion.Euler(0f, 20f - v * 15f, 0f));
-            cam = CreateCamera(new Vector3(0.0f, 0.2f, -0.42f), new Vector3(0f, 0.05f, 0f), 34f);
-            Capture(cam, "editor-houses.png", 1600, 1000);
-            cam.transform.position = new Vector3(0.02f, 0.25f, 0.4f); cam.transform.LookAt(new Vector3(0f, 0.05f, 0f));
-            Capture(cam, "editor-houses-back.png", 1600, 1000);
+            for (int st = 0; st < HouseFactory.StyleCount; st++)
+                Place(root, HouseFactory.Get(v, st), lit, new Vector3((st - 1.5f) * 0.17f, 0f, (v - 1) * 0.17f), Quaternion.Euler(0f, 18f - st * 9f, 0f));
+            cam = CreateCamera(new Vector3(0.0f, 0.42f, -0.78f), new Vector3(0f, 0.04f, 0.0f), 36f);
+            Capture(cam, "editor-houses.png", 1800, 1200);
+            cam.transform.position = new Vector3(0.02f, 0.4f, 0.75f); cam.transform.LookAt(new Vector3(0f, 0.04f, 0f));
+            Capture(cam, "editor-houses-back.png", 1800, 1200);
+            Object.DestroyImmediate(root.gameObject);
+
+            // Hero close-ups: one of each house with a few trees and meadow details.
+            root = new GameObject("Gallery").transform;
+            Place(root, HouseFactory.Get(0, 0), lit, new Vector3(-0.07f, 0f, 0f), Quaternion.Euler(0f, 20f, 0f));
+            Place(root, HouseFactory.Get(2, 1), lit, new Vector3(0.1f, 0f, 0.04f), Quaternion.Euler(0f, -18f, 0f));
+            Place(root, HouseFactory.Get(1, 2), lit, new Vector3(0.0f, 0f, 0.15f), Quaternion.Euler(0f, 5f, 0f));
+            Place(root, TreeFactory.Get(TreeKind.Oak, 0), lit, new Vector3(-0.17f, 0f, 0.1f), Quaternion.Euler(0f, 30f, 0f));
+            Place(root, TreeFactory.Get(TreeKind.Blossom, 0), lit, new Vector3(0.2f, 0f, 0.13f), Quaternion.Euler(0f, 80f, 0f));
+            Place(root, TreeFactory.Get(TreeKind.Conifer, 0), lit, new Vector3(-0.11f, 0f, 0.2f), Quaternion.identity);
+            Place(root, TreeFactory.Get(TreeKind.Bush, 1), lit, new Vector3(0.03f, 0f, -0.07f), Quaternion.identity);
+            Place(root, TreeFactory.Get(TreeKind.Bush, 3), lit, new Vector3(-0.16f, 0f, -0.04f), Quaternion.identity);
+            cam = CreateCamera(new Vector3(0.05f, 0.17f, -0.42f), new Vector3(0.0f, 0.05f, 0.05f), 36f);
+            Capture(cam, "editor-hero.png", 1800, 1100);
             Object.DestroyImmediate(root.gameObject);
 
             root = new GameObject("Gallery").transform;
@@ -51,6 +79,26 @@ namespace Wonderland.Editor
             Capture(cam, "editor-train.png", 1600, 900);
             cam.transform.position = new Vector3(0.18f, 0.09f, -0.12f); cam.transform.LookAt(new Vector3(0.06f, 0.04f, 0f));
             Capture(cam, "editor-train-front.png", 1600, 900);
+            Object.DestroyImmediate(root.gameObject);
+
+            // Villagers: the six outfits standing, walking and waving, with a sheep and a cow for scale.
+            root = new GameObject("Gallery").transform;
+            for (int st = 0; st < PersonFactory.StyleCount; st++)
+            {
+                var person = Place(root, PersonFactory.Body(st), lit, new Vector3((st - 2.5f) * 0.022f, 0f, 0f), Quaternion.Euler(0f, 180f + (st - 2.5f) * 8f, 0f));
+                float swing = st % 3 == 1 ? 1f : 0f;
+                Place(person, PersonFactory.Leg(st), lit, PersonFactory.Hip + Vector3.left * PersonFactory.LegX, Quaternion.Euler(swing * 28f, 0f, 0f));
+                Place(person, PersonFactory.Leg(st), lit, PersonFactory.Hip + Vector3.right * PersonFactory.LegX, Quaternion.Euler(-swing * 28f, 0f, 0f));
+                Place(person, PersonFactory.Arm(st), lit, new Vector3(-PersonFactory.ShoulderX, PersonFactory.ShoulderY, 0f), Quaternion.Euler(-swing * 24f, 0f, -6f));
+                Place(person, PersonFactory.Arm(st), lit, new Vector3(PersonFactory.ShoulderX, PersonFactory.ShoulderY, 0f), st % 3 == 2 ? Quaternion.Euler(0f, 0f, 150f) : Quaternion.Euler(swing * 24f, 0f, 6f));
+            }
+            foreach (var (kind, at, yaw) in new[] { (AnimalKind.Sheep, new Vector3(-0.085f, 0f, 0.03f), 120f), (AnimalKind.Cow, new Vector3(0.09f, 0f, 0.035f), 230f) })
+            {
+                var body = Place(root, AnimalFactory.Body(kind), lit, at, Quaternion.Euler(0f, yaw, 0f));
+                Place(body, AnimalFactory.Head(kind), lit, AnimalFactory.NeckOffset(kind), Quaternion.Euler(8f, 0f, 0f));
+            }
+            cam = CreateCamera(new Vector3(0f, 0.045f, -0.2f), new Vector3(0f, 0.017f, 0f), 30f);
+            Capture(cam, "editor-villagers.png", 1800, 900);
             Debug.Log("Wonderland: gallery rendered to " + Path.GetFullPath(Output));
         }
 

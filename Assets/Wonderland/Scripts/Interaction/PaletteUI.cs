@@ -6,7 +6,7 @@ using UnityEngine.Rendering;
 
 namespace Wonderland
 {
-    public enum Tool { Terrain, Forest, Track, Train, Houses, Eraser }
+    public enum Tool { Terrain, Water, Forest, Track, Train, Houses, Decor, Eraser }
 
     /// <summary>One pressable element of the palette (tool tile or option chip).</summary>
     public sealed class PaletteButton : MonoBehaviour
@@ -56,7 +56,7 @@ namespace Wonderland
     public sealed class PaletteUI : MonoBehaviour
     {
         public const int UiLayer = 5;
-        public const float Width = 0.27f, Height = 0.17f;
+        public const float Width = 0.33f, Height = 0.17f;
         private readonly Dictionary<Tool, PaletteButton> tools = new();
         private readonly List<PaletteButton> options = new();
         private readonly List<PaletteButton> globals = new();
@@ -66,7 +66,7 @@ namespace Wonderland
         public PaletteButton Hovered { get; private set; }
         public event Action<Tool> ToolSelected;
 
-        public static readonly string[] ToolNames = { "Terrain", "Forest", "Track", "Train", "Houses", "Eraser" };
+        public static readonly string[] ToolNames = { "Terrain", "Water", "Forest", "Track", "Train", "Houses", "Decor", "Eraser" };
 
         public void Build(Material ui, Material lit)
         {
@@ -81,8 +81,9 @@ namespace Wonderland
             for (int i = 0; i < ToolNames.Length; i++)
             {
                 var tool = (Tool)i;
-                float x = -Width / 2 + 0.024f + i * 0.0444f;
-                var b = Button(ToolNames[i], transform, new Vector3(x, 0.035f, 0f), new Vector2(0.04f, 0.052f), ToolNames[i], true);
+                float pitch = (Width - 0.012f) / ToolNames.Length;
+                float x = -Width / 2 + 0.006f + pitch * (i + 0.5f);
+                var b = Button(ToolNames[i], transform, new Vector3(x, 0.035f, 0f), new Vector2(pitch - 0.0045f, 0.052f), ToolNames[i], true);
                 b.Label.transform.localPosition = new Vector3(0f, -0.019f, -0.003f);
                 b.Icon = Icon(tool, b.transform);
                 (b.IconYaw, b.IconPitch) = tool switch { Tool.Train => (115f, -15f), Tool.Track => (20f, -55f), Tool.Terrain => (25f, -30f), _ => (30f, -20f) };
@@ -303,10 +304,12 @@ namespace Wonderland
             Mesh mesh = tool switch
             {
                 Tool.Terrain => HillIcon(),
+                Tool.Water => PondIcon(),
                 Tool.Forest => TreeFactory.Get(TreeKind.Oak, 0),
                 Tool.Track => TrackIcon(),
                 Tool.Train => TrainFactory.LocoMesh,
                 Tool.Houses => HouseFactory.Get(0),
+                Tool.Decor => SheepIcon(),
                 _ => EraserIcon(),
             };
             var pivot = new GameObject("Icon").transform;
@@ -333,6 +336,32 @@ namespace Wonderland
             b.AddBlob(new Vector3(0.022f, 0f, 0.008f), new Vector3(0.022f, 0.016f, 0.02f), 1, 0.1f, 5, (d, _) => Color.Lerp(Pal.Hex("#3E7E2C"), Pal.Hex("#A6CF57"), d.y * 0.6f + 0.4f));
             var m = b.ToMesh("HillIcon");
             return m;
+        }
+
+        private static Mesh SheepIcon()
+        {
+            var b = new MeshBuilder();
+            b.Append(new MeshData(AnimalFactory.Body(AnimalKind.Sheep)), Matrix4x4.identity, Color.white);
+            b.Append(new MeshData(AnimalFactory.Head(AnimalKind.Sheep)), Matrix4x4.TRS(AnimalFactory.NeckOffset(AnimalKind.Sheep), Quaternion.Euler(10f, 0f, 0f), Vector3.one), Color.white);
+            return b.ToMesh("SheepIcon");
+        }
+
+        private static Mesh PondIcon()
+        {
+            var b = new MeshBuilder();
+            var grass = Pal.Hex("#5E9A3A");
+            b.AddCylinder(new Vector3(0f, -0.004f, 0f), 0.05f, 0.05f, 0.004f, 24, Pal.Hex("#7A5232"), grass, true);
+            b.AddCylinder(new Vector3(0f, 0.0002f, 0f), 0.036f, 0.036f, 0.001f, 24, Pal.Hex("#2E7FA8"), Pal.Hex("#5BC3D8"), true);
+            b.AddDisc(new Vector3(-0.01f, 0.0014f, 0.006f), 0.006f, 10, Color.white, true);
+            var rng = new Rng(5);
+            for (int i = 0; i < 7; i++)
+            {
+                float a = 2.2f + i * 0.22f;
+                var p = new Vector3(Mathf.Cos(a) * 0.04f, 0f, Mathf.Sin(a) * 0.04f);
+                b.AddCylinder(p, 0.0016f, 0.0008f, rng.Range(0.014f, 0.026f), 4, Pal.Hex("#3E7A33"), Pal.Hex("#8FBF4A"), false);
+                if (i % 2 == 0) b.AddCylinder(p + Vector3.up * 0.016f, 0.0022f, 0.0022f, 0.006f, 6, Pal.Hex("#6B4630"), Pal.Hex("#6B4630"), true);
+            }
+            return b.ToMesh("PondIcon");
         }
 
         private static Mesh TrackIcon()

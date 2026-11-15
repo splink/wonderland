@@ -1,0 +1,24 @@
+Wonderland asset vertex budget:
+  tree Oak 0: 1624 verts
+  tree Oak 1: 1683 verts
+  tree Oak 2: 1796 verts
+  tree Oak 3: 2166 verts
+  tree Conifer 0: 559 verts
+  tree Conifer 1: 649 verts
+  tree Conifer 2: 825 verts
+  tree Cypress 0: 1350 verts
+  tree Cypress 1: 1200 verts
+  tree Cypress 2: 1332 verts
+  tree Blossom 0: 1871 verts
+  tree Blossom 1: 1977 verts
+  tree Blossom 2: 2529 verts
+  tree Bush 0: 678 verts
+  tree Bush 1: 1164 verts
+  tree Bush 2: 1158 verts
+  tree Bush 3: 406 verts
+  house Cottage: 10958 verts
+  house Townhouse: 14200 verts
+  house Thatched: 7075 verts
+  house Station: 7455 verts
+  villager: 642 verts
+  sheep: 828 verts, cow: 574 verts

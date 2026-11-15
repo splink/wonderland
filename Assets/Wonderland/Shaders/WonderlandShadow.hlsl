@@ -9,6 +9,7 @@ struct WLShadowAttributes
 {
     float4 positionOS : POSITION;
     float3 normalOS : NORMAL;
+    float2 uv : TEXCOORD0;
     UNITY_VERTEX_INPUT_INSTANCE_ID
 };
 
@@ -23,7 +24,7 @@ WLShadowVaryings WLShadowVert(WLShadowAttributes v)
     WLShadowVaryings o = (WLShadowVaryings)0;
     UNITY_SETUP_INSTANCE_ID(v);
     UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
-    float3 positionWS = TransformObjectToWorld(v.positionOS.xyz);
+    float3 positionWS = WL_Wind(TransformObjectToWorld(v.positionOS.xyz), v.uv.x);
     float3 normalWS = TransformObjectToWorldNormal(v.normalOS);
 #if _CASTING_PUNCTUAL_LIGHT_SHADOW
     float3 lightDirectionWS = normalize(_LightPosition - positionWS);
@@ -45,7 +46,7 @@ WLShadowVaryings WLDepthVert(WLShadowAttributes v)
     WLShadowVaryings o = (WLShadowVaryings)0;
     UNITY_SETUP_INSTANCE_ID(v);
     UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
-    o.positionCS = TransformObjectToHClip(v.positionOS.xyz);
+    o.positionCS = TransformWorldToHClip(WL_Wind(TransformObjectToWorld(v.positionOS.xyz), v.uv.x));
     return o;
 }
 

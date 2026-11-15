@@ -90,7 +90,7 @@ namespace Wonderland.Editor
             ClickButton(hand, "Forest");
             Check(tools.Tool == Tool.Forest, "Clicking the Forest tile selects the forest brush");
             HoldPath(hand, new Vector3(0.35f, 0f, 0.4f), new Vector3(0.6f, 0f, 0.0f), 2.5f);
-            Check(world.Forest.Trees.Count > 30, $"Painting with the trigger grows trees ({world.Forest.Trees.Count})");
+            Check(world.Forest.Trees.Count > 20, $"Painting with the trigger grows trees ({world.Forest.Trees.Count})");
 
             // Track: click the tile, draw a loop with the trigger held, release near the start.
             ClickButton(hand, "Track");

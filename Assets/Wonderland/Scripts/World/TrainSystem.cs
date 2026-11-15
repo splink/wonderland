@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -23,6 +24,13 @@ namespace Wonderland
         public float Odometer { get; private set; }
 
         private TrackLayout layout;
+        /// <summary>Platform centres (arc length) where the train halts.</summary>
+        public readonly List<float> Stops = new();
+        /// <summary>Whether an arc length is inside a tunnel (no steam underground).</summary>
+        public System.Func<float, bool> InTunnel;
+        public const float DwellSeconds = 3.5f;
+        public float Dwell { get; private set; }
+        private int departedFrom = -1;
         private Car[] cars;
         private ParticleSystem smoke;
         private Material lit, smokeMaterial;
@@ -54,6 +62,39 @@ namespace Wonderland
             foreach (var c in cars) c.Body.gameObject.SetActive(true);
             Pose();
             return true;
+        }
+
+        /// <summary>Swaps in a re-profiled layout of the same route (sculpting under the track) without disturbing the run.</summary>
+        public void SwapLayout(TrackLayout track)
+        {
+            if (!Placed || track == null) return;
+            layout = track;
+            S = track.Wrap(S);
+            Pose();
+        }
+
+        /// <summary>Loco position that centres the whole train on a platform at <paramref name="centre"/>.</summary>
+        private float StopPosition(float centre) =>
+            centre - (TrainFactory.Loco.Front + cars[2].Offset + TrainFactory.Coach.Rear) * 0.5f * Direction;
+
+        /// <summary>The next stop ahead in the running direction (not the one just left) and the distance to it.</summary>
+        private int NextStop(out float ahead)
+        {
+            ahead = float.MaxValue; int best = -1;
+            for (int i = 0; i < Stops.Count; i++)
+            {
+                float t = StopPosition(Stops[i]);
+                float d = Direction > 0f ? t - S : S - t;
+                if (layout.Closed) d = Mathf.Repeat(d, layout.Length);
+                if (d < 0f) continue;
+                if (i == departedFrom)
+                {
+                    if (d < layout.Length * 0.5f && d > 0.25f) departedFrom = -1;   // well clear of it again
+                    else continue;
+                }
+                if (d < ahead) { ahead = d; best = i; }
+            }
+            return best;
         }
 
         public void Remove()
@@ -151,6 +192,27 @@ namespace Wonderland
         {
             if (!Placed || layout == null) return;
             float target = Running ? CruiseSpeed : 0f;
+            // Station stops: brake to halt with the train centred on the platform, wait, then pull away.
+            if (Running && Stops.Count > 0)
+            {
+                if (Dwell > 0f)
+                {
+                    Dwell -= dt; Speed = 0f;
+                    if (Dwell > 0f) { Pose(); return; }
+                }
+                int next = NextStop(out float ahead);
+                if (next >= 0)
+                {
+                    float brake = Mathf.Sqrt(2f * Acceleration * Mathf.Max(0f, ahead - 0.001f));
+                    target = Mathf.Min(target, Mathf.Max(brake, 0.004f));
+                    if (ahead < 0.003f)
+                    {
+                        S = layout.Wrap(StopPosition(Stops[next]));
+                        Speed = 0f; Dwell = DwellSeconds; departedFrom = next;
+                        Pose(); return;
+                    }
+                }
+            }
             Speed = Mathf.MoveTowards(Speed, target, Acceleration * dt);
             if (!layout.Closed)
             {
@@ -182,7 +244,7 @@ namespace Wonderland
                 var emission = smoke.emission;
                 chuff += ds / (TrainFactory.Loco.WheelRadius[0] * Mathf.PI * 0.5f);
                 float pulse = 0.55f + 0.45f * Mathf.Abs(Mathf.Sin(chuff * Mathf.PI));
-                emission.rateOverTime = 3f + 30f * (Speed / CruiseSpeed) * pulse;
+                emission.rateOverTime = InTunnel != null && InTunnel(S) ? 0f : 3f + 30f * (Speed / CruiseSpeed) * pulse;
             }
         }
 

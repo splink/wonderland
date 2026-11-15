@@ -10,6 +10,7 @@ namespace Wonderland
     {
         public float x, z, rotation;
         public int variant;
+        public int style;   // colour style (0-3); older saves load as 0
     }
 
     /// <summary>
@@ -18,7 +19,7 @@ namespace Wonderland
     /// </summary>
     public sealed class BuildingSystem : MonoBehaviour
     {
-        public const float MaxSlopeRange = 0.035f;
+        public const float MaxSlopeRange = 0.09f;   // houses cut and fill a pad, so moderate slopes are fine
         public readonly List<HouseInstance> Houses = new();
         private readonly List<MeshRenderer> renderers = new();
         private TerrainField terrain;
@@ -48,7 +49,7 @@ namespace Wonderland
         {
             var go = new GameObject("House " + HouseFactory.Names[h.variant]);
             go.transform.SetParent(parent, false);
-            go.AddComponent<MeshFilter>().sharedMesh = HouseFactory.Get(h.variant);
+            go.AddComponent<MeshFilter>().sharedMesh = HouseFactory.Get(h.variant, h.style);
             var r = go.AddComponent<MeshRenderer>();
             r.sharedMaterial = material; r.shadowCastingMode = ShadowCastingMode.On;
             return r;
@@ -84,16 +85,18 @@ namespace Wonderland
             return result;
         }
 
+        /// <summary>The house's ground level: the footprint's average height (its pad is graded to exactly this).</summary>
         public float SitHeight(HouseInstance h, out float range)
         {
-            float min = float.MaxValue, max = float.MinValue;
-            foreach (var p in FootprintSamples(h))
+            float min = float.MaxValue, max = float.MinValue, sum = 0f;
+            var samples = FootprintSamples(h);
+            foreach (var p in samples)
             {
                 float y = terrain.SurfaceAt(p.x, p.y);
-                min = Mathf.Min(min, y); max = Mathf.Max(max, y);
+                min = Mathf.Min(min, y); max = Mathf.Max(max, y); sum += y;
             }
             range = max - min;
-            return min + Mathf.Min(range * 0.3f, 0.004f);
+            return sum / samples.Length;
         }
 
         public static float Radius(int variant) => HouseFactory.HalfExtents(variant).magnitude;
@@ -101,14 +104,16 @@ namespace Wonderland
         /// <summary>Why a house cannot go here, or null when it can.</summary>
         public string Validate(HouseInstance h, int ignore, Func<Vector2, float> trackDistance)
         {
+            bool station = h.variant == HouseFactory.Station;   // a station stands beside the rails on purpose
             foreach (var p in FootprintSamples(h))
             {
                 if (terrain.EdgeAt(p.x, p.y) < 0.5f) return "Too close to the edge";
-                if (trackDistance(p) < TrackSystem.BedHalfWidth + 0.012f) return "That's the railway";
+                if (terrain.WaterAt(p.x, p.y) > 0.2f) return "That's water";
+                if (!station && trackDistance(p) < TrackSystem.BedHalfWidth + 0.012f) return "That's the railway";
             }
-            if (trackDistance(new Vector2(h.x, h.z)) < TrackSystem.BedHalfWidth + 0.03f) return "That's the railway";
+            if (!station && trackDistance(new Vector2(h.x, h.z)) < TrackSystem.BedHalfWidth + 0.03f) return "That's the railway";
             SitHeight(h, out float range);
-            if (range > MaxSlopeRange) return "Too steep here - flatten it first";
+            if (range > MaxSlopeRange) return "Too steep here - smooth it a little first";
             float r = Radius(h.variant) * 0.82f;
             for (int i = 0; i < Houses.Count; i++)
             {

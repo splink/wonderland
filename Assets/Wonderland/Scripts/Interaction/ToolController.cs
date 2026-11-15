@@ -27,8 +27,14 @@ namespace Wonderland
         public bool PlacingWorld;
         public bool HapticsEnabled = true;
 
-        private readonly float[] radius = { 0.16f, 0.13f, 0.05f, 0.05f, 0.05f, 0.06f };
+        private readonly float[] radius = { 0.16f, 0.12f, 0.13f, 0.05f, 0.05f, 0.05f, 0.03f, 0.06f };
+        public int DecorKind { get; private set; }   // 0 sheep, 1 cows, 2 villagers
+        private Vector3 lastDrop; private float sinceDrop;
+        public bool Draining { get; private set; }
+        public bool StreamMode { get; private set; }
+        private float waterLevel;
         private float strength = 0.6f, density = 0.6f, houseRotation;
+        private int houseStyle;   // each new house gets the next colour style, so a village never repeats itself
         private readonly QuestInput quest = new();
         private LineRenderer line;
         private Transform dot;
@@ -130,6 +136,11 @@ namespace Wonderland
                         o.Add(new PaletteUI.Option(m.ToString(), TerrainMode == m, () => { TerrainMode = mode; RefreshOptions(); }));
                     }
                     break;
+                case Tool.Water:
+                    o.Add(new PaletteUI.Option("Pond", !Draining && !StreamMode, () => { Draining = false; StreamMode = false; RefreshOptions(); }));
+                    o.Add(new PaletteUI.Option("Stream", StreamMode, () => { Draining = false; StreamMode = true; RefreshOptions(); }));
+                    o.Add(new PaletteUI.Option("Drain", Draining, () => { Draining = true; StreamMode = false; RefreshOptions(); }));
+                    break;
                 case Tool.Forest:
                     o.Add(new PaletteUI.Option("Paint", !ForestErase, () => { ForestErase = false; RefreshOptions(); }));
                     o.Add(new PaletteUI.Option("Erase", ForestErase, () => { ForestErase = true; RefreshOptions(); }));
@@ -151,8 +162,13 @@ namespace Wonderland
                         o.Add(new PaletteUI.Option(HouseFactory.Names[i], HouseVariant == i && !carrying, () => { HouseVariant = v; carrying = false; RefreshOptions(); }));
                     }
                     break;
+                case Tool.Decor:
+                    o.Add(new PaletteUI.Option("Sheep", DecorKind == 0, () => { DecorKind = 0; RefreshOptions(); }));
+                    o.Add(new PaletteUI.Option("Cows", DecorKind == 1, () => { DecorKind = 1; RefreshOptions(); }));
+                    o.Add(new PaletteUI.Option("Villagers", DecorKind == 2, () => { DecorKind = 2; RefreshOptions(); }));
+                    break;
                 case Tool.Eraser:
-                    o.Add(new PaletteUI.Option("Tap: house / train / track", false, null));
+                    o.Add(new PaletteUI.Option("Tap: house / animal / villager / train / track", false, null));
                     o.Add(new PaletteUI.Option("Hold: trees", false, null));
                     break;
             }
@@ -175,11 +191,16 @@ namespace Wonderland
                 TerrainBrush.Trim => "Trim: paint along the shore to take land away  ·  A: mode",
                 _ => $"Hold trigger to {TerrainMode.ToString().ToLower()}  ·  A: mode  ·  stick: size / strength  ·  B: undo",
             },
+            Tool.Water => StreamMode ? "Hold trigger and draw a stream - it flows downhill and the railway bridges it  ·  A: next mode"
+                : Draining ? "Hold trigger over water to drain it (tap a stream to remove it)  ·  A: next mode" : "Hold trigger to dig a pond; start in a pond to make it bigger  ·  A: next mode  ·  stick: size",
             Tool.Forest => ForestErase ? "Hold trigger to clear trees  ·  A: paint" : "Hold trigger to paint a forest  ·  A: erase  ·  stick: size / density",
-            Tool.Track => World.Track.HasTrack ? "Draw a new loop to replace the railway  ·  end near the start to close it" : "Hold trigger and draw a loop; finish near the start",
+            Tool.Track => World.Track.HasTrack ? "Draw a new loop to replace the railway  ·  come back to the start to close it" : "Hold trigger and draw a loop - come back to the start and let go (over bare floor is fine)",
             Tool.Train => World.Train.Placed ? "Trigger on the track: move train  ·  A: start / stop" : World.Track.HasTrack ? "Point at the railway and pull the trigger" : "Draw a railway first (Track tool)",
-            Tool.Houses => carrying ? "Trigger: put the house down  ·  stick: rotate" : "Trigger: place  ·  stick: rotate  ·  A: next house  ·  grip / trigger on a house: move it",
-            _ => "Tap a house, the train or the railway to erase  ·  hold over trees to clear them",
+            Tool.Houses => HouseVariant == HouseFactory.Station ? "Point beside the railway: the station snaps to it and the train will stop there"
+                : carrying ? "Trigger: put the house down  ·  stick: rotate" : "Trigger: place  ·  stick: rotate  ·  A: next house  ·  grip / trigger on a house: move it",
+            Tool.Decor => DecorKind == 2 ? "Trigger: place a villager - they stroll to the neighbours, take the train and wave  ·  A: switch"
+                : "Trigger: place a " + (DecorKind == 0 ? "sheep" : "cow") + " - hold and sweep for a little herd  ·  A: switch",
+            _ => "Tap a house, an animal, a villager, the train or the railway to erase  ·  hold over trees to clear them",
         };
 
         private void Update()
@@ -224,7 +245,7 @@ namespace Wonderland
             var localDir = wt.InverseTransformDirection(ray.direction);
             bool hit = World.Terrain.Raycast(localOrigin, localDir, 3f, out var local);
             // Growing land: past the shore the pointer lands on the real floor.
-            if (!hit && LandMode) hit = World.Terrain.RaycastFloor(localOrigin, localDir, 4f, out local);
+            if (!hit && (LandMode || Tool == Tool.Track)) hit = World.Terrain.RaycastFloor(localOrigin, localDir, 5f, out local);
             if (PlacingWorld) { PlaceWorld(input, ray, dt); return; }
 
             // Stick: size on X (rotation for houses), strength / density on Y.
@@ -245,10 +266,12 @@ namespace Wonderland
             switch (Tool)
             {
                 case Tool.Terrain: TerrainTool(input, hit, local, dt, ref colour); break;
+                case Tool.Water: WaterTool(input, hit, local, dt, ref colour); break;
                 case Tool.Forest: ForestTool(input, hit, local, dt, ref colour); break;
                 case Tool.Track: TrackTool(input, hit, local, ref colour); break;
                 case Tool.Train: TrainTool(input, hit, local, ref colour); break;
                 case Tool.Houses: HouseTool(input, hit, local, localOrigin, localDir, ref colour); break;
+                case Tool.Decor: DecorTool(input, hit, local, dt, ref colour); break;
                 case Tool.Eraser: EraserTool(input, hit, local, localOrigin, localDir, dt, ref colour); break;
             }
             if (Tool != Tool.Houses) ghost.gameObject.SetActive(false);
@@ -262,6 +285,10 @@ namespace Wonderland
             {
                 case Tool.Terrain: TerrainMode = (TerrainBrush)(((int)TerrainMode + 1) % 6); Say(TerrainMode.ToString()); break;
                 case Tool.Forest: ForestErase = !ForestErase; Say(ForestErase ? "Erase trees" : "Paint trees"); break;
+                case Tool.Water:
+                    if (!Draining && !StreamMode) StreamMode = true; else if (StreamMode) { StreamMode = false; Draining = true; } else Draining = false;
+                    Say(StreamMode ? "Stream" : Draining ? "Drain" : "Pond"); break;
+                case Tool.Decor: DecorKind = (DecorKind + 1) % 3; Say(DecorKind == 0 ? "Sheep" : DecorKind == 1 ? "Cows" : "Villagers"); break;
                 case Tool.Houses: HouseVariant = (HouseVariant + 1) % HouseFactory.VariantCount; Say(HouseFactory.Names[HouseVariant]); break;
                 case Tool.Train: ToggleTrain(); break;
             }
@@ -292,7 +319,7 @@ namespace Wonderland
                     floorRing.SetPositionAndRotation(wt.TransformPoint(local + Vector3.up * 0.004f), wt.rotation);
                     floorRing.localScale = Vector3.one * Radius * (stroking ? 1.04f : 1f);
                     floorRing.GetComponent<MeshRenderer>().sharedMaterial.color = blocked ? new Color(1f, 0.4f, 0.35f) : ModeColour(TerrainMode);
-                    if (blocked && input.Trigger) Say("No room here - land grows only on free floor", 1.5f);
+                    if (blocked && input.Trigger) Say("That's as far as the land can reach", 1.5f);
                 }
                 else if (input.Trigger) Say("The land can't grow any further this way", 1.5f);
             }
@@ -305,6 +332,57 @@ namespace Wonderland
                 Buzz(0.12f);
             }
             if (stroking && (input.TriggerUp || !input.Trigger)) EndStroke();
+        }
+
+        private void WaterTool(PointerInput input, bool hit, Vector3 local, float dt, ref Color colour)
+        {
+            var ring = Draining ? new Color(1f, 0.75f, 0.45f) : new Color(0.45f, 0.8f, 1f);
+            colour = ring; colour.a = 0.8f;
+            if (hit) World.TerrainView.SetBrush(local, Radius, ring, 0.6f + (stroking ? 0.3f : 0f));
+            else World.TerrainView.HideBrush();
+            if (StreamMode)
+            {
+                // Drawn like the railway.
+                World.TerrainView.SetBrush(local, 0.02f, ring, hit ? 0.9f : 0f);
+                if (input.TriggerDown && hit) { drawn.Clear(); drawn.Add(local); }
+                if (input.Trigger && drawn.Count > 0 && hit && new Vector2(local.x - drawn[^1].x, local.z - drawn[^1].z).magnitude > 0.012f)
+                { drawn.Add(local); World.Track.ShowPreview(drawn, false, false); }
+                if ((input.TriggerUp || !input.Trigger) && drawn.Count > 0)
+                {
+                    string error = World.BuildStream(drawn);
+                    World.Track.HidePreview();
+                    Say(error ?? "A stream! It flows downhill", 3f);
+                    Haptic(error == null ? 0.5f : 0.8f, error == null ? 0.06f : 0.12f);
+                    drawn.Clear();
+                }
+                return;
+            }
+            if (input.TriggerDown && hit && Draining && World.RemoveStreamAt(local)) { Say("Stream removed"); Haptic(0.5f, 0.05f); return; }
+            if (input.TriggerDown && hit) { World.Checkpoint(); stroking = true; waterLevel = World.WaterLevelForStroke(local); }
+            if (stroking && input.Trigger && hit) { World.WaterStroke(local, Radius, strength, dt, waterLevel, Draining); Buzz(0.12f); }
+            if (stroking && (input.TriggerUp || !input.Trigger)) EndStroke();
+        }
+
+        private void DecorTool(PointerInput input, bool hit, Vector3 local, float dt, ref Color colour)
+        {
+            bool person = DecorKind == 2;
+            var kind = (AnimalKind)Mathf.Min(DecorKind, 1);
+            float radius = person ? PeopleSystem.Radius * 2f : AnimalFactory.Radius(kind);
+            var p2 = new Vector2(local.x, local.z);
+            bool free = hit && (person ? World.People.Walkable(p2) : World.IsFreeGrass(p2, radius));
+            colour = free ? new Color(1f, 0.95f, 0.75f, 0.85f) : new Color(1f, 0.5f, 0.45f, 0.85f);
+            if (hit) World.TerrainView.SetBrush(local, radius * 1.4f, free ? new Color(1f, 0.95f, 0.7f) : new Color(1f, 0.4f, 0.35f), 0.8f);
+            else World.TerrainView.HideBrush();
+            sinceDrop += dt;
+            if (input.TriggerDown && hit) { World.Checkpoint(); stroking = true; lastDrop = new Vector3(1e6f, 0f, 0f); sinceDrop = 1f; }
+            if (stroking && input.Trigger && hit && (local - lastDrop).magnitude > (person ? 0.04f : 0.05f) && sinceDrop > 0.12f)
+            {
+                string error = person ? World.PlacePerson(local, Random.Range(0, PersonFactory.StyleCount), Random.Range(1, 1 << 30))
+                    : World.PlaceAnimal(local, kind, Random.Range(1, 1 << 30));
+                if (error == null) { lastDrop = local; sinceDrop = 0f; Haptic(0.35f, 0.03f); }
+                else if (input.TriggerDown) Say(error);
+            }
+            if (stroking && (input.TriggerUp || !input.Trigger)) stroking = false;
         }
 
         private void ForestTool(PointerInput input, bool hit, Vector3 local, float dt, ref Color colour)
@@ -398,7 +476,7 @@ namespace Wonderland
                     if (input.TriggerDown || input.GripDown)
                     {
                         var h = World.PickUpHouse(hover);
-                        HouseVariant = h.variant; houseRotation = h.rotation; carrying = true; pickedHover = -1;
+                        HouseVariant = h.variant; houseRotation = h.rotation; houseStyle = h.style; carrying = true; pickedHover = -1;
                         Say("Moving " + HouseFactory.Names[h.variant]);
                         RefreshOptions();
                     }
@@ -406,10 +484,18 @@ namespace Wonderland
                 }
             }
             if (!hit) { ghost.gameObject.SetActive(false); World.TerrainView.HideBrush(); return; }
-            var candidate = new HouseInstance { x = local.x, z = local.z, rotation = houseRotation, variant = HouseVariant };
-            string error = World.ValidateHouse(candidate);
+            var candidate = new HouseInstance { x = local.x, z = local.z, rotation = houseRotation, variant = HouseVariant, style = houseStyle };
+            string error;
+            if (HouseVariant == HouseFactory.Station)
+            {
+                // Stations snap beside the rails, facing them, on the side the pointer is on.
+                var snapped = World.StationAt(local, houseStyle);
+                if (snapped.HasValue) { candidate = snapped.Value; local = new Vector3(candidate.x, local.y, candidate.z); houseRotation = candidate.rotation; error = World.ValidateHouse(candidate); }
+                else error = World.Track.HasTrack ? "Point next to the railway for a station" : "Draw a railway first";
+            }
+            else error = World.ValidateHouse(candidate);
             ghost.gameObject.SetActive(true);
-            ghostFilter.sharedMesh = HouseFactory.Get(HouseVariant);
+            ghostFilter.sharedMesh = HouseFactory.Get(HouseVariant, houseStyle);
             var wt = World.transform;
             ghost.position = wt.TransformPoint(new Vector3(local.x, World.Buildings.SitHeight(candidate, out _) + 0.004f * Mathf.Sin(Time.time * 6f) + 0.004f, local.z));
             ghost.rotation = wt.rotation * Quaternion.Euler(0f, houseRotation, 0f);
@@ -420,8 +506,10 @@ namespace Wonderland
             {
                 if (error == null)
                 {
+                    bool wasCarrying = carrying;
                     World.PlaceHouse(candidate, !carrying);
                     carrying = false;
+                    if (!wasCarrying) houseStyle = (houseStyle + 1 + Random.Range(0, HouseFactory.StyleCount - 1)) % HouseFactory.StyleCount;
                     Haptic(0.5f, 0.05f);
                     Say(HouseFactory.Names[HouseVariant] + " placed");
                     RefreshOptions();

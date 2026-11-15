@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace Wonderland
@@ -21,7 +22,8 @@ namespace Wonderland
     public sealed class TerrainField
     {
         public const int DefaultHalfCells = 120;   // 4.8 m square when the room is unknown
-        public const int MaxCells = 460;           // per axis: 9.2 m
+        public const int MaxCells = 800;           // per axis: 16 m, a memory backstop
+        public const float MaxReach = (MaxCells / 2) * CellSize;   // how far from the world's centre land may reach
         public const float CellSize = 0.02f;
         public const float BaseHeight = 0.022f;
         public const float MinHeight = 0.004f;
@@ -40,6 +42,11 @@ namespace Wonderland
         public int GX0 { get; private set; }
         public int GZ0 { get; private set; }
         public float[] Height, Surface, Land, Edge, Lock, Soil;
+        /// <summary>House pads (1 = under a house): brushes and trimming leave them alone. Derived from the houses.</summary>
+        public float[] Pad;
+        /// <summary>Ponds and lakes: water mask (1 = water) and the water surface height for each water cell.</summary>
+        public float[] Water, WaterLevel;
+        public const float PondDepth = 0.028f;
         /// <summary>1 where land may grow (free floor inside the room).</summary>
         public byte[] Allowed;
         private float[] scratch, rim, rimNoise, distance, blur;   // rim = Shape(Edge); rimNoise = shoreline roughness (m)
@@ -90,7 +97,8 @@ namespace Wonderland
         {
             GX0 = c.x; GZ0 = c.y; Nx = c.width; Nz = c.height;
             int n = Nx * Nz;
-            Height = new float[n]; Surface = new float[n]; Land = new float[n]; Edge = new float[n]; Lock = new float[n]; Soil = new float[n];
+            Height = new float[n]; Surface = new float[n]; Land = new float[n]; Edge = new float[n]; Lock = new float[n]; Soil = new float[n]; Pad = new float[n];
+            Water = new float[n]; WaterLevel = new float[n];
             Allowed = new byte[n]; scratch = new float[n]; rim = new float[n]; rimNoise = new float[n]; distance = new float[n]; blur = new float[n];
             for (int i = 0; i < n; i++) Allowed[i] = 1;
         }
@@ -102,7 +110,7 @@ namespace Wonderland
             float lx = LocalX(x), lz = LocalZ(z);
             rimNoise[i] = (Noise.Fbm2(lx * 3.5f + Seed * 0.71f, lz * 3.5f - Seed * 0.37f, 3) - 0.5f) * 0.12f;
             Height[i] = BaseHeight + (undulate ? (Noise.Fbm2(lx * 4f + Seed, lz * 4f) - 0.5f) * 0.008f : 0f);
-            Land[i] = 0f; Lock[i] = 0f; Soil[i] = 0f;
+            Land[i] = 0f; Lock[i] = 0f; Soil[i] = 0f; Water[i] = 0f; WaterLevel[i] = 0f;
         }
 
         /// <summary>
@@ -114,7 +122,7 @@ namespace Wonderland
             if (cells == Cells) return;
             int oldNx = Nx, oldGX = GX0, oldGZ = GZ0;
             var oldRect = Cells;
-            float[] h = Height, l = Land, lk = Lock, so = Soil;
+            float[] h = Height, l = Land, lk = Lock, so = Soil, wa = Water, wl = WaterLevel;
             Allocate(cells);
             for (int z = 0; z < Nz; z++)
             for (int x = 0; x < Nx; x++)
@@ -123,7 +131,7 @@ namespace Wonderland
                 InitCell(i, x, z);
                 if (gx < oldRect.xMin || gx >= oldRect.xMax || gz < oldRect.yMin || gz >= oldRect.yMax) continue;
                 int j = (gz - oldGZ) * oldNx + (gx - oldGX);
-                Height[i] = h[j]; Land[i] = l[j]; Lock[i] = lk[j]; Soil[i] = so[j];
+                Height[i] = h[j]; Land[i] = l[j]; Lock[i] = lk[j]; Soil[i] = so[j]; Water[i] = wa[j]; WaterLevel[i] = wl[j];
             }
             RecomputeEdge(All);
             UpdateSurface(All);
@@ -297,6 +305,65 @@ namespace Wonderland
 
         public float SurfaceAt(float x, float z) => Bilinear(Surface, x, z);
         public float EdgeAt(float x, float z) => Inside(x, z) ? Bilinear(Edge, x, z) : 0f;
+        public bool LandAt(float x, float z) => Inside(x, z) && Bilinear(Land, x, z) >= 0.5f;
+        public float WaterAt(float x, float z) => Inside(x, z) ? Bilinear(Water, x, z) : 0f;
+
+        /// <summary>Water surface height at a point (the level of the nearest water cell), or -1 when dry.</summary>
+        public float WaterLevelAt(float x, float z)
+        {
+            if (!Inside(x, z)) return -1f;
+            int ix = Mathf.Clamp(Mathf.RoundToInt((x - X0) / Cell), 0, Nx - 1), iz = Mathf.Clamp(Mathf.RoundToInt((z - Z0) / Cell), 0, Nz - 1);
+            int i = iz * Nx + ix;
+            return Water[i] >= 0.5f ? WaterLevel[i] : -1f;
+        }
+
+        /// <summary>
+        /// One frame of the Pond brush: cells inside the brush become water at <paramref name="level"/> and the ground
+        /// under them is dug into a soft basin (deepest in the middle, banks sloping in); <paramref name="drain"/> removes
+        /// water and fills the basin back up to its old water level. The railway corridor and house pads are left alone.
+        /// </summary>
+        public RectInt PaintWater(Vector2 centre, float radius, float strength, float dt, float level, bool drain)
+        {
+            var r = RegionAround(centre, radius);
+            float r2 = radius * radius, rate = Mathf.Min(1f, 6f * strength * dt);
+            for (int z = r.yMin; z < r.yMax; z++)
+            for (int x = r.xMin; x < r.xMax; x++)
+            {
+                int i = z * Nx + x;
+                float dx = LocalX(x) - centre.x, dz = LocalZ(z) - centre.y;
+                float d2 = (dx * dx + dz * dz) / r2 * (1f + rimNoise[i] * 2.5f);
+                if (d2 >= 1f || Lock[i] > 0.05f || Pad[i] > 0.05f || Land[i] < 0.5f || rim[i] < 0.15f) continue;
+                float inner = 1f - d2;
+                if (drain)
+                {
+                    if (Water[i] < 0.5f) continue;
+                    float fill = HeightForSurface(i, WaterLevel[i] + 0.002f);
+                    Height[i] = Mathf.Lerp(Height[i], Mathf.Max(Height[i], fill), Mathf.Min(1f, rate * 2f));
+                    if (Surface[i] >= WaterLevel[i]) Water[i] = 0f;
+                    Water[i] = inner > 0.2f ? 0f : Water[i];
+                    continue;
+                }
+                if (inner > 0.22f && rim[i] > 0.65f)   // water stays clear of the shore taper, where no bank could hold it
+                {
+                    if (Water[i] < 0.5f) { Water[i] = 1f; WaterLevel[i] = level; }
+                    float lvl = WaterLevel[i];
+                    float bed = lvl - Mathf.Min(PondDepth, lvl - MinHeight - 0.002f) * Mathf.SmoothStep(0.15f, 1f, (inner - 0.22f) / 0.78f) - 0.003f;
+                    float target = HeightForSurface(i, bed);
+                    if (target < Height[i]) Height[i] = Mathf.Lerp(Height[i], target, rate);
+                }
+                else if (Water[i] < 0.5f && inner <= 0.22f)
+                {
+                    // The bank: shaped to stand just above the water - eased down where the ground was higher, raised
+                    // into a little levee where it was lower (downhill, towards the shore), so the pond always holds.
+                    float bank = level + 0.002f + (0.22f - inner) * 0.04f;
+                    float target = HeightForSurface(i, bank);
+                    if (Surface[i] < level + 0.0015f) Height[i] = Mathf.Max(Height[i], Mathf.Lerp(Height[i], target, rate));
+                    else if (target < Height[i]) Height[i] = Mathf.Lerp(Height[i], target, rate * 0.5f);
+                }
+            }
+            UpdateSurface(r);
+            return r;
+        }
         public float LockAt(float x, float z) => Inside(x, z) ? Bilinear(Lock, x, z) : 0f;
         public Vector3 PointAt(float x, float z) => new(x, SurfaceAt(x, z), z);
 
@@ -352,7 +419,8 @@ namespace Wonderland
             if (t < 0f || t > maxDistance) return false;
             hit = origin + direction * t;
             hit.y = 0f;
-            return Inside(hit.x, hit.z);
+            // Anywhere on the floor within reach: the grid grows to meet new land.
+            return Mathf.Abs(hit.x) < MaxReach - 0.3f && Mathf.Abs(hit.z) < MaxReach - 0.3f;
         }
 
         public RectInt RegionAround(Vector2 centre, float radius)
@@ -384,7 +452,8 @@ namespace Wonderland
                 if (d2 >= 1f) continue;
                 int i = z * Nx + x;
                 // Fade towards the shore (where the landscape tapers to the floor) so hills never pile up into a cliff there.
-                float w = (1f - d2) * (1f - d2) * (1f - Lock[i]) * Mathf.Sqrt(rim[i]);
+                // The railway is not protected: the track re-profiles to sculpted ground. House pads are.
+                float w = (1f - d2) * (1f - d2) * (1f - Pad[i]) * Mathf.Sqrt(rim[i]);
                 if (w <= 0f) continue;
                 float h = Height[i];
                 float relax = Average(scratch, x, z) - h;
@@ -428,7 +497,7 @@ namespace Wonderland
                 // Roughen the brush edge so painted shores meander.
                 float d2 = (dx * dx + dz * dz) / r2 * (1f + rimNoise[i] * 3f);
                 if (d2 >= 1f) continue;
-                if (!grow && (Lock[i] > 0.02f || (Protect != null && Protect(LocalX(x), LocalZ(z))))) continue;
+                if (!grow && (Lock[i] > 0.02f || Pad[i] > 0.02f || (Protect != null && Protect(LocalX(x), LocalZ(z))))) continue;
                 float w = Mathf.Clamp01((1f - d2) * 2.5f) * Mathf.Min(1f, 5f * strength * dt);
                 float before = Land[i];
                 Land[i] = Mathf.Clamp01(Land[i] + (grow ? w : -w));
@@ -453,7 +522,7 @@ namespace Wonderland
             for (int x = Mathf.Max(3, r.xMin); x < Mathf.Min(Nx - 3, r.xMax); x++)
             {
                 int i = z * Nx + x;
-                if (Land[i] < 0.5f || Lock[i] > 0.02f) continue;
+                if (Land[i] < 0.5f || Lock[i] > 0.02f || Pad[i] > 0.02f) continue;
                 float best = 0f;
                 for (int oz = -3; oz <= 3 && best < 0.22f; oz++)
                 for (int ox = -3; ox <= 3; ox++) best = Mathf.Max(best, Edge[i + oz * Nx + ox]);
@@ -478,13 +547,13 @@ namespace Wonderland
                 for (int x = Mathf.Max(1, r.xMin); x < Mathf.Min(Nx - 1, r.xMax); x++)
                 {
                     int i = z * Nx + x;
-                    if (Lock[i] > 0.5f) continue;
+                    if (Pad[i] > 0.5f) continue;
                     float si = Math.Max(rim[i], 0.15f), h = scratch[i] * rim[i];
                     for (int k = 0; k < 4; k++)
                     {
                         int j = k == 0 ? i - 1 : k == 1 ? i + 1 : k == 2 ? i - Nx : i + Nx;
                         float excess = h - scratch[j] * rim[j] - talus;
-                        if (excess <= 0f || Lock[j] > 0.5f) continue;
+                        if (excess <= 0f || Pad[j] > 0.5f) continue;
                         float move = excess * 0.2f / si;
                         Height[i] -= move; Height[j] += move * 0.6f;
                     }
@@ -519,15 +588,42 @@ namespace Wonderland
         }
 
         /// <summary>Restores data saved for this grid size (resize first if the snapshot's grid differs).</summary>
-        public void CopyFrom(float[] height, float[] land, float[] locks, float[] soil)
+        public void CopyFrom(float[] height, float[] land, float[] locks, float[] soil, float[] water = null, float[] waterLevel = null)
         {
             if (height.Length != Height.Length) throw new ArgumentException("Terrain data does not match the grid size.");
+            if (water != null && water.Length == Water.Length) Array.Copy(water, Water, Water.Length); else Array.Clear(Water, 0, Water.Length);
+            if (waterLevel != null && waterLevel.Length == WaterLevel.Length) Array.Copy(waterLevel, WaterLevel, WaterLevel.Length); else Array.Clear(WaterLevel, 0, WaterLevel.Length);
             Array.Copy(height, Height, Height.Length);
             Array.Copy(land, Land, Land.Length);
             Array.Copy(locks, Lock, Lock.Length);
             Array.Copy(soil, Soil, Soil.Length);
             RecomputeEdge(All);
             UpdateSurface(All);
+        }
+
+        /// <summary>
+        /// Makes everything within <paramref name="radius"/> of the path land (railway drawn over bare floor). Returns
+        /// the touched region.
+        /// </summary>
+        public RectInt GrowLandAlong(List<Vector2> path, float radius)
+        {
+            float minX = float.MaxValue, minZ = float.MaxValue, maxX = float.MinValue, maxZ = float.MinValue;
+            foreach (var p in path) { minX = Mathf.Min(minX, p.x); maxX = Mathf.Max(maxX, p.x); minZ = Mathf.Min(minZ, p.y); maxZ = Mathf.Max(maxZ, p.y); }
+            var r = RegionAround(new Vector2((minX + maxX) / 2f, (minZ + maxZ) / 2f), Mathf.Max(maxX - minX, maxZ - minZ) / 2f + radius + Cell);
+            float r2 = radius * radius;
+            for (int z = Mathf.Max(2, r.yMin); z < Mathf.Min(Nz - 2, r.yMax); z++)
+            for (int x = Mathf.Max(2, r.xMin); x < Mathf.Min(Nx - 2, r.xMax); x++)
+            {
+                int i = z * Nx + x;
+                if (Land[i] >= 1f) continue;
+                var c = new Vector2(LocalX(x), LocalZ(z));
+                for (int k = 0; k < path.Count; k += 3)
+                    if ((path[k] - c).sqrMagnitude < r2) { Land[i] = 1f; break; }
+            }
+            var affected = Expand(r, RimCells + 1);
+            RecomputeEdge(affected);
+            UpdateSurface(affected);
+            return affected;
         }
 
         /// <summary>Land area in square metres (for feedback and tests).</summary>
