@@ -70,6 +70,20 @@ namespace Wonderland.Editor
             Check(steepest < 1.3f, $"Hills stay rounded, no spikes (steepest slope {steepest:0.00} at {where.x:0.00},{where.y:0.00}, limit 1.3)");
             Check(Min(t.Height) >= TerrainField.MinHeight - 1e-5f, "Lowering never digs below the floor margin");
 
+            // 1b. Extend the land: grow a peninsula onto the floor beyond the shore, plant it, trim part of it back.
+            float area = t.LandArea();
+            Check(t.EdgeAt(1.3f, 0f) == 0f, "Beyond the starting shore is bare floor");
+            Stroke(new Vector3(0.9f, 0f, -0.1f), new Vector3(1.45f, 0f, 0.05f), 2.5f, p => world.TerrainStroke(TerrainBrush.Grow, p, 0.22f, 0.8f, Dt, 0f));
+            float grown = t.LandArea();
+            Check(t.EdgeAt(1.3f, 0f) > 0.3f && grown > area + 0.15f, $"Grow brush extends the land ({area:0.00} -> {grown:0.00} m2)");
+            Check(t.SurfaceAt(1.3f, 0f) > 0.008f && t.SurfaceAt(1.75f, 0.6f) == 0f, "New land rises gently from the floor; the rest stays floor");
+            Hold(() => world.PaintForest(new Vector3(1.25f, 0f, 0f), 0.12f, 0.8f, Dt), 1.5f);
+            int planted = world.Forest.Trees.FindAll(tr => tr.x > 1.05f).Count;
+            Check(planted > 3, $"Trees grow on the new land ({planted})");
+            Hold(() => world.TerrainStroke(TerrainBrush.Trim, new Vector3(1.4f, 0f, 0.03f), 0.18f, 1f, Dt, 0f), 1.5f);
+            Check(t.LandArea() < grown && t.EdgeAt(1.42f, 0.03f) == 0f, $"Trim brush takes land away ({grown:0.00} -> {t.LandArea():0.00} m2)");
+            Check(!world.Forest.Trees.Exists(tr => t.EdgeAt(tr.x, tr.z) < 0.3f && tr.x > 1.05f), "Trees on trimmed land are removed");
+
             // 2. Forest: two painted strokes, then a little erasing.
             Stroke(new Vector3(-0.75f, 0f, 0.15f), new Vector3(-0.2f, 0f, 0.7f), 3f, p => world.PaintForest(p, 0.2f, 0.75f, Dt));
             Stroke(new Vector3(0.35f, 0f, 0.75f), new Vector3(0.78f, 0f, 0.2f), 2.2f, p => world.PaintForest(p, 0.17f, 0.6f, Dt));
@@ -186,7 +200,50 @@ namespace Wonderland.Editor
             bool same = true;
             for (int i = 0; i < t.Height.Length; i++) if (Mathf.Abs(copy.Terrain.Height[i] - t.Height[i]) > 1e-6f) { same = false; break; }
             Check(same, "Save/load keeps the sculpted terrain exactly");
+            bool sameLand = true;
+            for (int i = 0; i < t.Land.Length; i++) if (copy.Terrain.Land[i] != t.Land[i]) { sameLand = false; break; }
+            Check(sameLand, "Save/load keeps the grown and trimmed land");
             UnityEngine.Object.DestroyImmediate(copy.gameObject);
+
+            // 9. Worlds saved before land could grow (save version 1) still load.
+            var v1 = new SaveV1 { version = 1, size = 2f, seed = 7, trees = new List<TreeInstance> { new() { x = 0.3f, z = 0.2f, scale = 1f, kind = 0, tint = 1f } } };
+            var oldHeights = new float[97 * 97]; for (int i = 0; i < oldHeights.Length; i++) oldHeights[i] = 0.05f;
+            var bytes = new byte[oldHeights.Length * 4]; Buffer.BlockCopy(oldHeights, 0, bytes, 0, bytes.Length);
+            v1.height = Convert.ToBase64String(bytes); v1.locks = v1.soil = Convert.ToBase64String(new byte[bytes.Length]);
+            string v1Path = Path.Combine(Path.GetTempPath(), "wonderland-v1.json");
+            File.WriteAllText(v1Path, JsonUtility.ToJson(v1));
+            var migrated = new GameObject("Migrated").AddComponent<WonderlandWorld>();
+            migrated.Load(Materials(), v1Path);
+            var mt = migrated.Terrain;
+            Check(Mathf.Abs(mt.Height[mt.Index(-mt.GX0, -mt.GZ0)] - 0.05f) < 1e-4f && mt.EdgeAt(0f, 0f) > 0.9f && mt.EdgeAt(1.3f, 0f) == 0f
+                && migrated.Forest.Trees.Count == 1, "Version 1 save migrates (terrain resampled, island rebuilt, trees kept)");
+            UnityEngine.Object.DestroyImmediate(migrated.gameObject);
+
+            // 10. Room bounds: the grid fits the room, land grows anywhere on free floor - not through walls or under
+            // furniture - and the grid re-fits when the world moves. The starting patch is the user's 1 m2.
+            var roomWorld = new GameObject("Room world").AddComponent<WonderlandWorld>();
+            roomWorld.transform.position = new Vector3(10f, 0f, 0f);
+            var roomFootprint = new RoomFootprint();
+            foreach (var c in new[] { new Vector2(-1.2f, -1f), new Vector2(3.4f, -1f), new Vector2(3.4f, 2.6f), new Vector2(-1.2f, 2.6f) })
+                roomFootprint.Floor.Add(new Vector3(10f + c.x, 0f, c.y));
+            roomFootprint.Obstacles.Add(new List<Vector3> { new(11.6f, 0f, 1.6f), new(13.4f, 0f, 1.6f), new(13.4f, 0.8f, 2.5f), new(11.6f, 0.8f, 2.5f) }); // sofa
+            roomWorld.Room = roomFootprint;
+            roomWorld.Create(1f, Materials());
+            var rt = roomWorld.Terrain;
+            Check(Mathf.Abs(rt.LandArea() - 1f) < 0.25f, $"Starts as a small patch ({rt.LandArea():0.00} m2)");
+            Check(rt.X0 <= -1.15f && rt.XMax >= 3.35f && rt.Z0 <= -0.95f && rt.ZMax >= 2.55f, $"Grid covers the whole room ({rt.Nx * rt.Cell:0.0} x {rt.Nz * rt.Cell:0.0} m)");
+            Check(rt.AllowedAt(2.8f, 0.5f) && !rt.AllowedAt(3.38f, 0.5f) && !rt.AllowedAt(2.5f, 2f), "Free floor allowed; walls and the sofa footprint are not");
+            Stroke(new Vector3(0.4f, 0f, 0f), new Vector3(3.6f, 0f, 0f), 6f, p => roomWorld.TerrainStroke(TerrainBrush.Grow, p, 0.25f, 1f, Dt, 0f));
+            Check(rt.EdgeAt(2.6f, 0f) > 0.3f, "Land grows across the room");
+            Check(rt.EdgeAt(3.38f, 0f) == 0f && rt.Land[rt.Index(rt.Nx - 1, rt.Nz / 2)] < 0.5f, "Growth stops at the wall");
+            Stroke(new Vector3(2.5f, 0f, 1.2f), new Vector3(2.5f, 0f, 2.3f), 3f, p => roomWorld.TerrainStroke(TerrainBrush.Grow, p, 0.2f, 1f, Dt, 0f));
+            Check(rt.EdgeAt(2.5f, 1.25f) > 0f && rt.EdgeAt(2.5f, 2.1f) == 0f, "Growth stops at the sofa");
+            float landBeforeMove = rt.LandArea();
+            roomWorld.transform.SetPositionAndRotation(new Vector3(9.4f, 0f, 0.6f), Quaternion.Euler(0f, 30f, 0f));
+            roomWorld.FitToRoom();
+            var corner = roomWorld.transform.InverseTransformPoint(new Vector3(10f + 3.3f, 0f, 2.5f));
+            Check(Mathf.Abs(rt.LandArea() - landBeforeMove) < 1e-4f && rt.Inside(corner.x, corner.z), "After moving, the grid re-fits to the room and the land is unchanged");
+            UnityEngine.Object.DestroyImmediate(roomWorld.gameObject);
 
             world.Forest.RebuildDirty();
             world.Cover.RebuildDirty();
@@ -198,6 +255,8 @@ namespace Wonderland.Editor
                 if (f == null || f.sharedMesh == null || f.sharedMesh.vertexCount == 0) continue;
                 renderers++; triangles += f.sharedMesh.triangles.Length / 3;
             }
+            var terrainStats = world.TerrainView.Stats();
+            Report.AppendLine($"INFO  terrain: {terrainStats.chunks} chunk meshes, {terrainStats.triangles / 1000} k triangles, land {t.LandArea():0.00} m2 of a {t.Nx * t.Cell:0.0} x {t.Nz * t.Cell:0.0} m grid");
             Report.AppendLine($"INFO  static budget of this world: {renderers} mesh renderers (~draw calls per eye pass before batching, excl. shadows/UI), {triangles / 1000} k triangles, ground cover {world.Cover.Count} tufts");
             Report.AppendLine($"INFO  trees {world.Forest.Trees.Count}, forest chunks {world.Forest.ChunkCount}, houses {world.Buildings.Houses.Count}, " +
                 $"track {layout.Length:0.00} m, undo depth {world.UndoDepth}, journey simulated in {(DateTime.Now - started).TotalSeconds:0.0} s wall time");
@@ -213,6 +272,15 @@ namespace Wonderland.Editor
                 if (world.ValidateHouse(h) == null) return h;
             }
             return default;
+        }
+
+        [Serializable]
+        private sealed class SaveV1
+        {
+            public int version; public float size; public int seed;
+            public string height, locks, soil;
+            public List<TreeInstance> trees = new(); public List<HouseInstance> houses = new(); public List<Vector3> track = new();
+            public bool trackClosed, trainPlaced, trainRunning; public float trainS;
         }
 
         private static void Hold(Action action, float seconds)
@@ -247,11 +315,11 @@ namespace Wonderland.Editor
         private static float MaxSlope(TerrainField t, out Vector2 where)
         {
             float worst = 0f; where = default;
-            for (int z = 1; z < TerrainField.N - 1; z++)
-            for (int x = 1; x < TerrainField.N - 1; x++)
+            for (int z = 1; z < t.Nz - 1; z++)
+            for (int x = 1; x < t.Nx - 1; x++)
             {
-                int i = z * TerrainField.N + x;
-                float gx = (t.Surface[i + 1] - t.Surface[i - 1]) / (2f * t.Cell), gz = (t.Surface[i + TerrainField.N] - t.Surface[i - TerrainField.N]) / (2f * t.Cell);
+                int i = z * t.Nx + x;
+                float gx = (t.Surface[i + 1] - t.Surface[i - 1]) / (2f * t.Cell), gz = (t.Surface[i + t.Nx] - t.Surface[i - t.Nx]) / (2f * t.Cell);
                 float g = Mathf.Sqrt(gx * gx + gz * gz);
                 if (g > worst) { worst = g; where = new Vector2(t.LocalX(x), t.LocalZ(z)); }
             }
@@ -296,6 +364,9 @@ namespace Wonderland.Editor
             WonderlandRenders.Capture(cam, "editor-world-train.png", 1920, 1200);
             cam.transform.position = new Vector3(0f, 2.6f, -0.01f); cam.transform.LookAt(Vector3.zero); cam.fieldOfView = 45f;
             WonderlandRenders.Capture(cam, "editor-world-top.png", 1600, 1600);
+            // The land grown onto the floor past the original shore (right-hand side).
+            cam.transform.position = new Vector3(2.05f, 0.55f, -0.75f); cam.transform.LookAt(new Vector3(1.15f, 0.03f, 0.02f)); cam.fieldOfView = 45f;
+            WonderlandRenders.Capture(cam, "editor-world-grown-land.png", 1920, 1200);
             // Kneeling view across the meadow, eye height ~45 cm.
             cam.transform.position = new Vector3(0.55f, 0.32f, -1.05f); cam.transform.LookAt(new Vector3(-0.1f, 0.06f, 0.1f)); cam.fieldOfView = 50f;
             WonderlandRenders.Capture(cam, "editor-world-kneeling.png", 1920, 1200);

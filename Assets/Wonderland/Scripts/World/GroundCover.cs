@@ -15,7 +15,8 @@ namespace Wonderland
     {
         private const float ChunkSize = 0.25f;
         private struct Tuft { public float x, z, scale, rotation; public byte kind; public float tint; }
-        private readonly List<Tuft> tufts = new();
+        private readonly Dictionary<int, List<Tuft>> tufts = new();   // per chunk
+        private int count, seed;
         private readonly Dictionary<int, (GameObject go, Mesh mesh)> chunks = new();
         private readonly HashSet<int> dirty = new();
         private MeshData[] meshes;
@@ -23,24 +24,41 @@ namespace Wonderland
         private Material material;
         private Func<Vector2, bool> blocked;
 
-        public int Count => tufts.Count;
+        public int Count => count;
 
         public void Init(TerrainField field, Material lit, int seed, Func<Vector2, bool> isBlocked)
         {
-            terrain = field; material = lit; blocked = isBlocked;
+            terrain = field; material = lit; blocked = isBlocked; this.seed = seed;
             meshes = new[] { new MeshData(GrassTuft(0)), new MeshData(GrassTuft(1)), new MeshData(FlowerClump(Pal.FlowerYellow)),
                 new MeshData(FlowerClump(Pal.FlowerWhite)), new MeshData(FlowerClump(Pal.FlowerPink)), new MeshData(FlowerClump(Pal.FlowerLilac)), new MeshData(Pebbles()) };
-            var rng = new Rng(seed * 31 + 5);
+            Scatter();
+            MarkAllDirty();
+        }
+
+        /// <summary>
+        /// Candidate positions on a global 4.2 cm lattice, each seeded by its lattice index: the same tufts appear in the
+        /// same places however the terrain grid is cut, so re-fitting the grid to the room changes nothing visible.
+        /// </summary>
+        public void Scatter()
+        {
+            foreach (var k in chunks.Keys) dirty.Add(k);
+            tufts.Clear(); count = 0;
             const float spacing = 0.042f;
-            for (float x = -field.Half; x < field.Half; x += spacing)
-            for (float z = -field.Half; z < field.Half; z += spacing)
+            int ix0 = Mathf.FloorToInt(terrain.X0 / spacing), ix1 = Mathf.CeilToInt(terrain.XMax / spacing);
+            int iz0 = Mathf.FloorToInt(terrain.Z0 / spacing), iz1 = Mathf.CeilToInt(terrain.ZMax / spacing);
+            for (int iz = iz0; iz <= iz1; iz++)
+            for (int ix = ix0; ix <= ix1; ix++)
             {
-                var p = new Vector2(x + rng.Range(-0.45f, 0.45f) * spacing, z + rng.Range(-0.45f, 0.45f) * spacing);
+                var rng = new Rng((int)(Noise.Hash(ix, iz, seed) * 16777215f) + 1);
+                var p = new Vector2((ix + rng.Range(-0.45f, 0.45f)) * spacing, (iz + rng.Range(-0.45f, 0.45f)) * spacing);
                 float meadow = Noise.Fbm2(p.x * 3f + seed, p.y * 3f, 2);
                 if (rng.Value > 0.35f + meadow * 0.5f) continue;
                 float r = rng.Value;
                 byte kind = r < 0.72f ? (byte)rng.Range(0, 2) : r < 0.94f ? (byte)rng.Range(2, 6) : (byte)6;
-                tufts.Add(new Tuft { x = p.x, z = p.y, scale = rng.Range(0.75f, 1.3f), rotation = rng.Range(0f, 360f), kind = kind, tint = rng.Range(0.85f, 1.1f) });
+                int key = ChunkKey(p.x, p.y);
+                if (!tufts.TryGetValue(key, out var list)) tufts[key] = list = new List<Tuft>();
+                list.Add(new Tuft { x = p.x, z = p.y, scale = rng.Range(0.75f, 1.3f), rotation = rng.Range(0f, 360f), kind = kind, tint = rng.Range(0.85f, 1.1f) });
+                count++;
             }
             MarkAllDirty();
         }
@@ -57,8 +75,8 @@ namespace Wonderland
         public void MarkAllDirty()
         {
             if (terrain == null) return;
-            for (float x = -terrain.Half; x <= terrain.Half + ChunkSize; x += ChunkSize)
-            for (float z = -terrain.Half; z <= terrain.Half + ChunkSize; z += ChunkSize)
+            for (float x = terrain.X0; x <= terrain.XMax + ChunkSize; x += ChunkSize)
+            for (float z = terrain.Z0; z <= terrain.ZMax + ChunkSize; z += ChunkSize)
                 dirty.Add(ChunkKey(x, z));
         }
 
@@ -68,18 +86,20 @@ namespace Wonderland
         {
             if (dirty.Count == 0 || terrain == null) return;
             var builders = new Dictionary<int, MeshBuilder>();
-            foreach (var t in tufts)
+            foreach (int k in dirty)
             {
-                int k = ChunkKey(t.x, t.z);
-                if (!dirty.Contains(k)) continue;
+            if (!tufts.TryGetValue(k, out var list)) continue;
+            foreach (var t in list)
+            {
                 var p = new Vector2(t.x, t.z);
                 if (terrain.EdgeAt(t.x, t.z) < 0.3f || terrain.LockAt(t.x, t.z) > 0.1f || blocked(p)) continue;
-                if (!builders.TryGetValue(k, out var b)) builders[k] = b = new MeshBuilder();
+                if (!builders.TryGetValue(ChunkKey(t.x, t.z), out var b)) builders[ChunkKey(t.x, t.z)] = b = new MeshBuilder();
                 var normal = terrain.NormalAt(t.x, t.z);
                 if (normal.y < 0.6f && t.kind < 6) continue;   // no tufts on steep banks
                 var rot = Quaternion.FromToRotation(Vector3.up, Vector3.Lerp(Vector3.up, normal, 0.6f)) * Quaternion.Euler(0f, t.rotation, 0f);
                 var m = Matrix4x4.TRS(new Vector3(t.x, terrain.SurfaceAt(t.x, t.z) - 0.0008f, t.z), rot, Vector3.one * t.scale);
                 b.Append(meshes[t.kind], m, new Color(t.tint, t.tint, t.tint));
+            }
             }
             foreach (int k in dirty)
             {

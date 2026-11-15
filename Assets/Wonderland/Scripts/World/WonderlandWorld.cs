@@ -19,7 +19,7 @@ namespace Wonderland
     /// </summary>
     public sealed class WonderlandWorld : MonoBehaviour
     {
-        public const int MaxUndo = 30;
+        public const int MaxUndo = 20;
         public TerrainField Terrain { get; private set; }
         public TerrainRenderer TerrainView { get; private set; }
         public ForestSystem Forest { get; private set; }
@@ -28,12 +28,17 @@ namespace Wonderland
         public TrainSystem Train { get; private set; }
         public GroundCover Cover { get; private set; }
         public WorldMaterials Materials { get; private set; }
-        public float Size => Terrain.Size;
+        public float PatchSize => Terrain.PatchSize;
         public int Seed { get; private set; }
         public int UndoDepth => undo.Count;
 
         private readonly List<Snapshot> undo = new();
         private bool resitHouses;
+        private RoomFootprint room;
+        private RoomFootprint.Local roomLocal;
+
+        /// <summary>The real room's free floor (null: unknown, land may grow anywhere in the default grid).</summary>
+        public RoomFootprint Room { get => room; set { room = value; if (Terrain != null) FitToRoom(); } }
 
         public static string SavePath => Path.Combine(Application.persistentDataPath, "wonderland-world.json");
 
@@ -45,7 +50,7 @@ namespace Wonderland
             }
             Materials = materials; Seed = seed;
             Terrain = new TerrainField(size, seed, hills);
-            TerrainView = Child<TerrainRenderer>("Terrain", true);
+            TerrainView = Child<TerrainRenderer>("Terrain");
             TerrainView.Init(Terrain, materials.Terrain);
             Forest = Child<ForestSystem>("Forest");
             Forest.Init(Terrain, materials.Lit, seed);
@@ -53,18 +58,57 @@ namespace Wonderland
             Track.Init(materials.Lit, materials.UI);
             Buildings = Child<BuildingSystem>("Buildings");
             Buildings.Init(Terrain, materials.Lit);
+            Terrain.Protect = (x, z) => Buildings.Contains(new Vector2(x, z), 0.03f);
             Train = Child<TrainSystem>("Train");
             Train.Init(materials.Lit, materials.Smoke);
             Cover = Child<GroundCover>("Ground cover");
             Cover.Init(Terrain, materials.Lit, seed, p => Buildings.Contains(p, 0.01f));
             undo.Clear();
+            FitToRoom();
         }
 
-        private T Child<T>(string name, bool mesh = false) where T : Component
+        /// <summary>
+        /// Cuts the terrain grid to cover the room (and all existing land and railway) as seen from the world root, and
+        /// marks where land may grow. Called when the room becomes known, after loading and after the world moves.
+        /// </summary>
+        public void FitToRoom()
+        {
+            roomLocal = room != null && room.Floor.Count >= 3 ? room.ToLocal(transform) : null;
+            if (roomLocal != null)
+            {
+                var need = roomLocal.Bounds;
+                var land = Terrain.LandBounds();
+                if (land.width > 0f) need = Union(need, Grow(land, TerrainField.RimWidth));
+                if (Track.Layout != null)
+                    foreach (var p in Track.Layout.Points) need = Union(need, new Rect(p.x - 0.15f, p.z - 0.15f, 0.3f, 0.3f));
+                need = Grow(need, 0.08f);
+                var cells = TerrainField.CellsCovering(need);
+                // Very large rooms: keep the grid within budget, centred on the world.
+                if (cells.width > TerrainField.MaxCells) cells = new RectInt(Mathf.Clamp(cells.x, -TerrainField.MaxCells / 2 - 1, cells.xMax - TerrainField.MaxCells), cells.y, TerrainField.MaxCells, cells.height);
+                if (cells.height > TerrainField.MaxCells) cells = new RectInt(cells.x, Mathf.Clamp(cells.y, -TerrainField.MaxCells / 2 - 1, cells.yMax - TerrainField.MaxCells), cells.width, TerrainField.MaxCells);
+                if (cells != Terrain.Cells)
+                {
+                    Terrain.Resize(cells);
+                    TerrainView.Reinit();
+                    Cover.Scatter();
+                }
+            }
+            var free = roomLocal;
+            Terrain.SetAllowed(free != null ? free.IsFree : null);
+            TerrainView.RebuildAll();
+            Forest.MarkAllDirty();
+        }
+
+        private static Rect Union(Rect a, Rect b) => Rect.MinMaxRect(Mathf.Min(a.xMin, b.xMin), Mathf.Min(a.yMin, b.yMin), Mathf.Max(a.xMax, b.xMax), Mathf.Max(a.yMax, b.yMax));
+        private static Rect Grow(Rect r, float by) => Rect.MinMaxRect(r.xMin - by, r.yMin - by, r.xMax + by, r.yMax + by);
+
+        /// <summary>Whether land may grow at a local point (inside the room, off the walls and furniture).</summary>
+        public bool CanGrowLand(Vector3 local) => Terrain.AllowedAt(local.x, local.z);
+
+        private T Child<T>(string name) where T : Component
         {
             var go = new GameObject(name);
             go.transform.SetParent(transform, false);
-            if (mesh) { go.AddComponent<MeshFilter>(); go.AddComponent<MeshRenderer>(); }
             return go.AddComponent<T>();
         }
 
@@ -77,7 +121,9 @@ namespace Wonderland
 
         private sealed class Snapshot
         {
-            public float[] Height, Lock, Soil;
+            public RectInt Cells;
+            public float[] Height;
+            public byte[] Land, Lock, Soil;   // 0..1 masks, quantised: snapshots of a room-sized grid stay small
             public TreeInstance[] Trees;
             public HouseInstance[] Houses;
             public List<Vector3> Track;
@@ -85,9 +131,24 @@ namespace Wonderland
             public float TrainS;
         }
 
+        private static byte[] Quantise(float[] v)
+        {
+            var b = new byte[v.Length];
+            for (int i = 0; i < v.Length; i++) b[i] = (byte)Mathf.RoundToInt(Mathf.Clamp01(v[i]) * 255f);
+            return b;
+        }
+
+        private static float[] Expand(byte[] b)
+        {
+            var v = new float[b.Length];
+            for (int i = 0; i < b.Length; i++) v[i] = b[i] / 255f;
+            return v;
+        }
+
         private Snapshot Capture() => new()
         {
-            Height = (float[])Terrain.Height.Clone(), Lock = (float[])Terrain.Lock.Clone(), Soil = (float[])Terrain.Soil.Clone(),
+            Cells = Terrain.Cells,
+            Height = (float[])Terrain.Height.Clone(), Land = Quantise(Terrain.Land), Lock = Quantise(Terrain.Lock), Soil = Quantise(Terrain.Soil),
             Trees = Forest.Trees.ToArray(), Houses = Buildings.Houses.ToArray(),
             Track = Track.Layout != null ? new List<Vector3>(Track.Layout.Points) : null, TrackClosed = Track.Layout?.Closed ?? false,
             TrainPlaced = Train.Placed, TrainRunning = Train.Running, TrainS = Train.S,
@@ -95,7 +156,8 @@ namespace Wonderland
 
         private void Restore(Snapshot s)
         {
-            Terrain.CopyFrom(s.Height, s.Lock, s.Soil);
+            if (s.Cells != Terrain.Cells) { Terrain.Resize(s.Cells); TerrainView.Reinit(); Cover.Scatter(); }
+            Terrain.CopyFrom(s.Height, Expand(s.Land), Expand(s.Lock), Expand(s.Soil));
             TerrainView.RebuildAll();
             Forest.SetTrees(s.Trees);
             Buildings.SetHouses(s.Houses);
@@ -103,6 +165,7 @@ namespace Wonderland
             if (s.TrainPlaced && Track.Layout != null && Train.Place(Track.Layout, s.TrainS)) Train.Running = s.TrainRunning;
             else Train.Remove();
             Cover.MarkAllDirty();
+            if (room != null) FitToRoom();
         }
 
         /// <summary>Remember the world before an operation, so Undo can return to it.</summary>
@@ -125,10 +188,16 @@ namespace Wonderland
 
         public void TerrainStroke(TerrainBrush brush, Vector3 local, float radius, float strength, float dt, float flattenTarget)
         {
-            var region = Terrain.ApplyBrush(brush, new Vector2(local.x, local.z), radius, strength, dt, flattenTarget);
+            var centre = new Vector2(local.x, local.z);
+            var region = Terrain.ApplyBrush(brush, centre, radius, strength, dt, flattenTarget);
+            if (region.width == 0) return;
             TerrainView.Rebuild(region);
-            Forest.MarkDirtyRegion(new Vector2(local.x, local.z), radius);
-            Cover.MarkDirtyRegion(new Vector2(local.x, local.z), radius);
+            // Land edits move the shore (and its taper) up to a rim width beyond the brush.
+            float reach = brush == TerrainBrush.Grow || brush == TerrainBrush.Trim ? radius + TerrainField.RimWidth : radius;
+            Forest.MarkDirtyRegion(centre, reach);
+            Cover.MarkDirtyRegion(centre, reach);
+            if (brush == TerrainBrush.Trim)
+                Forest.RemoveWhere(t => (new Vector2(t.x, t.z) - centre).sqrMagnitude < reach * reach && Terrain.EdgeAt(t.x, t.z) < 0.3f);
             resitHouses = true;
         }
 
@@ -159,7 +228,7 @@ namespace Wonderland
             TrackSystem.UnlockTerrain(Terrain);
             Track.SetLayout(plan.Layout);
             TrackSystem.GradeTerrain(Terrain, plan.Layout);
-            Terrain.UpdateSurface(new RectInt(0, 0, TerrainField.N, TerrainField.N));
+            Terrain.UpdateSurface(Terrain.All);
             TerrainView.RebuildAll();
             var layout = plan.Layout;
             Forest.RemoveWhere(t => { layout.Nearest(new Vector3(t.x, 0f, t.z), out float d); return d < TrackSystem.BedHalfWidth + TreeFactory.Radius((TreeKind)t.kind) * t.scale * 0.5f + 0.006f; });
@@ -243,10 +312,11 @@ namespace Wonderland
         [Serializable]
         private sealed class SaveData
         {
-            public int version = 1;
-            public float size;
+            public int version = 2;
+            public int gx, gz, nx, nz;       // v2: the grid in global cells
+            public float size;               // v1: island size (its grid spanned exactly this); v2: starting patch size
             public int seed;
-            public string height, locks, soil;
+            public string height, land, locks, soil;
             public List<TreeInstance> trees;
             public List<HouseInstance> houses;
             public List<Vector3> track;
@@ -272,8 +342,8 @@ namespace Wonderland
 
         public string Serialize() => JsonUtility.ToJson(new SaveData
         {
-            size = Terrain.Size, seed = Seed,
-            height = Pack(Terrain.Height), locks = Pack(Terrain.Lock), soil = Pack(Terrain.Soil),
+            gx = Terrain.GX0, gz = Terrain.GZ0, nx = Terrain.Nx, nz = Terrain.Nz, size = Terrain.PatchSize, seed = Seed,
+            height = Pack(Terrain.Height), land = Pack(Terrain.Land), locks = Pack(Terrain.Lock), soil = Pack(Terrain.Soil),
             trees = new List<TreeInstance>(Forest.Trees), houses = new List<HouseInstance>(Buildings.Houses),
             track = Track.Layout != null ? new List<Vector3>(Track.Layout.Points) : new List<Vector3>(),
             trackClosed = Track.Layout?.Closed ?? false,
@@ -283,16 +353,62 @@ namespace Wonderland
         public void Deserialize(string json, WorldMaterials materials)
         {
             var d = JsonUtility.FromJson<SaveData>(json);
-            if (d == null || d.version != 1 || d.size <= 0f) throw new InvalidDataException("Not a Wonderland save.");
-            int count = TerrainField.N * TerrainField.N;
-            var height = Unpack(d.height, count); var locks = Unpack(d.locks, count); var soil = Unpack(d.soil, count);
+            if (d == null || d.size <= 0f || (d.version != 1 && d.version != 2)) throw new InvalidDataException("Not a Wonderland save.");
+            float[] height, land, locks, soil;
+            RectInt cells;
+            if (d.version == 2)
+            {
+                cells = new RectInt(d.gx, d.gz, d.nx, d.nz);
+                int count = d.nx * d.nz;
+                if (d.nx < 8 || d.nz < 8 || d.nx > TerrainField.MaxCells * 2 || d.nz > TerrainField.MaxCells * 2) throw new InvalidDataException("Saved terrain grid is invalid.");
+                height = Unpack(d.height, count); land = Unpack(d.land, count); locks = Unpack(d.locks, count); soil = Unpack(d.soil, count);
+            }
+            else MigrateV1(d, out cells, out height, out land, out locks, out soil);
+            var keepRoom = room; room = null;   // fit once, after the data is in
             Create(d.size, materials, d.seed, false);
             Restore(new Snapshot
             {
-                Height = height, Lock = locks, Soil = soil, Trees = (d.trees ?? new List<TreeInstance>()).ToArray(),
+                Cells = cells, Height = height, Land = Quantise(land), Lock = Quantise(locks), Soil = Quantise(soil), Trees = (d.trees ?? new List<TreeInstance>()).ToArray(),
                 Houses = (d.houses ?? new List<HouseInstance>()).ToArray(), Track = d.track != null && d.track.Count > 2 ? d.track : null,
                 TrackClosed = d.trackClosed, TrainPlaced = d.trainPlaced, TrainRunning = d.trainRunning, TrainS = d.trainS,
             });
+            Terrain.CopyFrom(height, land, locks, soil);   // exact values (snapshots are quantised)
+            TerrainView.RebuildAll();
+            room = keepRoom;
+            FitToRoom();
+        }
+
+        /// <summary>
+        /// Version 1 saves (before land could grow) stored a 97 x 97 grid spanning exactly the island. Resample it into
+        /// the larger grid and rebuild the island's land mask from its size and seed.
+        /// </summary>
+        private static void MigrateV1(SaveData d, out RectInt cells, out float[] height, out float[] land, out float[] locks, out float[] soil)
+        {
+            const int halfCells = TerrainField.DefaultHalfCells, n = halfCells * 2 + 1;
+            cells = new RectInt(-halfCells, -halfCells, n, n);
+            const int oldN = 97;
+            var oldHeight = Unpack(d.height, oldN * oldN); var oldLocks = Unpack(d.locks, oldN * oldN); var oldSoil = Unpack(d.soil, oldN * oldN);
+            int count = n * n;
+            height = new float[count]; land = new float[count]; locks = new float[count]; soil = new float[count];
+            float oldHalf = d.size * 0.5f, oldCell = d.size / (oldN - 1);
+            float half = halfCells * TerrainField.CellSize;
+            float Sample(float[] g, float x, float z)
+            {
+                float gx = Mathf.Clamp((x + oldHalf) / oldCell, 0f, oldN - 1.001f), gz = Mathf.Clamp((z + oldHalf) / oldCell, 0f, oldN - 1.001f);
+                int ix = (int)gx, iz = (int)gz; float fx = gx - ix, fz = gz - iz; int i = iz * oldN + ix;
+                return Mathf.Lerp(Mathf.Lerp(g[i], g[i + 1], fx), Mathf.Lerp(g[i + oldN], g[i + oldN + 1], fx), fz);
+            }
+            for (int z = 0; z < n; z++)
+            for (int x = 0; x < n; x++)
+            {
+                int i = z * n + x;
+                float px = -half + x * TerrainField.CellSize, pz = -half + z * TerrainField.CellSize;
+                bool inside = Mathf.Abs(px) < oldHalf && Mathf.Abs(pz) < oldHalf;
+                height[i] = inside ? Sample(oldHeight, px, pz) : TerrainField.BaseHeight;
+                locks[i] = inside ? Sample(oldLocks, px, pz) : 0f;
+                soil[i] = inside ? Sample(oldSoil, px, pz) : 0f;
+                land[i] = TerrainField.OrganicPatch(d.size, d.seed, px, pz);
+            }
         }
 
         public void Save(string path = null)

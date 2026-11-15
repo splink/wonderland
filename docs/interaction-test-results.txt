@@ -1,8 +1,10 @@
 PASS  Starts with the Terrain tool
-PASS  Trigger + aim raises a hill (6.7 -> 17.7 cm)
+PASS  Trigger + aim raises a hill (6.4 -> 17.4 cm)
 PASS  One stroke = one undo step
 PASS  Stick right enlarges the brush (16 -> 31 cm)
 PASS  A switches Raise -> Lower
+PASS  Grow chip selects the land brush
+PASS  Aiming at the floor beyond the shore grows land (2.73 -> 3.00 m2)
 PASS  Clicking the Forest tile selects the forest brush
 PASS  Painting with the trigger grows trees (35)
 PASS  Track tool selected

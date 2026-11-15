@@ -32,10 +32,15 @@ The palette floats above the **left** controller; the **right** controller point
 | Right trigger | use the tool / press palette buttons |
 | Right stick ← → | brush size (Houses: rotate) |
 | Right stick ↑ ↓ | strength (Forest: density) |
-| A | next mode: Raise → Lower → Smooth → Flatten · Paint ↔ Erase · next house · train start/stop |
+| A | next mode: Raise → Lower → Smooth → Flatten → Grow → Trim · Paint ↔ Erase · next house · train start/stop |
 | B | undo |
 | Right grip | pick up a house to move it |
 | Left Y | hide / show the palette |
+
+**Growing the world:** it starts as a small patch of land (about 1 m²) in front of you. In the Terrain tool pick
+**Grow** and paint over the real floor: new land rises out of it with the same soft, organic edge, anywhere on the free
+floor of your room (from the Quest room scan: not through walls, not under furniture; without a scan the guardian area or
+a 4.8 m square is used). **Trim** takes land away (never under the railway or houses).
 
 Palette: **Terrain · Forest · Track · Train · Houses · Eraser** tools, an options row for the current tool, and
 **Undo · Save · Load · Move · New**. The world saves automatically when the app is paused or closed and is restored

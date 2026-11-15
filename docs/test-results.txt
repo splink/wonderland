@@ -1,9 +1,15 @@
-PASS  Raise brush builds hills (max height 8.1 cm -> 22.5 cm)
-PASS  Hills stay rounded, no spikes (steepest slope 1.12 at -0.63,0.56, limit 1.3)
+PASS  Raise brush builds hills (max height 7.5 cm -> 22.8 cm)
+PASS  Hills stay rounded, no spikes (steepest slope 1.10 at -0.64,0.56, limit 1.3)
 PASS  Lowering never digs below the floor margin
-PASS  Forest brush paints clusters (137 trees, 5 species)
+PASS  Beyond the starting shore is bare floor
+PASS  Grow brush extends the land (3.37 -> 3.62 m2)
+PASS  New land rises gently from the floor; the rest stays floor
+PASS  Trees grow on the new land (13)
+PASS  Trim brush takes land away (3.62 -> 3.49 m2)
+PASS  Trees on trimmed land are removed
+PASS  Forest brush paints clusters (152 trees, 5 species)
 PASS  Painted forest mixes species
-PASS  Forest eraser removes trees (137 -> 132)
+PASS  Forest eraser removes trees (152 -> 148)
 PASS  Self-crossing track rejected ("The track crosses itself - no bridges yet, try a simple loop")
 PASS  Track off the landscape rejected ("Keep the railway on the landscape")
 PASS  Rejected strokes leave the world unchanged
@@ -11,7 +17,7 @@ PASS  Hand-drawn loop accepted
 PASS  Loop closed automatically (end drawn 17 cm from start)
 PASS  Curves smoothed to a drivable radius (min 20 cm, limit 18 cm), length 3.39 m
 PASS  Grades limited (max 4.5 %)
-PASS  Trees cleared from the corridor (132 -> 115)
+PASS  Trees cleared from the corridor (148 -> 131)
 PASS  Terrain graded to the track bed (embankments / cuttings)
 PASS  Railway corridor locked against brushes (bed moved 0.0 mm)
 PASS  Place Cottage
@@ -28,10 +34,20 @@ PASS  Locomotive follows the curves (worst alignment 0.999)
 PASS  Train stops smoothly
 PASS  Fourth house placed at a free spot (0.20, 0.00)
 PASS  Undo removes the last house (3 -> 4 -> 3)
-PASS  Save/load keeps trees and houses (115 trees, 3 houses, 189 KB)
+PASS  Save/load keeps trees and houses (131 trees, 3 houses, 1254 KB)
 PASS  Save/load keeps the railway
 PASS  Save/load keeps the running train
 PASS  Save/load keeps the sculpted terrain exactly
-INFO  static budget of this world: 102 mesh renderers (~draw calls per eye pass before batching, excl. shadows/UI), 170 k triangles, ground cover 1313 tufts
-INFO  trees 115, forest chunks 25, houses 3, track 3.39 m, undo depth 6, journey simulated in 0.5 s wall time
+PASS  Save/load keeps the grown and trimmed land
+PASS  Version 1 save migrates (terrain resampled, island rebuilt, trees kept)
+PASS  Starts as a small patch (0.84 m2)
+PASS  Grid covers the whole room (4.8 x 3.8 m)
+PASS  Free floor allowed; walls and the sofa footprint are not
+PASS  Land grows across the room
+PASS  Growth stops at the wall
+PASS  Growth stops at the sofa
+PASS  After moving, the grid re-fits to the room and the land is unchanged
+INFO  terrain: 6 chunk meshes, 17 k triangles, land 3.49 m2 of a 4.8 x 4.8 m grid
+INFO  static budget of this world: 114 mesh renderers (~draw calls per eye pass before batching, excl. shadows/UI), 203 k triangles, ground cover 8073 tufts
+INFO  trees 131, forest chunks 27, houses 3, track 3.39 m, undo depth 6, journey simulated in 3.8 s wall time
 RESULT: PASS

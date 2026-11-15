@@ -77,6 +77,15 @@ namespace Wonderland.Editor
             Frame(hand, target, false, primary: true);
             Check(tools.TerrainMode == TerrainBrush.Lower, "A switches Raise -> Lower");
 
+            // Grow: pick the mode chip, aim past the shore at the floor, hold the trigger.
+            ClickButton(hand, "Grow");
+            Check(tools.TerrainMode == TerrainBrush.Grow, "Grow chip selects the land brush");
+            float landBefore = world.Terrain.LandArea();
+            var floor = world.transform.TransformPoint(new Vector3(1.15f, 0f, -0.2f));
+            HoldAt(hand, () => floor, 1.5f);
+            Check(world.Terrain.EdgeAt(1.15f, -0.2f) > 0.1f && world.Terrain.LandArea() > landBefore, $"Aiming at the floor beyond the shore grows land ({landBefore:0.00} -> {world.Terrain.LandArea():0.00} m2)");
+            ClickButton(hand, "Raise");
+
             // Palette: click the Forest tile, paint.
             ClickButton(hand, "Forest");
             Check(tools.Tool == Tool.Forest, "Clicking the Forest tile selects the forest brush");

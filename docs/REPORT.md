@@ -27,6 +27,7 @@ There are no headset screenshots, because no device was available.
 | Terrain under the track | **Rule: the track owns its corridor.** Laying a track grades the ground to the track's smooth profile (embankments/cuttings) and locks a 12 cm corridor; brushes skip locked ground, so sculpting can never bury or float the rails. Removing the track unlocks it | Journey: bed matches the track within 4 mm; raising across the line moved the bed 0.0 mm | ✗ |
 | 4. Train: place, start/stop, runs smoothly | ✓ 8 cm steam locomotive + 2 coaches, each car posed from two bogie points (turns into curves, tilts on grades); spinning wheels, animated side rods, steam puffs with speed; eases to a stop; reverses at buffers on open lines | Journey: 1.44 m in 12 s, worst offset from the rails 4.2 mm, worst alignment 0.999, stops smoothly. Interaction: trigger on the track places it, Start runs it | ✗ |
 | 5. Houses: 3 variants, place / rotate / move, sit on terrain | ✓ Cottage, Townhouse, Thatched; ghost preview tinted green/red with reasons ("Too steep here - flatten it first", "That's the railway", "Too close to another house", edge); stick rotates; trigger or grip on a house picks it up; stone plinth sinks into slopes; houses re-sit after sculpting | Journey: all three placed (one after flattening), overlap and on-track refused, ray picking, move + rotate. Interaction: placement, rotation, variant chips | ✗ |
+| Grow the world across the room (added after the first headset session) | ✓ The world starts as a ~1 m² patch; **Grow / Trim** brushes paint land onto or off the real floor anywhere on the room's free floor. The room comes from the MRUK scan (floor outline minus furniture footprints standing on the floor, with margins), falling back to the guardian play area, then to a 4.8 m square. The terrain grid is a rectangle of 2 cm cells sized to the room (≤ 9.2 m per side) and re-fits when the world is moved, copying cells exactly. The rim is derived from the land mask (blurred distance to the shore plus noise). Trim never removes the railway corridor or ground under houses, clears trees left on bare floor, and drops thin slivers. The terrain is drawn as ≤ 60×60-cell chunk meshes; only touched chunks re-upload, and only land cells have triangles | Journey: grow, plant, trim, save/load of land, v1 save migration; synthetic room: grid covers the room, growth stops at the wall and at a sofa, re-fit after a move keeps the land. Interaction: Grow chip + aiming at the floor grows land | ✗ |
 | Eraser, undo, save/load | ✓ eraser taps remove a house, the train or the railway, and holding it clears trees; undo restores whole-world snapshots (30 deep); Save/Load to one local JSON file, plus autosave on pause/quit and restore at launch | Journey: undo; save/load round trip preserves terrain exactly, trees, houses, railway and the running train (190 KB). Interaction: B undo, palette Undo, eraser tap | ✗ |
 | Palette UI | ✓ panel on the left controller: six tool tiles with live 3D models of what they make, a contextual options row, a hint line, a status line, and Undo · Save · Load · Move · New (New needs a second press to confirm) | Interaction test clicks tiles, chips and buttons by ray; layout checked in `editor-palette.png` | ✗ |
 
@@ -105,8 +106,10 @@ strokes produce deep cuttings rather than an error.
 **Limits:**
 - Hand-coding geometry gets slow for organic detail (foliage, characters, sheep). Moving further toward the concept's
   richness would likely need Blender-Python generators with baked AO, or hand-authored hero assets.
-- The single heightfield (97×97 over 2 m, about 2 cm cells) cannot do overhangs, tunnels or crisp cliffs.
-- Undo by full snapshot is fine at this size but wasteful at larger scales.
+- The single heightfield (2 cm cells, sized to the room, capped at 460×460 cells) cannot do overhangs, tunnels or
+  crisp cliffs. On a large grid, undo, load and re-fit recompute the whole rim (a brief hitch); worth measuring on device.
+- Undo by full snapshot (float heights + byte masks: about 1.3 MB for a 4.6 × 3.6 m room, 20 deep) is fine here but
+  wasteful at larger scales.
 
 ## Performance evidence
 
@@ -155,7 +158,7 @@ scripts/unity.sh build   # -> Builds/Android/Wonderland.apk
 metavr app install Builds/Android/Wonderland.apk && metavr app launch com.splink.wonderland
 ```
 
-Built 2026-11-15: `Builds/Android/Wonderland.apk`, 57.6 MB, sha256 `a35a371fcef4292c…`, package `com.splink.wonderland`
+Built 2026-11-15: `Builds/Android/Wonderland.apk`, 57.7 MB, sha256 `91100f8ada8da77a…`, package `com.splink.wonderland`
 0.1.0 (versionCode 1), minSdk 32 / targetSdk 34. Shader-error check clean. The APK manifest declares USE_SCENE,
 USE_ANCHOR_API, BOUNDARY_VISIBILITY, HEADSET_CAMERA and INTERNET (the last added by Unity/Meta SDK defaults).
 

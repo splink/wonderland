@@ -160,7 +160,7 @@ namespace Wonderland
                 if (bestIndex < 0) continue;
                 float dist = Mathf.Sqrt(best);
                 if (dist > CorridorHalfWidth) continue;
-                int g = z * TerrainField.N + x;
+                int g = z * terrain.Nx + x;
                 float w = dist < BedHalfWidth * 0.8f ? 1f : Mathf.SmoothStep(1f, 0f, (dist - BedHalfWidth * 0.8f) / (CorridorHalfWidth - BedHalfWidth * 0.8f));
                 float target = layout.Points[bestIndex].y - 0.0015f;
                 terrain.Height[g] = Mathf.Lerp(terrain.Height[g], terrain.HeightForSurface(g, target), w);

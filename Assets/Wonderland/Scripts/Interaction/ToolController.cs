@@ -32,6 +32,7 @@ namespace Wonderland
         private readonly QuestInput quest = new();
         private LineRenderer line;
         private Transform dot;
+        private Transform floorRing;
         private bool stroking;
         private float flattenTarget;
         private readonly List<Vector3> drawn = new();
@@ -59,6 +60,9 @@ namespace Wonderland
             dot.GetComponent<MeshRenderer>().sharedMaterial = new Material(world.Materials.UI) { renderQueue = 3011 };
             dot.GetComponent<MeshRenderer>().shadowCastingMode = ShadowCastingMode.Off;
 
+            floorRing = CreateFloorRing(world.Materials.UI);
+            floorRing.SetParent(transform, false);
+
             ghost = new GameObject("House ghost").transform;
             ghost.SetParent(transform, false);   // not under the world root: loading a world rebuilds the root's children
             ghostFilter = ghost.gameObject.AddComponent<MeshFilter>();
@@ -79,6 +83,38 @@ namespace Wonderland
             RefreshOptions();
             Haptic(0.25f, 0.03f);
         }
+
+        /// <summary>Ring + faint disc lying on the real floor: the brush where there is no landscape to draw it on.</summary>
+        private static Transform CreateFloorRing(Material ui)
+        {
+            var b = new MeshBuilder();
+            const int seg = 48;
+            var ring = new Color(1f, 0.92f, 0.6f, 0.95f); var fill = new Color(1f, 0.92f, 0.6f, 0.12f);
+            int centre = b.AddVertex(Vector3.zero, Vector3.up, fill);
+            for (int i = 0; i <= seg; i++)
+            {
+                float a = i / (float)seg * Mathf.PI * 2f;
+                var d = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
+                b.AddVertex(d * 0.95f, Vector3.up, fill);
+                b.AddVertex(d * 0.95f, Vector3.up, ring);
+                b.AddVertex(d * 1.02f, Vector3.up, ring);
+                if (i > 0)
+                {
+                    int v = 1 + (i - 1) * 3, n = v + 3;
+                    b.AddTriangle(centre, v, n);
+                    b.AddTriangle(v + 1, n + 1, n + 2); b.AddTriangle(v + 1, n + 2, v + 2);
+                }
+            }
+            var go = new GameObject("Floor brush");
+            go.AddComponent<MeshFilter>().sharedMesh = b.ToMesh("FloorRing");
+            var r = go.AddComponent<MeshRenderer>();
+            r.sharedMaterial = new Material(ui) { renderQueue = 3004 };
+            r.shadowCastingMode = ShadowCastingMode.Off; r.receiveShadows = false;
+            go.SetActive(false);
+            return go.transform;
+        }
+
+        private bool LandMode => Tool == Tool.Terrain && (TerrainMode == TerrainBrush.Grow || TerrainMode == TerrainBrush.Trim);
 
         public void Say(string text, float seconds = 3f) { message = text; messageUntil = Time.time + seconds; }
 
@@ -133,7 +169,12 @@ namespace Wonderland
 
         private string Hint() => Tool switch
         {
-            Tool.Terrain => $"Hold trigger to {TerrainMode.ToString().ToLower()}  ·  A: mode  ·  stick: size / strength  ·  B: undo",
+            Tool.Terrain => TerrainMode switch
+            {
+                TerrainBrush.Grow => "Grow: paint over the floor to extend the land anywhere in the room  ·  A: mode",
+                TerrainBrush.Trim => "Trim: paint along the shore to take land away  ·  A: mode",
+                _ => $"Hold trigger to {TerrainMode.ToString().ToLower()}  ·  A: mode  ·  stick: size / strength  ·  B: undo",
+            },
             Tool.Forest => ForestErase ? "Hold trigger to clear trees  ·  A: paint" : "Hold trigger to paint a forest  ·  A: erase  ·  stick: size / density",
             Tool.Track => World.Track.HasTrack ? "Draw a new loop to replace the railway  ·  end near the start to close it" : "Hold trigger and draw a loop; finish near the start",
             Tool.Train => World.Train.Placed ? "Trigger on the track: move train  ·  A: start / stop" : World.Track.HasTrack ? "Point at the railway and pull the trigger" : "Draw a railway first (Track tool)",
@@ -182,6 +223,8 @@ namespace Wonderland
             var localOrigin = wt.InverseTransformPoint(ray.origin);
             var localDir = wt.InverseTransformDirection(ray.direction);
             bool hit = World.Terrain.Raycast(localOrigin, localDir, 3f, out var local);
+            // Growing land: past the shore the pointer lands on the real floor.
+            if (!hit && LandMode) hit = World.Terrain.RaycastFloor(localOrigin, localDir, 4f, out local);
             if (PlacingWorld) { PlaceWorld(input, ray, dt); return; }
 
             // Stick: size on X (rotation for houses), strength / density on Y.
@@ -209,6 +252,7 @@ namespace Wonderland
                 case Tool.Eraser: EraserTool(input, hit, local, localOrigin, localDir, dt, ref colour); break;
             }
             if (Tool != Tool.Houses) ghost.gameObject.SetActive(false);
+            floorRing.gameObject.SetActive(LandMode && hit);
             DrawPointer(ray, rayLength, colour, hit);
         }
 
@@ -216,7 +260,7 @@ namespace Wonderland
         {
             switch (Tool)
             {
-                case Tool.Terrain: TerrainMode = (TerrainBrush)(((int)TerrainMode + 1) % 4); Say(TerrainMode.ToString()); break;
+                case Tool.Terrain: TerrainMode = (TerrainBrush)(((int)TerrainMode + 1) % 6); Say(TerrainMode.ToString()); break;
                 case Tool.Forest: ForestErase = !ForestErase; Say(ForestErase ? "Erase trees" : "Paint trees"); break;
                 case Tool.Houses: HouseVariant = (HouseVariant + 1) % HouseFactory.VariantCount; Say(HouseFactory.Names[HouseVariant]); break;
                 case Tool.Train: ToggleTrain(); break;
@@ -230,13 +274,29 @@ namespace Wonderland
             TerrainBrush.Raise => new Color(0.75f, 1f, 0.45f),
             TerrainBrush.Lower => new Color(0.45f, 0.75f, 1f),
             TerrainBrush.Smooth => new Color(1f, 1f, 1f),
+            TerrainBrush.Grow => new Color(1f, 0.92f, 0.55f),
+            TerrainBrush.Trim => new Color(1f, 0.5f, 0.42f),
             _ => new Color(1f, 0.75f, 0.4f),
         };
 
         private void TerrainTool(PointerInput input, bool hit, Vector3 local, float dt, ref Color colour)
         {
             colour = ModeColour(TerrainMode); colour.a = 0.8f;
-            if (hit) World.TerrainView.SetBrush(local, Radius, ModeColour(TerrainMode), 0.55f + (stroking ? 0.35f : 0f));
+            if (LandMode)
+            {
+                World.TerrainView.HideBrush();
+                if (hit)
+                {
+                    var wt = World.transform;
+                    bool blocked = TerrainMode == TerrainBrush.Grow && !World.CanGrowLand(local);
+                    floorRing.SetPositionAndRotation(wt.TransformPoint(local + Vector3.up * 0.004f), wt.rotation);
+                    floorRing.localScale = Vector3.one * Radius * (stroking ? 1.04f : 1f);
+                    floorRing.GetComponent<MeshRenderer>().sharedMaterial.color = blocked ? new Color(1f, 0.4f, 0.35f) : ModeColour(TerrainMode);
+                    if (blocked && input.Trigger) Say("No room here - land grows only on free floor", 1.5f);
+                }
+                else if (input.Trigger) Say("The land can't grow any further this way", 1.5f);
+            }
+            else if (hit) World.TerrainView.SetBrush(local, Radius, ModeColour(TerrainMode), 0.55f + (stroking ? 0.35f : 0f));
             else World.TerrainView.HideBrush();
             if (input.TriggerDown && hit) { World.Checkpoint(); stroking = true; flattenTarget = local.y; }
             if (stroking && input.Trigger && hit)
@@ -410,7 +470,7 @@ namespace Wonderland
                 }
             }
             if (Mathf.Abs(input.Stick.x) > 0.25f) World.transform.Rotate(0f, input.Stick.x * 60f * dt, 0f, Space.World);
-            if (input.TriggerDown) { PlacingWorld = false; Say("World placed"); Haptic(0.5f, 0.06f); }
+            if (input.TriggerDown) { PlacingWorld = false; World.FitToRoom(); Say("World placed"); Haptic(0.5f, 0.06f); }
         }
 
         public void RequestReset()
