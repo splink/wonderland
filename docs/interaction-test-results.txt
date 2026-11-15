@@ -1,0 +1,19 @@
+PASS  Starts with the Terrain tool
+PASS  Trigger + aim raises a hill (6.7 -> 17.7 cm)
+PASS  One stroke = one undo step
+PASS  Stick right enlarges the brush (16 -> 31 cm)
+PASS  A switches Raise -> Lower
+PASS  Clicking the Forest tile selects the forest brush
+PASS  Painting with the trigger grows trees (35)
+PASS  Track tool selected
+PASS  Drawing a loop with the trigger lays a closed railway (2.78 m)
+PASS  Trigger on the railway places the train
+PASS  Start option sets the train running
+PASS  Train moves (0.27 m)
+PASS  Trigger places a house where the pointer is
+PASS  Stick rotated the house before placing
+PASS  House type chips choose the variant
+PASS  B undoes the last house
+PASS  Eraser tap removes the house under the pointer
+PASS  Palette Undo restores it
+RESULT: PASS

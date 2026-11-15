@@ -1,0 +1,357 @@
+using System;
+using System.Collections.Generic;
+using TMPro;
+using UnityEngine;
+using UnityEngine.Rendering;
+
+namespace Wonderland
+{
+    public enum Tool { Terrain, Forest, Track, Train, Houses, Eraser }
+
+    /// <summary>One pressable element of the palette (tool tile or option chip).</summary>
+    public sealed class PaletteButton : MonoBehaviour
+    {
+        public Action OnClick;
+        public bool Selected;
+        public bool Hovered;
+        public bool Enabled = true;
+        internal MeshRenderer Background;
+        internal MeshRenderer Ring;
+        internal TextMeshPro Label;
+        public string Text => Label != null ? Label.text : "";
+        internal Transform Icon;
+        internal Color Idle, Hover, Active;
+        private float hover;
+        private MaterialPropertyBlock block;
+        private static readonly int ColorId = Shader.PropertyToID("_Color");
+
+        internal float IconYaw = 30f, IconPitch = -20f;
+
+        private void Update()
+        {
+            hover = Mathf.MoveTowards(hover, Hovered && Enabled ? 1f : 0f, Time.deltaTime * 8f);
+            ApplyVisuals(Time.time);
+        }
+
+        /// <summary>Colour, selection ring, hover pop and icon pose (also applied at once when state changes).</summary>
+        public void ApplyVisuals(float time = 0f)
+        {
+            block ??= new MaterialPropertyBlock();
+            var c = Selected ? Active : Color.Lerp(Idle, Hover, hover);
+            if (!Enabled) c.a *= 0.4f;
+            block.SetColor(ColorId, c);
+            Background.SetPropertyBlock(block);
+            if (Ring) Ring.enabled = Selected;
+            transform.localScale = Vector3.one * (1f + hover * 0.05f);
+            if (Icon) Icon.localRotation = Quaternion.Euler(IconPitch, IconYaw + time * (Selected || Hovered ? 50f : 0f), 0f);
+            if (Label) Label.alpha = Enabled ? 1f : 0.45f;
+        }
+    }
+
+    /// <summary>
+    /// The compact palette on the left controller: six tool tiles with little 3D models of what they make, a row of
+    /// options for the current tool, global actions (undo, save, load, move, new) and a status / hint line. Built at
+    /// runtime from meshes and TextMeshPro; buttons are hit with the right-hand pointer.
+    /// </summary>
+    public sealed class PaletteUI : MonoBehaviour
+    {
+        public const int UiLayer = 5;
+        public const float Width = 0.27f, Height = 0.17f;
+        private readonly Dictionary<Tool, PaletteButton> tools = new();
+        private readonly List<PaletteButton> options = new();
+        private readonly List<PaletteButton> globals = new();
+        private TextMeshPro status, hint, title;
+        private Material uiMaterial, litMaterial;
+        private Transform optionRow;
+        public PaletteButton Hovered { get; private set; }
+        public event Action<Tool> ToolSelected;
+
+        public static readonly string[] ToolNames = { "Terrain", "Forest", "Track", "Train", "Houses", "Eraser" };
+
+        public void Build(Material ui, Material lit)
+        {
+            uiMaterial = ui; litMaterial = lit;
+            // Backing panel with a soft lighter border.
+            Quad("Border", transform, Width + 0.006f, Height + 0.006f, 0.022f, new Color(1f, 0.93f, 0.8f, 0.35f), new Color(1f, 0.93f, 0.8f, 0.18f), 0.002f, 2990);
+            Quad("Panel", transform, Width, Height, 0.019f, new Color(0.17f, 0.15f, 0.2f, 0.9f), new Color(0.1f, 0.09f, 0.12f, 0.9f), 0f, 2991);
+            title = Text("Title", transform, "Wonderland", new Vector3(-Width / 2 + 0.062f, Height / 2 - 0.011f, -0.002f), new Vector2(0.1f, 0.012f), 0.07f, TextAlignmentOptions.Left);
+            title.color = new Color(1f, 0.86f, 0.55f);
+            title.fontStyle = FontStyles.Bold;
+
+            for (int i = 0; i < ToolNames.Length; i++)
+            {
+                var tool = (Tool)i;
+                float x = -Width / 2 + 0.024f + i * 0.0444f;
+                var b = Button(ToolNames[i], transform, new Vector3(x, 0.035f, 0f), new Vector2(0.04f, 0.052f), ToolNames[i], true);
+                b.Label.transform.localPosition = new Vector3(0f, -0.019f, -0.003f);
+                b.Icon = Icon(tool, b.transform);
+                (b.IconYaw, b.IconPitch) = tool switch { Tool.Train => (115f, -15f), Tool.Track => (20f, -55f), Tool.Terrain => (25f, -30f), _ => (30f, -20f) };
+                b.ApplyVisuals();
+                b.OnClick = () => ToolSelected?.Invoke(tool);
+                tools[tool] = b;
+            }
+            optionRow = new GameObject("Options").transform;
+            optionRow.SetParent(transform, false);
+            optionRow.localPosition = new Vector3(0f, -0.019f, 0f);
+
+            hint = Text("Hint", transform, "", new Vector3(0f, -0.04f, -0.002f), new Vector2(Width - 0.02f, 0.011f), 0.05f, TextAlignmentOptions.Center);
+            hint.color = new Color(0.86f, 0.84f, 0.8f);
+            status = Text("Status", transform, "", new Vector3(0f, Height / 2 - 0.011f, -0.002f), new Vector2(0.15f, 0.012f), 0.055f, TextAlignmentOptions.Right);
+            status.rectTransform.localPosition = new Vector3(Width / 2 - 0.085f, Height / 2 - 0.011f, -0.002f);
+            status.color = new Color(1f, 0.95f, 0.85f);
+        }
+
+        public PaletteButton AddGlobal(string label, Action onClick)
+        {
+            int i = globals.Count;
+            const float w = 0.048f;
+            var b = Button(label, transform, new Vector3(-Width / 2 + 0.03f + i * (w + 0.004f), -0.063f, 0f), new Vector2(w, 0.02f), label, false);
+            b.OnClick = onClick;
+            b.ApplyVisuals();
+            globals.Add(b);
+            return b;
+        }
+
+        public void SetTool(Tool tool)
+        {
+            foreach (var kv in tools) { kv.Value.Selected = kv.Key == tool; kv.Value.ApplyVisuals(); }
+        }
+
+        public struct Option
+        {
+            public string Label; public bool Selected; public bool Enabled; public Action OnClick;
+            public Option(string label, bool selected, Action onClick, bool enabled = true) { Label = label; Selected = selected; OnClick = onClick; Enabled = enabled; }
+        }
+
+        /// <summary>Rebuilds the option chips (cheap: a handful of objects, only when the tool or mode changes).</summary>
+        public void SetOptions(IReadOnlyList<Option> list)
+        {
+            while (options.Count > list.Count)
+            {
+                if (Application.isPlaying) Destroy(options[^1].gameObject); else DestroyImmediate(options[^1].gameObject);
+                options.RemoveAt(options.Count - 1);
+            }
+            float w = Mathf.Min(0.06f, (Width - 0.02f - (list.Count - 1) * 0.004f) / Mathf.Max(1, list.Count));
+            float total = list.Count * w + (list.Count - 1) * 0.004f;
+            for (int i = 0; i < list.Count; i++)
+            {
+                if (i >= options.Count) options.Add(Button("Option", optionRow, Vector3.zero, new Vector2(w, 0.02f), "", false));
+                var b = options[i];
+                b.transform.localPosition = new Vector3(-total / 2 + w / 2 + i * (w + 0.004f), 0f, 0f);
+                b.Label.text = list[i].Label;
+                b.Selected = list[i].Selected; b.Enabled = list[i].Enabled;
+                var action = list[i].OnClick;
+                b.OnClick = action;
+                ResizeButton(b, new Vector2(w, 0.02f));
+                b.ApplyVisuals();
+            }
+        }
+
+        public void SetStatus(string text) => status.text = text;
+        public void SetHint(string text) => hint.text = text;
+
+        /// <summary>The button under the ray (UI layer colliders), and hover state for all buttons.</summary>
+        public PaletteButton Raycast(Ray ray, out float distance)
+        {
+            distance = 0f;
+            PaletteButton hit = null;
+            if (gameObject.activeInHierarchy && Physics.Raycast(ray, out var info, 1.5f, 1 << UiLayer, QueryTriggerInteraction.Collide))
+            {
+                hit = info.collider.GetComponent<PaletteButton>();
+                distance = info.distance;
+                if (hit == null && info.collider.transform == transform) distance = info.distance; // panel back: swallow the ray
+            }
+            if (Hovered && Hovered != hit) Hovered.Hovered = false;
+            Hovered = hit;
+            if (hit) hit.Hovered = true;
+            return hit;
+        }
+
+        public void ClearHover()
+        {
+            if (Hovered) Hovered.Hovered = false;
+            Hovered = null;
+        }
+
+        public bool RayHitsPanel(Ray ray, out float distance)
+        {
+            distance = 0f;
+            if (!gameObject.activeInHierarchy) return false;
+            if (!Physics.Raycast(ray, out var info, 1.5f, 1 << UiLayer, QueryTriggerInteraction.Collide)) return false;
+            distance = info.distance;
+            return true;
+        }
+
+        // ------------------------------------------------------------------ construction helpers
+
+        private PaletteButton Button(string name, Transform parent, Vector3 position, Vector2 size, string label, bool tile)
+        {
+            var go = new GameObject(name);
+            go.layer = UiLayer;
+            go.transform.SetParent(parent, false);
+            go.transform.localPosition = position;
+            var b = go.AddComponent<PaletteButton>();
+            b.Idle = tile ? new Color(1f, 1f, 1f, 0.09f) : new Color(1f, 1f, 1f, 0.12f);
+            b.Hover = new Color(1f, 1f, 1f, 0.26f);
+            b.Active = tile ? new Color(1f, 0.85f, 0.45f, 0.28f) : new Color(1f, 0.8f, 0.4f, 0.55f);
+            b.Background = Quad("Background", go.transform, size.x, size.y, Mathf.Min(size.x, size.y) * 0.28f, Color.white, new Color(0.85f, 0.85f, 0.9f), -0.001f, 2992);
+            if (tile) b.Ring = Ring("Selected", go.transform, size.x + 0.003f, size.y + 0.003f, 0.0016f, new Color(1f, 0.82f, 0.35f, 1f));
+            b.Label = Text("Label", go.transform, label, new Vector3(0f, 0f, -0.003f), new Vector2(size.x - 0.004f, tile ? 0.009f : size.y - 0.005f), tile ? 0.045f : 0.05f, TextAlignmentOptions.Center);
+            var col = go.AddComponent<BoxCollider>();
+            col.size = new Vector3(size.x, size.y, 0.01f);
+            return b;
+        }
+
+        private void ResizeButton(PaletteButton b, Vector2 size)
+        {
+            var mesh = RoundedRect(size.x, size.y, Mathf.Min(size.x, size.y) * 0.28f, Color.white, new Color(0.85f, 0.85f, 0.9f));
+            b.Background.GetComponent<MeshFilter>().sharedMesh = mesh;
+            b.GetComponent<BoxCollider>().size = new Vector3(size.x, size.y, 0.01f);
+            b.Label.rectTransform.sizeDelta = new Vector2(size.x - 0.004f, size.y - 0.005f);
+        }
+
+        private MeshRenderer Quad(string name, Transform parent, float w, float h, float radius, Color top, Color bottom, float z, int queue)
+        {
+            var go = new GameObject(name);
+            go.layer = UiLayer;
+            go.transform.SetParent(parent, false);
+            go.transform.localPosition = new Vector3(0f, 0f, z);
+            go.AddComponent<MeshFilter>().sharedMesh = RoundedRect(w, h, radius, top, bottom);
+            var r = go.AddComponent<MeshRenderer>();
+            r.sharedMaterial = new Material(uiMaterial) { renderQueue = queue };
+            r.shadowCastingMode = ShadowCastingMode.Off; r.receiveShadows = false;
+            if (name == "Panel")
+            {
+                var col = go.AddComponent<BoxCollider>();
+                col.size = new Vector3(w, h, 0.004f);
+            }
+            return r;
+        }
+
+        private MeshRenderer Ring(string name, Transform parent, float w, float h, float thickness, Color colour)
+        {
+            var go = new GameObject(name);
+            go.layer = UiLayer;
+            go.transform.SetParent(parent, false);
+            go.transform.localPosition = new Vector3(0f, 0f, -0.0015f);
+            var outer = RoundedRectPoints(w, h, Mathf.Min(w, h) * 0.3f);
+            var inner = RoundedRectPoints(w - thickness * 2f, h - thickness * 2f, Mathf.Min(w, h) * 0.3f - thickness);
+            var b = new MeshBuilder();
+            for (int i = 0; i < outer.Count; i++)
+            {
+                b.AddVertex(outer[i], Vector3.back, colour); b.AddVertex(inner[i], Vector3.back, colour);
+            }
+            for (int i = 0; i < outer.Count; i++)
+            {
+                int a = i * 2, n = ((i + 1) % outer.Count) * 2;
+                b.AddTriangle(a, n, n + 1); b.AddTriangle(a, n + 1, a + 1);
+            }
+            go.AddComponent<MeshFilter>().sharedMesh = b.ToMesh("Ring");
+            var r = go.AddComponent<MeshRenderer>();
+            r.sharedMaterial = new Material(uiMaterial) { renderQueue = 2994 };
+            r.shadowCastingMode = ShadowCastingMode.Off;
+            return r;
+        }
+
+        private static List<Vector3> RoundedRectPoints(float w, float h, float r)
+        {
+            var pts = new List<Vector3>();
+            const int seg = 6;
+            var corners = new[] { new Vector2(w / 2 - r, h / 2 - r), new Vector2(-w / 2 + r, h / 2 - r), new Vector2(-w / 2 + r, -h / 2 + r), new Vector2(w / 2 - r, -h / 2 + r) };
+            for (int c = 0; c < 4; c++)
+            for (int i = 0; i <= seg; i++)
+            {
+                float a = (c * 90f + i * 90f / seg) * Mathf.Deg2Rad;
+                pts.Add(new Vector3(corners[c].x + Mathf.Cos(a) * r, corners[c].y + Mathf.Sin(a) * r, 0f));
+            }
+            return pts;
+        }
+
+        public static Mesh RoundedRect(float w, float h, float r, Color top, Color bottom)
+        {
+            var b = new MeshBuilder();
+            var pts = RoundedRectPoints(w, h, r);
+            int centre = b.AddVertex(Vector3.zero, Vector3.back, Color.Lerp(top, bottom, 0.5f));
+            foreach (var p in pts) b.AddVertex(p, Vector3.back, Color.Lerp(bottom, top, p.y / h + 0.5f));
+            for (int i = 0; i < pts.Count; i++) b.AddTriangle(centre, 1 + (i + 1) % pts.Count, 1 + i);
+            return b.ToMesh("RoundedRect");
+        }
+
+        private TextMeshPro Text(string name, Transform parent, string text, Vector3 position, Vector2 size, float fontSize, TextAlignmentOptions align)
+        {
+            var go = new GameObject(name);
+            go.layer = UiLayer;
+            go.transform.SetParent(parent, false);
+            var t = go.AddComponent<TextMeshPro>();
+            t.rectTransform.sizeDelta = size;
+            t.rectTransform.localPosition = position;
+            t.text = text;
+            t.fontSize = fontSize;
+            t.enableAutoSizing = true;
+            t.fontSizeMin = fontSize * 0.5f; t.fontSizeMax = fontSize;
+            t.alignment = align;
+            t.textWrappingMode = TextWrappingModes.NoWrap;
+            t.overflowMode = TextOverflowModes.Ellipsis;
+            t.color = Color.white;
+            t.GetComponent<MeshRenderer>().shadowCastingMode = ShadowCastingMode.Off;
+            return t;
+        }
+
+        /// <summary>A tiny 3D model of what each tool makes, floating on its tile.</summary>
+        private Transform Icon(Tool tool, Transform parent)
+        {
+            Mesh mesh = tool switch
+            {
+                Tool.Terrain => HillIcon(),
+                Tool.Forest => TreeFactory.Get(TreeKind.Oak, 0),
+                Tool.Track => TrackIcon(),
+                Tool.Train => TrainFactory.LocoMesh,
+                Tool.Houses => HouseFactory.Get(0),
+                _ => EraserIcon(),
+            };
+            var pivot = new GameObject("Icon").transform;
+            pivot.SetParent(parent, false);
+            pivot.localPosition = new Vector3(0f, 0.004f, -0.012f);
+            var go = new GameObject("Model");
+            go.layer = UiLayer;
+            go.transform.SetParent(pivot, false);
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            var r = go.AddComponent<MeshRenderer>();
+            r.sharedMaterial = litMaterial; r.shadowCastingMode = ShadowCastingMode.Off; r.receiveShadows = false;
+            var bounds = mesh.bounds;
+            float scale = 0.026f / Mathf.Max(bounds.size.x, bounds.size.y, bounds.size.z);
+            go.transform.localScale = Vector3.one * scale;
+            go.transform.localPosition = -bounds.center * scale;
+            return pivot;
+        }
+
+        private static Mesh HillIcon()
+        {
+            var b = new MeshBuilder();
+            b.AddCylinder(new Vector3(0f, -0.004f, 0f), 0.05f, 0.05f, 0.004f, 20, Pal.Hex("#7A5232"), Pal.Hex("#5E8F33"), true);
+            b.AddBlob(new Vector3(-0.012f, 0f, 0f), new Vector3(0.034f, 0.026f, 0.03f), 2, 0.1f, 3, (d, _) => Color.Lerp(Pal.Hex("#3E7E2C"), Pal.Hex("#8DC24D"), d.y * 0.6f + 0.4f));
+            b.AddBlob(new Vector3(0.022f, 0f, 0.008f), new Vector3(0.022f, 0.016f, 0.02f), 1, 0.1f, 5, (d, _) => Color.Lerp(Pal.Hex("#3E7E2C"), Pal.Hex("#A6CF57"), d.y * 0.6f + 0.4f));
+            var m = b.ToMesh("HillIcon");
+            return m;
+        }
+
+        private static Mesh TrackIcon()
+        {
+            var pts = new List<Vector3>();
+            for (int i = 0; i <= 12; i++) { float a = i / 12f * 0.9f - 0.45f; pts.Add(new Vector3(Mathf.Sin(a) * 0.12f, 0f, Mathf.Cos(a) * 0.12f - 0.12f)); }
+            var b = new MeshBuilder();
+            TrackSystem.BuildTrack(b, new TrackLayout(pts, false));
+            return b.ToMesh("TrackIcon");
+        }
+
+        private static Mesh EraserIcon()
+        {
+            var b = new MeshBuilder();
+            b.Push(Vector3.zero, Quaternion.Euler(0f, 0f, 20f));
+            b.AddBox(new Vector3(-0.012f, 0f, 0f), new Vector3(0.026f, 0.016f, 0.02f), Pal.Hex("#F28AA0"), Pal.Hex("#FFB3C2"), Pal.Hex("#C96A80"), false);
+            b.AddBox(new Vector3(0.016f, 0f, 0f), new Vector3(0.03f, 0.016f, 0.02f), Pal.Hex("#4F7FC8"), Pal.Hex("#77A3E6"), Pal.Hex("#3B62A0"), false);
+            b.Pop();
+            return b.ToMesh("EraserIcon");
+        }
+    }
+}
