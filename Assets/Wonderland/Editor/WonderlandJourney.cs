@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -144,6 +145,7 @@ namespace Wonderland.Editor
             TrackTolerance("Loop drawn half over bare floor closes and grows land under it", (t2, l) => Loop(t2, 1.05f, 0.6f, 0.97f, false), true);
             NetworkJourney();
             LivingJourney();
+            BridgeJourney();
             {
                 // Tunnel: a big hill across the line keeps its top; portals at both mouths; no steam underground.
                 var w = new GameObject("Tunnel").AddComponent<WonderlandWorld>();
@@ -651,6 +653,89 @@ namespace Wonderland.Editor
                 if (g > worst) { worst = g; where = new Vector2(t.LocalX(x), t.LocalZ(z)); }
             }
             return worst;
+        }
+
+        // ------------------------------------------------------------------ bridges
+
+        /// <summary>
+        /// Bridges follow from what crosses the water: a railway over a pond gets stone arches; a second track beside it
+        /// shares (and widens) the same bridge; a tap restyles it (saved, undoable); a road over a stream gets a deck
+        /// villagers walk across; a trail gets stepping stones, a footpath a footbridge; long spans offer a suspension bridge.
+        /// </summary>
+        private static void BridgeJourney()
+        {
+            var w = Scratch("Bridges", 170f);
+            var t = w.Terrain;
+            var pond = new Vector3(0.5f, 0f, 0f);
+            float lvl = w.WaterLevelForStroke(pond);
+            Hold(() => w.WaterStroke(pond, 0.15f, 1f, Dt, lvl, false), 1.6f);
+            w.BuildTrack(Loop(t, 0.5f, 0.38f, 0.97f, false));
+            var br = w.Bridges.Bridges;
+            Check(br.Count == 1 && br[0].Rail && br[0].Style == BridgeStyle.Stone, $"A railway over the pond gets a stone arch bridge ({br.Count} bridge{(br.Count == 1 ? $", {br[0].Style}" : "")})");
+            if (br.Count != 1) { UnityEngine.Object.DestroyImmediate(w.gameObject); return; }
+            // A second track alongside: offset the loop's crossing outward and draw it as a new line.
+            var layout = w.Track.Network.Edges[0].Layout;
+            int near = 0; float bestD = float.MaxValue;
+            for (int i = 0; i < layout.Points.Count; i++) { float d = new Vector2(layout.Points[i].x - pond.x, layout.Points[i].z - pond.z).sqrMagnitude; if (d < bestD) { bestD = d; near = i; } }
+            var parallel = new List<Vector3>();
+            for (int k = -42; k <= 42; k += 2)
+            {
+                int i = (near + k + layout.Points.Count) % layout.Points.Count;
+                layout.Evaluate(layout.Cum[i], out var tan); tan.y = 0f;
+                var outward = Vector3.Cross(Vector3.up, tan.normalized);
+                if (Vector3.Dot(outward, layout.Points[i] - pond) < 0f && Vector3.Dot(outward, new Vector3(layout.Points[i].x, 0f, layout.Points[i].z)) < 0f) outward = -outward;
+                var q = layout.Points[i] + outward * 0.1f;
+                parallel.Add(t.PointAt(q.x, q.z));
+            }
+            var second = w.BuildTrack(parallel);
+            br = w.Bridges.Bridges;
+            int members = br.Count > 0 ? br.Max(b => b.Members.Count) : 0;
+            Check(second.Ok && br.Count == 1 && members == 2, $"A second track beside the first shares the same, wider bridge ({br.Count} bridge, {members} lines)" + (second.Ok ? "" : $" (\"{second.Error}\")"));
+            // Tap to restyle; remembered through rebuilds, save/load and undo.
+            var anchor = new Vector3(br[0].Anchor.x, 0f, br[0].Anchor.y);
+            string first = w.CycleBridge(anchor);
+            Check(first == BridgeSystem.Names[(int)BridgeStyle.Timber] && w.Bridges.Bridges[0].Style == BridgeStyle.Timber, $"A tap on the bridge restyles it (\"{first}\")");
+            string again = w.CycleBridge(anchor);
+            Check(w.Bridges.Bridges[0].Style == BridgeStyle.Truss, $"Another tap: the next style (\"{again}\")");
+            w.RefreshBridges();
+            Check(w.Bridges.Bridges[0].Style == BridgeStyle.Truss, "The chosen style stays when the bridge is rebuilt");
+            string json = w.Serialize();
+            var copy = new GameObject("Bridge copy").AddComponent<WonderlandWorld>();
+            copy.transform.position = new Vector3(180f, 0f, 0f);
+            copy.Deserialize(json, Materials());
+            Check(copy.Bridges.Bridges.Count == 1 && copy.Bridges.Bridges[0].Style == BridgeStyle.Truss, "Save/load keeps the bridge style");
+            UnityEngine.Object.DestroyImmediate(copy.gameObject);
+            w.Undo();
+            Check(w.Bridges.Bridges[0].Style == BridgeStyle.Timber, "Undo takes the last restyle back");
+            var allowed = BridgeSystem.Allowed(w.Bridges.Bridges[0]);
+            Check(allowed.Contains(BridgeStyle.Truss) && !allowed.Contains(BridgeStyle.Footbridge), $"A railway bridge offers railway styles ({string.Join(", ", allowed)})");
+
+            // A road over a stream: a deck above the water that villagers walk across.
+            var stream = w.BuildStream(Stroke(t, new Vector2(-0.6f, -0.75f), new Vector2(-0.3f, -0.2f), new Vector2(-0.35f, 0.3f)));
+            int before = w.Bridges.Bridges.Count;
+            string road = w.BuildPath(Stroke(t, new Vector2(-0.6f, -0.22f), new Vector2(-0.05f, -0.2f)), PathKind.Road);
+            var roadBridge = w.Bridges.Bridges.Find(b => b.Road);
+            Check(stream == null && road == null && roadBridge != null && roadBridge.Style == BridgeStyle.Stone, "A road across the stream gets a bridge" + (stream ?? road ?? ""));
+            if (roadBridge != null)
+            {
+                var a = roadBridge.Anchor;
+                float water = w.WaterLevelFor(a);
+                bool deck = w.Bridges.Deck(a, out float deckH, out _);
+                Check(deck && deckH > water + 0.015f, $"The road rises onto a deck above the water ({(deckH - water) * 1000f:0} mm clear)");
+                Check(w.People.Walkable(a), "Villagers can walk across the road bridge");
+            }
+            // A trail and a footpath over the stream.
+            w.BuildPath(Stroke(t, new Vector2(-0.55f, 0.05f), new Vector2(-0.15f, 0.06f)), PathKind.Trail);
+            w.BuildPath(Stroke(t, new Vector2(-0.6f, -0.45f), new Vector2(-0.2f, -0.45f)), PathKind.Footpath);
+            Check(w.Bridges.Bridges.Exists(b => b.Style == BridgeStyle.Stones), "A trail crosses the stream on stepping stones");
+            Check(w.Bridges.Bridges.Exists(b => b.Style == BridgeStyle.Footbridge), "A footpath crosses on a little footbridge");
+            Check(w.Bridges.Bridges.Count >= before + 3, $"Each crossing has its bridge ({w.Bridges.Bridges.Count})");
+            // Long spans may hang from cables; short ones may not.
+            var longest = w.Bridges.Bridges.OrderByDescending(b => b.Length).First();
+            var shortest = w.Bridges.Bridges.OrderBy(b => b.Length).First();
+            Check(!BridgeSystem.Allowed(shortest).Contains(BridgeStyle.Suspension) || shortest.Length >= 0.16f, $"Short spans don't offer a suspension bridge ({shortest.Length * 100f:0} cm)");
+            Check(longest.Length < 0.26f || BridgeSystem.Allowed(longest).Contains(BridgeStyle.Suspension), $"Long spans do ({longest.Length * 100f:0} cm)");
+            UnityEngine.Object.DestroyImmediate(w.gameObject);
         }
 
         // ------------------------------------------------------------------ a richer, living world
@@ -1217,6 +1302,51 @@ namespace Wonderland.Editor
                 var c = w.transform.TransformPoint(hill);
                 cam.transform.position = c + new Vector3(0.05f, 0.25f, -0.55f); cam.transform.LookAt(c + Vector3.up * 0.03f); cam.fieldOfView = 40f;
                 WonderlandRenders.Capture(cam, "editor-world-tunnel.png", 1920, 1200);
+                UnityEngine.Object.DestroyImmediate(w.gameObject);
+            }
+            {
+                // Bridges across a river: every style.
+                var w = Scratch("Bridge demo", 190f);
+                var t = w.Terrain;
+                for (float z = -0.75f; z <= 0.75f; z += 0.05f)
+                {
+                    var at = new Vector3(Mathf.Sin(z * 2.2f) * 0.06f, 0f, z);
+                    float lvl = w.WaterLevelForStroke(at);
+                    Hold(() => w.WaterStroke(at, 0.13f, 1f, Dt, lvl, false), 0.5f);
+                }
+                w.BuildStream(Stroke(t, new Vector2(0.62f, -0.75f), new Vector2(0.6f, -0.3f), new Vector2(0.66f, 0.2f)));
+                w.BuildTrack(Line(t, new Vector2(-0.75f, 0.52f), new Vector2(0.75f, 0.52f)));
+                w.BuildTrack(Line(t, new Vector2(-0.75f, 0.62f), new Vector2(0.75f, 0.62f)));
+                w.BuildTrack(Line(t, new Vector2(-0.75f, 0.28f), new Vector2(0.75f, 0.28f)));
+                w.BuildPath(Stroke(t, new Vector2(-0.6f, 0.02f), new Vector2(0.45f, 0.02f)), PathKind.Road);
+                w.BuildPath(Stroke(t, new Vector2(-0.6f, -0.2f), new Vector2(0.45f, -0.2f)), PathKind.Lane);
+                w.BuildPath(Stroke(t, new Vector2(-0.6f, -0.4f), new Vector2(0.45f, -0.4f)), PathKind.Footpath);
+                w.BuildPath(Stroke(t, new Vector2(-0.6f, -0.58f), new Vector2(0.45f, -0.58f)), PathKind.Lane);
+                w.BuildPath(Stroke(t, new Vector2(0.45f, -0.5f), new Vector2(0.8f, -0.5f)), PathKind.Trail);
+                void Style(float z, BridgeStyle style)
+                {
+                    for (int k = 0; k < 8; k++)
+                    {
+                        int i = w.Bridges.Bridges.FindIndex(b => Mathf.Abs(b.Anchor.y - z) < 0.06f && Mathf.Abs(b.Anchor.x) < 0.3f);
+                        if (i < 0 || w.Bridges.Bridges[i].Style == style) return;
+                        w.CycleBridge(new Vector3(w.Bridges.Bridges[i].Anchor.x, 0f, w.Bridges.Bridges[i].Anchor.y));
+                    }
+                }
+                Style(0.57f, BridgeStyle.Stone); Style(0.28f, BridgeStyle.Truss); Style(0.02f, BridgeStyle.Suspension); Style(-0.2f, BridgeStyle.Covered);
+                for (int i = 0; i < 3; i++) w.PlacePerson(t.PointAt(-0.3f + i * 0.04f, -0.4f), i, 300 + i);
+                w.PlaceTrain(t.PointAt(-0.5f, 0.52f), TrainKind.Passenger, Vector3.right, out _);
+                w.PlaceTrain(t.PointAt(0.4f, 0.28f), TrainKind.Goods, Vector3.left, out _);
+                for (int i = 0; i < 72 * 6; i++) { w.Trains.Step(Dt); w.People.Step(Dt); }
+                w.Cover.RebuildDirty(); w.Forest.RebuildDirty();
+                var c = w.transform.position;
+                cam.transform.position = c + new Vector3(0.9f, 0.85f, -1.0f); cam.transform.LookAt(c + new Vector3(0.0f, 0.02f, 0.0f)); cam.fieldOfView = 42f;
+                WonderlandRenders.Capture(cam, "editor-bridges.png", 1920, 1200);
+                cam.transform.position = c + new Vector3(0.35f, 0.18f, 0.25f); cam.transform.LookAt(c + new Vector3(0.0f, 0.03f, 0.5f)); cam.fieldOfView = 40f;
+                WonderlandRenders.Capture(cam, "editor-bridges-rail.png", 1920, 1200);
+                cam.transform.position = c + new Vector3(0.38f, 0.16f, -0.1f); cam.transform.LookAt(c + new Vector3(0.0f, 0.03f, 0.05f)); cam.fieldOfView = 40f;
+                WonderlandRenders.Capture(cam, "editor-bridges-road.png", 1920, 1200);
+                cam.transform.position = c + new Vector3(0.3f, 0.14f, -0.75f); cam.transform.LookAt(c + new Vector3(0.05f, 0.01f, -0.4f)); cam.fieldOfView = 40f;
+                WonderlandRenders.Capture(cam, "editor-bridges-paths.png", 1920, 1200);
                 UnityEngine.Object.DestroyImmediate(w.gameObject);
             }
             {

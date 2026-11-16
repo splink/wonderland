@@ -97,6 +97,22 @@ PASS  ...with craggy, uneven slopes (roughness 442)
 PASS  Undo takes the hedge away again
 PASS  Save/load keeps roads, paths and the pasture fence (5)
 PASS  Save/load keeps the ducks and the fair
+PASS  A railway over the pond gets a stone arch bridge (1 bridge, Stone)
+PASS  A second track beside the first shares the same, wider bridge (1 bridge, 2 lines)
+PASS  A tap on the bridge restyles it ("Timber trestle")
+PASS  Another tap: the next style ("Steel truss bridge")
+PASS  The chosen style stays when the bridge is rebuilt
+PASS  Save/load keeps the bridge style
+PASS  Undo takes the last restyle back
+PASS  A railway bridge offers railway styles (Stone, Timber, Truss, Suspension, Covered)
+PASS  A road across the stream gets a bridge
+PASS  The road rises onto a deck above the water (26 mm clear)
+PASS  Villagers can walk across the road bridge
+PASS  A trail crosses the stream on stepping stones
+PASS  A footpath crosses on a little footbridge
+PASS  Each crossing has its bridge (6)
+PASS  Short spans don't offer a suspension bridge (13 cm)
+PASS  Long spans do (34 cm)
 PASS  A railway under a big hill becomes a tunnel (hill 29 cm, 30 cm of tunnel, hill kept above it)
 PASS  The train runs into the tunnel (steam off underground)
 PASS  Railway across a pond rises onto a bridge and the water stays
@@ -165,6 +181,6 @@ PASS  Bad room data does not block growth ("room (room scan) sizes the start; la
 PASS  Land still grows with bad room data
 PASS  Trimmed land grows back (1.19 -> 1.04 -> 1.16 m2)
 INFO  terrain: 6 chunk meshes, 17 k triangles, land 3.49 m2 of a 4.8 x 4.8 m grid
-INFO  static budget of this world: 165 mesh renderers (~draw calls per eye pass before batching, excl. shadows/UI), 449 k triangles, ground cover 8073 tufts
-INFO  trees 131, forest chunks 30, houses 3, track 3.40 m, undo depth 9, journey simulated in 33.1 s wall time
+INFO  static budget of this world: 166 mesh renderers (~draw calls per eye pass before batching, excl. shadows/UI), 448 k triangles, ground cover 8073 tufts
+INFO  trees 131, forest chunks 30, houses 3, track 3.40 m, undo depth 9, journey simulated in 34.2 s wall time
 RESULT: PASS

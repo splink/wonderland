@@ -34,6 +34,8 @@ namespace Wonderland
         private Material material;
         private Mesh groundMesh, barrierMesh;
         private Func<TrackNetwork> network;
+        /// <summary>Bridge decks: whether a point is on one, its height, and whether the way's surface gives way to it.</summary>
+        public BridgeSystem Bridges;
         private List<Node> graph;
         // Spatial index of every line's segments (5 cm cells), so the many per-frame "near a fence / on a road" questions
         // villagers and animals ask stay cheap.
@@ -370,8 +372,12 @@ namespace Wonderland
             float hw = HalfWidth(l.kind), lift = 0.0014f + 0.00025f * (3 - l.kind);
             const int across = 4;
             int start = b.VertexCount;
+            var hidden = new bool[n];
             for (int i = 0; i < n; i++)
             {
+                float deckH = 0f; bool hide = false;
+                bool onDeck = Bridges != null && Bridges.Deck(l.points[i], out deckH, out hide);
+                hidden[i] = onDeck && hide;
                 var p = l.points[i];
                 var t = l.points[l.closed ? (i + 1) % n : Mathf.Min(i + 1, n - 1)] - l.points[l.closed ? (i - 1 + n) % n : Mathf.Max(i - 1, 0)];
                 t = t.sqrMagnitude > 1e-10f ? t.normalized : Vector2.up;
@@ -382,10 +388,10 @@ namespace Wonderland
                 {
                     float u = k / (float)across * 2f - 1f;
                     var q = p + right * (u * hw * taper);
-                    float y = terrain.SurfaceAt(q.x, q.y) + lift * (1f - 0.35f * Mathf.Abs(u));
+                    float y = (onDeck ? deckH : terrain.SurfaceAt(q.x, q.y)) + lift * (1f - 0.35f * Mathf.Abs(u));
                     b.AddVertex(new Vector3(q.x, y, q.y), Vector3.up, WayColour(l.kind, q, u));
                 }
-                if (i > 0)
+                if (i > 0 && !(hidden[i] && hidden[i - 1]))
                     for (int k = 0; k < across; k++)
                     {
                         int a = start + (i - 1) * (across + 1) + k, c = start + i * (across + 1) + k;

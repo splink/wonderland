@@ -44,11 +44,12 @@ There are no headset screenshots; all images are editor renders.
 | Paths, fences, pastures | ✓ One drawing gesture for roads, lanes, footpaths, trails, fences, hedges and walls. Ends snap onto lines of the same family; roads and lanes grade the ground; closed barriers make enclosures; ways crossing the railway get level crossings. A walking graph with A* gives villagers routes | Journey: a road smooths the ground across it, a path joins it, a route is found, no houses on the road but lamps beside it; a fenced pasture keeps its sheep in and the horse outside out; a level crossing lets villagers cross the rails there and only there; undo and save/load | ✗ |
 | Living world | ✓ Places bring activity spots (door, seat, gathering point, play, ride, view, browse). Villagers pick free spots near home, weighted, with fun places drawing people from further away; claims stop two people taking one chair. Riders sit on the carousel's horses as it turns, or vanish into a Ferris wheel cabin. Homes bring residents. Hikers walk the trails. Animals keep to habitats: pasture grazers, hens, ducks on ponds, deer by the woods that flee | Journey: residents move in; villagers sit, gather and browse; visitors ride and play at the fair; a hiker sets off; a duck stays on the pond; deer refuse open ground, settle by the wood and bolt from a villager | ✗ |
 | Mountains and beaches | ✓ Peaks brush (ridged noise); the terrain shader adds alpine scree, layered rock bands on cliffs, snow on the tops and sand along pond shores; ground cover adds boulders and alpine flowers | Journey: the Peaks brush raises a craggy mountain | ✗ |
+| Bridges | ✓ Derived from what crosses water (railway pieces and ways): crossings close together and parallel share one deck; 7 styles (stone arches, timber trestle, steel truss, suspension, covered, footbridge, stepping stones) offered by what the bridge carries and its span; a tap in the Track or Paths tool cycles them; choices are remembered by place (saved, undoable); ways rise onto the deck and villagers walk across | Journey: rail bridge over a pond; a parallel second track shares and widens it; tap restyles; survives rebuild, save/load, undo; road bridge deck 26 mm above the water and walkable; stepping stones for a trail, a footbridge for a footpath; suspension only for long spans | ✗ |
 | Eraser, undo, save/load | ✓ eraser taps remove a house, a stream, an animal, a villager, the train or the railway, and holding it clears trees; undo restores whole-world snapshots (depth adapts to a 48 MB budget); Save/Load to one local JSON file, plus autosave on pause/quit and restore at launch | Journey: undo; save/load round trip preserves terrain exactly, trees, houses, railway and the running train (190 KB). Interaction: B undo, palette Undo, eraser tap | ✗ |
 | Palette UI | ✓ panel on the left controller: eight tool tiles with live 3D models of what they make, a contextual options row, a hint line, a status line, and Undo · Save · Load · Move · New (New needs a second press to confirm) | Interaction test clicks tiles, chips and buttons by ray; layout checked in `editor-palette.png` | ✗ |
 
 **Automated tests** (Unity batch mode on this Linux machine):
-- `scripts/unity.sh test` runs **166/166 checks PASS**. It is the scripted journey against the world API that the controllers drive.
+- `scripts/unity.sh test` runs **182/182 checks PASS**. It is the scripted journey against the world API that the controllers drive.
 - `scripts/unity.sh interaction` runs **28/28 PASS**. It drives the real `ToolController` and `PaletteUI` with synthetic controller rays and buttons (UI hit-testing, tool switching, strokes, track drawing, placement, undo, eraser).
 
 What the tests do **not** cover: OVRInput and tracking, passthrough compositing, MRUK on a real room, the permission
@@ -231,7 +232,7 @@ scripts/unity.sh build   # -> Builds/Android/Wonderland.apk
 metavr app install Builds/Android/Wonderland.apk && metavr app launch com.splink.wonderland
 ```
 
-Built 2026-11-16: `Builds/Android/Wonderland.apk`, 58.2 MB, sha256 `274ef641881b7ce6…`, package `com.splink.wonderland`
+Built 2026-11-16: `Builds/Android/Wonderland.apk`, 58.2 MB, sha256 `f2590a0c802538ef…`, package `com.splink.wonderland`
 0.1.0 (versionCode 1), minSdk 32 / targetSdk 34. Shader-error check clean. The APK manifest declares USE_SCENE,
 USE_ANCHOR_API, BOUNDARY_VISIBILITY, HEADSET_CAMERA and INTERNET (the last added by Unity/Meta SDK defaults).
 

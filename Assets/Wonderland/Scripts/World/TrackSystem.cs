@@ -92,7 +92,6 @@ namespace Wonderland
             var e = Network.Edges[i];
             var b = new MeshBuilder();
             BuildTrack(b, e.Layout, e.Joint[0] < 0, e.Joint[1] < 0);
-            if (waterLevel != null && terrain != null) BuildBridges(b, e.Layout, waterLevel, terrain);
             if (e.Tunnel != null) BuildTunnels(b, e.Layout, e.Tunnel);
             b.ToMesh("Track piece", pieces[i].mesh);
             pieces[i].mesh.RecalculateBounds();
@@ -356,119 +355,6 @@ namespace Wonderland
                     b.AddBox(new Vector3(0f, 0.008f, 0f), new Vector3(0.034f, 0.008f, 0.005f), Pal.TrainRed);
                     b.AddBox(new Vector3(0f, 0.004f, -0.004f), new Vector3(0.03f, 0.008f, 0.006f), Pal.Timber);
                     b.Pop();
-                }
-            }
-        }
-
-        /// <summary>
-        /// Stone bridges wherever the railway crosses water: a deck carrying the ballast, parapets with coping, piers
-        /// standing in the water and round arches between them with filled spandrels.
-        /// </summary>
-        public static void BuildBridges(MeshBuilder b, TrackLayout layout, System.Func<Vector2, float> waterLevel, TerrainField terrain)
-        {
-            var pts = layout.Points; int n = pts.Count;
-            var wet = new bool[n];
-            for (int i = 0; i < n; i++) wet[i] = waterLevel(new Vector2(pts[i].x, pts[i].z)) >= 0f;
-            // Spans: runs of wet points, widened by 4 cm onto the banks.
-            var spanWet = new bool[n];
-            for (int i = 0; i < n; i++)
-                if (wet[i]) for (int k = -4; k <= 4; k++) { int j = i + k; if (layout.Closed) j = (j % n + n) % n; if (j >= 0 && j < n) spanWet[j] = true; }
-            int start = -1;
-            for (int i = 0; i <= n; i++)
-            {
-                bool w = i < n && spanWet[i];
-                if (w && start < 0) start = i;
-                if (!w && start >= 0) { Span(b, layout, start, i - 1, terrain); start = -1; }
-            }
-        }
-
-        private static void Span(MeshBuilder b, TrackLayout layout, int i0, int i1, TerrainField terrain)
-        {
-            if (i1 - i0 < 2) return;
-            var pts = layout.Points;
-            var stone = Pal.Stone; var dark = Pal.StoneDark; var coping = Pal.Hex("#C9BBA3");
-            var path = new List<Vector3>(); var right = new List<Vector3>(); var up = new List<Vector3>();
-            for (int i = i0; i <= i1; i++)
-            {
-                var a = pts[Mathf.Max(i - 1, 0)]; var c = pts[Mathf.Min(i + 1, pts.Count - 1)];
-                var t = c - a; t.y = 0f; t.Normalize();
-                path.Add(pts[i]); right.Add(Vector3.Cross(Vector3.up, t)); up.Add(Vector3.up);
-            }
-            // Deck: a slab hiding the ballast's foot, with parapet walls and a pale coping on both sides.
-            var deck = new[] { new Vector2(-0.054f, -0.016f), new Vector2(-0.054f, -0.004f), new Vector2(0.054f, -0.004f), new Vector2(0.054f, -0.016f) };
-            b.AddExtrusion(path, right, up, deck, new[] { dark, stone, stone, dark }, false);
-            foreach (int side in new[] { -1, 1 })
-            {
-                float x0 = side * 0.047f, x1 = side * 0.054f;
-                var wall = side > 0
-                    ? new[] { new Vector2(x0, -0.004f), new Vector2(x0, 0.009f), new Vector2(x1, 0.009f), new Vector2(x1, -0.004f) }
-                    : new[] { new Vector2(x1, -0.004f), new Vector2(x1, 0.009f), new Vector2(x0, 0.009f), new Vector2(x0, -0.004f) };
-                b.AddExtrusion(path, right, up, wall, new[] { stone, stone, coping, stone }, false);
-                // Coursed stonework: a joint line along the parapet and the deck face, and vertical joints.
-                for (int i = 0; i < path.Count; i++)
-                {
-                    var outward = right[i] * side;
-                    var face = path[i] + right[i] * side * 0.0546f;
-                    b.Push(face + Vector3.up * 0.0025f, Quaternion.LookRotation(Vector3.Cross(outward, Vector3.up), Vector3.up));
-                    b.AddBox(Vector3.zero, new Vector3(0.0004f, 0.0005f, TrackPlanner.Spacing * 1.02f), dark);
-                    b.Pop();
-                    b.Push(face + Vector3.up * -0.01f, Quaternion.LookRotation(Vector3.Cross(outward, Vector3.up), Vector3.up));
-                    b.AddBox(Vector3.zero, new Vector3(0.0004f, 0.0005f, TrackPlanner.Spacing * 1.02f), dark);
-                    b.Pop();
-                    if (i % 2 == 0)
-                    {
-                        float y = (i / 2) % 2 == 0 ? 0.0055f : -0.0005f;
-                        b.Push(face + Vector3.up * y, Quaternion.LookRotation(Vector3.Cross(outward, Vector3.up), Vector3.up));
-                        b.AddBox(Vector3.zero, new Vector3(0.0004f, 0.0055f, 0.0005f), dark);
-                        b.Pop();
-                    }
-                }
-            }
-            // Piers every ~8 cm, arches between them on both faces.
-            float length = (i1 - i0) * TrackPlanner.Spacing;
-            int arches = Mathf.Max(1, Mathf.RoundToInt(length / 0.08f));
-            float step = (i1 - i0) / (float)arches;
-            for (int k = 0; k <= arches; k++)
-            {
-                int i = Mathf.Clamp(Mathf.RoundToInt(i0 + k * step), i0, i1);
-                var p = pts[i]; var r = right[i - i0];
-                float ground = terrain.SurfaceAt(p.x, p.z) - 0.006f;
-                float top = p.y - 0.016f, h = Mathf.Max(0.004f, top - ground);
-                b.Push(new Vector3(p.x, ground + h / 2f, p.z), Quaternion.LookRotation(Vector3.Cross(r, Vector3.up), Vector3.up));
-                b.AddBox(Vector3.zero, new Vector3(0.112f, h, 0.014f), dark, stone, dark);
-                b.AddBox(new Vector3(0f, h / 2f - 0.002f, 0f), new Vector3(0.116f, 0.003f, 0.017f), coping);
-                b.Pop();
-            }
-            for (int k = 0; k < arches; k++)
-            {
-                int ia = Mathf.Clamp(Mathf.RoundToInt(i0 + k * step), i0, i1), ib = Mathf.Clamp(Mathf.RoundToInt(i0 + (k + 1) * step), i0, i1);
-                foreach (int side in new[] { -1, 1 })
-                {
-                    // Spandrel strip between the deck's underside and a semicircular arch, plus voussoir stones on the arch.
-                    const int seg = 8;
-                    for (int q = 0; q < seg; q++)
-                    {
-                        float u0 = q / (float)seg, u1 = (q + 1f) / seg;
-                        Vector3 At(float u, out Vector3 rr)
-                        {
-                            float fi = Mathf.Lerp(ia, ib, u); int lo = Mathf.Clamp(Mathf.FloorToInt(fi), i0, i1), hi = Mathf.Min(lo + 1, i1);
-                            var p = Vector3.Lerp(pts[lo], pts[hi], fi - lo); rr = right[lo - i0];
-                            return p + rr * side * 0.0545f;
-                        }
-                        var top0 = At(u0, out var r0) + Vector3.up * -0.016f; var top1 = At(u1, out _) + Vector3.up * -0.016f;
-                        float span = (ib - ia) * TrackPlanner.Spacing * 0.5f;
-                        float g0 = Mathf.Sin(u0 * Mathf.PI) * span * 0.9f, g1 = Mathf.Sin(u1 * Mathf.PI) * span * 0.9f;
-                        float springing = Mathf.Min(0.03f, span * 0.6f);
-                        var bot0 = top0 - Vector3.up * (springing + 0.004f - g0 * 0.55f);
-                        var bot1 = top1 - Vector3.up * (springing + 0.004f - g1 * 0.55f);
-                        bot0.y = Mathf.Min(bot0.y, top0.y - 0.004f); bot1.y = Mathf.Min(bot1.y, top1.y - 0.004f);
-                        var outward = r0 * side;
-                        b.AddQuad(top0, top1, bot1, bot0, stone);
-                        b.AddQuad(top1, top0, bot0, bot1, stone);
-                        b.Push((bot0 + bot1) * 0.5f + outward * 0.0006f, Quaternion.LookRotation((bot1 - bot0).normalized, outward));
-                        b.AddBox(Vector3.zero, new Vector3(0.004f, 0.0012f, (bot1 - bot0).magnitude * 0.92f), q % 2 == 0 ? coping : stone);
-                        b.Pop();
-                    }
                 }
             }
         }

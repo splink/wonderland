@@ -33,6 +33,7 @@ namespace Wonderland
         public PeopleSystem People { get; private set; }
         public StreamSystem Streams { get; private set; }
         public PathSystem Paths { get; private set; }
+        public BridgeSystem Bridges { get; private set; }
         public WorldMaterials Materials { get; private set; }
         public float PatchSize => Terrain.PatchSize;
         public int Seed { get; private set; }
@@ -80,6 +81,9 @@ namespace Wonderland
             Streams.Init(materials.Water);
             Paths = Child<PathSystem>("Paths");
             Paths.Init(Terrain, materials.Lit, () => Track.Network);
+            Bridges = Child<BridgeSystem>("Bridges");
+            Bridges.Init(Terrain, materials.Lit, WaterLevelFor);
+            Paths.Bridges = Bridges;
             undo.Clear();
             FitToRoom();
         }
@@ -170,7 +174,7 @@ namespace Wonderland
             return go.AddComponent<T>();
         }
 
-        private bool trackDirty, streamsDirty, pathsDirty;
+        private bool trackDirty, streamsDirty, pathsDirty, bridgesDirty;
         private float trackUpdated, streamsUpdated, pathsUpdated;
 
         private void LateUpdate()
@@ -179,7 +183,8 @@ namespace Wonderland
             // Sculpting under the railway: re-profile it a few times per second (and once more after the stroke).
             if (streamsDirty && Time.realtimeSinceStartup - streamsUpdated > 0.3f) UpdateStreamsFromTerrain();
             if (trackDirty && Time.realtimeSinceStartup - trackUpdated > 0.25f) UpdateTrackFromTerrain();
-            if (pathsDirty && Time.realtimeSinceStartup - pathsUpdated > 0.3f) { pathsDirty = false; pathsUpdated = Time.realtimeSinceStartup; Paths.Rebuild(); }
+            if (bridgesDirty && !trackDirty && Time.realtimeSinceStartup - pathsUpdated > 0.3f) { bridgesDirty = false; pathsDirty = false; pathsUpdated = Time.realtimeSinceStartup; RefreshBridges(); }
+            if (pathsDirty && Time.realtimeSinceStartup - pathsUpdated > 0.3f) { pathsDirty = false; pathsUpdated = Time.realtimeSinceStartup; RefreshBridges(); }
         }
 
         /// <summary>Sculpting near a stream: re-level it on its course (still flowing downhill) and re-carve its channel.</summary>
@@ -225,6 +230,7 @@ namespace Wonderland
             Track.RebuildFixtures();
             RebuildStations();
             Cover.MarkAllDirty();
+            bridgesDirty = true;
         }
 
         /// <summary>
@@ -397,6 +403,7 @@ namespace Wonderland
             public PersonInstance[] People;
             public List<StreamPath> Streams;
             public List<PathLine> Paths;
+            public List<BridgeChoice> Bridges;
             public TrackNetwork.Data Network;
             public List<TrainSystem.TrainData> TrainList;
             public List<SignalInstance> Signals;
@@ -423,7 +430,7 @@ namespace Wonderland
             Height = (float[])Terrain.Height.Clone(), Land = Quantise(Terrain.Land), Lock = Quantise(Terrain.Lock), Soil = Quantise(Terrain.Soil),
             Water = Quantise(Terrain.Water), WaterLevel = (float[])Terrain.WaterLevel.Clone(),
             Trees = Forest.Trees.ToArray(), Houses = Buildings.Houses.ToArray(), Animals = Animals.Animals.ToArray(), People = People.People.ToArray(),
-            Streams = CopyStreams(Streams.Streams), Paths = PathSystem.Copy(Paths.Lines),
+            Streams = CopyStreams(Streams.Streams), Paths = PathSystem.Copy(Paths.Lines), Bridges = new List<BridgeChoice>(Bridges.Choices),
             Network = Track.Network.ToData(), TrainList = Trains.ToData(), Signals = new List<SignalInstance>(Track.Signals), Mode = Trains.Mode,
         };
 
@@ -452,7 +459,9 @@ namespace Wonderland
             Trains.Mode = s.Mode;
             Track.SetNetwork(TrackNetwork.FromData(s.Network), WaterLevelFor, Terrain);
             Trains.FromData(s.TrainList);
-            Paths.Rebuild();
+            Bridges.Choices.Clear();
+            if (s.Bridges != null) Bridges.Choices.AddRange(s.Bridges);
+            RefreshBridges();
             RebuildStations();
             Cover.MarkAllDirty();
             if (room != null) FitToRoom();
@@ -535,6 +544,7 @@ namespace Wonderland
             Cover.MarkAllDirty();
             RemoveStrandedAnimals();
             if (Track.HasTrack) UpdateTrackFromTerrain();   // lifts the railway onto a bridge where a stream now crosses it
+            RefreshBridges();
         }
 
         public bool RemoveStreamAt(Vector3 local)
@@ -642,6 +652,8 @@ namespace Wonderland
             if (!drain) RemoveStrandedAnimals();
             Forest.MarkDirtyRegion(centre, radius);
             Cover.MarkDirtyRegion(centre, radius);
+            if (Track.HasTrack && TouchesTrack(centre, radius)) trackDirty = true;   // the railway rises onto a bridge
+            bridgesDirty = true;
         }
 
         public bool CanGrowTree(Vector2 p, float footprint)
@@ -772,7 +784,25 @@ namespace Wonderland
             Cover.MarkAllDirty();
             if (placeTrains != null) placeTrains(); else Trains.Relocate();
             RebuildStations();
+            RefreshBridges();
+        }
+
+        /// <summary>Re-derives every bridge (from the railway, the ways and the water) and lays the ways onto their decks.</summary>
+        public void RefreshBridges()
+        {
+            Bridges.Rebuild(Track.Network, Paths.Lines);
             Paths.Rebuild();
+        }
+
+        /// <summary>Tap on a bridge: the next style that suits it (checkpointed). Returns its name, or null if there is no bridge.</summary>
+        public string CycleBridge(Vector3 local)
+        {
+            int i = Bridges.Pick(new Vector2(local.x, local.z));
+            if (i < 0) return null;
+            Checkpoint();
+            var style = Bridges.Cycle(i);
+            RefreshBridges();
+            return BridgeSystem.Names[(int)style];
         }
 
         /// <summary>Where a grip on a piece of track would bend it to (no change yet): an error, and the preview line.</summary>
@@ -967,7 +997,8 @@ namespace Wonderland
             Checkpoint();
             Paths.Add(line);
             var region = Paths.Grade(line);
-            if (region.width > 0) { TerrainView.Rebuild(region); Paths.Rebuild(); resitHouses = true; }
+            if (region.width > 0) { TerrainView.Rebuild(region); resitHouses = true; }
+            RefreshBridges();
             float hw = PathSystem.HalfWidth((int)kind);
             Forest.RemoveWhere(t => PathSystem.Distance(line, new Vector2(t.x, t.z)) < hw + TreeFactory.Radius((TreeKind)t.kind) * t.scale * 0.4f);
             Forest.MarkAllDirty();
@@ -982,7 +1013,7 @@ namespace Wonderland
             if (i < 0) return false;
             Checkpoint();
             Paths.Lines.RemoveAt(i);
-            Paths.Rebuild();
+            RefreshBridges();
             Cover.MarkAllDirty();
             return true;
         }
@@ -1034,6 +1065,7 @@ namespace Wonderland
             public List<PersonInstance> people;
             public List<StreamPath> streams;
             public List<PathLine> paths;
+            public List<BridgeChoice> bridges;
             public TrackNetwork.Data network;          // v3: the railway network
             public List<TrainSystem.TrainData> trains;
             public List<SignalInstance> signals;
@@ -1064,7 +1096,7 @@ namespace Wonderland
             gx = Terrain.GX0, gz = Terrain.GZ0, nx = Terrain.Nx, nz = Terrain.Nz, size = Terrain.PatchSize, seed = Seed,
             height = Pack(Terrain.Height), land = Pack(Terrain.Land), locks = Pack(Terrain.Lock), soil = Pack(Terrain.Soil),
             water = Pack(Terrain.Water), waterLevel = Pack(Terrain.WaterLevel),
-            trees = new List<TreeInstance>(Forest.Trees), houses = new List<HouseInstance>(Buildings.Houses), animals = new List<AnimalInstance>(Animals.Animals), people = new List<PersonInstance>(People.People), streams = CopyStreams(Streams.Streams), paths = PathSystem.Copy(Paths.Lines),
+            trees = new List<TreeInstance>(Forest.Trees), houses = new List<HouseInstance>(Buildings.Houses), animals = new List<AnimalInstance>(Animals.Animals), people = new List<PersonInstance>(People.People), streams = CopyStreams(Streams.Streams), paths = PathSystem.Copy(Paths.Lines), bridges = new List<BridgeChoice>(Bridges.Choices),
             network = Track.Network.ToData(), trains = Trains.ToData(), signals = new List<SignalInstance>(Track.Signals), switchMode = (int)Trains.Mode,
         });
 
@@ -1104,7 +1136,7 @@ namespace Wonderland
             {
                 Cells = cells, Height = height, Land = Quantise(land), Lock = Quantise(locks), Soil = Quantise(soil),
                 Water = water != null ? Quantise(water) : null, WaterLevel = waterLevel, Trees = (d.trees ?? new List<TreeInstance>()).ToArray(),
-                Houses = (d.houses ?? new List<HouseInstance>()).ToArray(), Animals = (d.animals ?? new List<AnimalInstance>()).ToArray(), People = (d.people ?? new List<PersonInstance>()).ToArray(), Streams = d.streams, Paths = d.paths,
+                Houses = (d.houses ?? new List<HouseInstance>()).ToArray(), Animals = (d.animals ?? new List<AnimalInstance>()).ToArray(), People = (d.people ?? new List<PersonInstance>()).ToArray(), Streams = d.streams, Paths = d.paths, Bridges = d.bridges,
                 Network = network, TrainList = trains, Signals = d.signals, Mode = (SwitchMode)Mathf.Clamp(d.switchMode, 0, 2),
             });
             Terrain.CopyFrom(height, land, locks, soil, water, waterLevel);   // exact values (snapshots are quantised)

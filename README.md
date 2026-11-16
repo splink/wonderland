@@ -89,6 +89,14 @@ stroke:
 - Where a way crosses the railway, a level crossing appears, with planks and crossbucks. It is the only place villagers
   cross the rails.
 
+**Bridges.** Wherever a railway, road or path crosses a pond or stream, a bridge appears by itself, in a style that
+suits it: stone arches for railways and roads, a timber trestle for lanes, a humped footbridge for paths, stepping stones
+where a trail meets a narrow stream.
+- **Tap a bridge** with the Track or Paths tool to cycle through the other styles that fit it: steel truss,
+  suspension (long spans only), covered bridge, and so on. Your choice is remembered, saved and undoable.
+- **Shared decks:** draw a second track, or a road, beside an existing crossing and the bridge widens to carry both.
+- **Walking across:** villagers walk over road and path bridges.
+
 **Life.** Villagers, sheep, cows, horses, pigs, hens, ducks and deer:
 - **Villagers** use what is built around them. They sit at the café's tables and on benches, gather round the
   fountain and on the church steps, browse the grocer's crates, play in the playground, ride the carousel and the Ferris

@@ -182,6 +182,9 @@ namespace Wonderland
         private bool WalkableGround(Vector2 p)
         {
             var t = world.Terrain;
+            // On a road or path bridge: walk across the water.
+            if (world.Bridges.Deck(p, out _, out _, -Radius * 0.5f))
+                return !(world.Track.HasTrack && world.Track.DistanceTo(new Vector3(p.x, 0f, p.y)) < TrackSystem.BedHalfWidth + Radius) && !InsideHouse(p, Radius);
             if (t.EdgeAt(p.x, p.y) < 0.4f || t.WaterAt(p.x, p.y) > 0.05f) return false;
             if (world.Streams.IsWet(p, Radius + 0.002f)) return false;
             if (world.Track.HasTrack && world.Track.DistanceTo(new Vector3(p.x, 0f, p.y)) < TrackSystem.BedHalfWidth + Radius && !world.Paths.NearLevelCrossing(p, 0.035f)) return false;
@@ -234,7 +237,7 @@ namespace Wonderland
             return new Vector2(q.x, q.z);
         }
 
-        private float GroundAt(Vector2 p) => OnPlatform(p, out float top) ? top : world.Terrain.SurfaceAt(p.x, p.y);
+        private float GroundAt(Vector2 p) => OnPlatform(p, out float top) ? top : world.Bridges.Deck(p, out float deck, out _) ? deck : world.Terrain.SurfaceAt(p.x, p.y);
 
         private bool TrainRunning => world.Trains.AnyRunning;
 

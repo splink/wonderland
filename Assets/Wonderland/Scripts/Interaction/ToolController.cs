@@ -263,12 +263,13 @@ namespace Wonderland
                 : Draining ? "Hold trigger over water to drain it (tap a stream to remove it)  ·  A: next mode" : "Hold trigger to dig a pond; start in a pond to make it bigger  ·  A: next mode  ·  stick: size",
             Tool.Forest => ForestErase ? "Hold trigger to clear trees  ·  A: paint" : "Hold trigger to paint a forest  ·  A: erase  ·  stick: size / density",
             Tool.Track => SignalMode ? "Trigger beside the track: put up a stop signal  ·  tap a signal: red / green  ·  A: draw"
-                : World.Track.HasTrack ? "Draw from the track to branch off, from an end to extend, back onto track to join  ·  tap a switch to throw it  ·  grip: bend track  ·  A: signals"
+                : World.Track.HasTrack ? (World.Bridges.Bridges.Count > 0 ? "Tap a bridge to change its style  ·  draw from the track to branch, from an end to extend  ·  tap a switch to throw it  ·  grip: bend track"
+                    : "Draw from the track to branch off, from an end to extend, back onto track to join  ·  tap a switch to throw it  ·  grip: bend track  ·  A: signals")
                 : "Hold trigger and draw a railway - come back to the start for a loop (over bare floor is fine)",
             Tool.Train => !World.Track.HasTrack ? "Draw a railway first (Track tool)"
                 : hoveredTrain != null ? "Trigger: stop / go  ·  stick up-down: speed  ·  grip: pick it up  ·  A: stop / go"
                 : "Trigger on the track: add a train  ·  tap a switch or signal to change it  ·  A: start / stop all",
-            Tool.Paths => PathSystem.IsWay((int)PathKind) ? $"Draw a {PathSystem.Names[(int)PathKind].ToLower()} - start or end on another to join them; villagers walk along it  ·  A: next"
+            Tool.Paths => PathSystem.IsWay((int)PathKind) ? $"Draw a {PathSystem.Names[(int)PathKind].ToLower()} - across water it gets a bridge (tap a bridge to change it); start on another way to join  ·  A: next"
                 : $"Draw a {PathSystem.Names[(int)PathKind].ToLower()} - close it into a loop for a pasture that keeps animals in  ·  A: next",
             Tool.Houses => HouseVariant == HouseFactory.Station ? "Point beside the railway: the station snaps to it and the train will stop there"
                 : !carrying && Catalog.Get(HouseVariant).Hint != null ? $"Trigger: place the {Catalog.Get(HouseVariant).Name.ToLower()} - {Catalog.Get(HouseVariant).Hint}  ·  stick: rotate  ·  A: next"
@@ -479,7 +480,9 @@ namespace Wonderland
             float width = Mathf.Max(PathSystem.HalfWidth((int)PathKind), 0.008f);
             if (drawn.Count == 0)
             {
-                if (hit) World.TerrainView.SetBrush(local, width, new Color(1f, 0.9f, 0.6f), 0.9f); else World.TerrainView.HideBrush();
+                int bridge = hit ? World.Bridges.Pick(new Vector2(local.x, local.z)) : -1;
+                if (bridge >= 0) { var a = World.Bridges.Bridges[bridge].Anchor; World.TerrainView.SetBrush(new Vector3(a.x, local.y, a.y), 0.05f, new Color(0.55f, 0.85f, 1f), 0.95f); }
+                else if (hit) World.TerrainView.SetBrush(local, width, new Color(1f, 0.9f, 0.6f), 0.9f); else World.TerrainView.HideBrush();
             }
             if (input.TriggerDown && hit) { drawn.Clear(); drawn.Add(local); }
             if (input.Trigger && drawn.Count > 0 && hit)
@@ -490,6 +493,14 @@ namespace Wonderland
             if ((input.TriggerUp || !input.Trigger) && drawn.Count > 0)
             {
                 World.Track.HidePreview();
+                if (TrackPlanner.Length(drawn) < 0.03f)
+                {
+                    // A tap: on a bridge, try its next style.
+                    var bridge = World.CycleBridge(drawn[0]);
+                    if (bridge != null) { Say(bridge + " - tap again for another style"); Haptic(0.5f, 0.05f); }
+                    drawn.Clear();
+                    return;
+                }
                 string error = World.BuildPath(drawn, PathKind);
                 if (error == null) { Say(PathSystem.Names[(int)PathKind] + " added"); Haptic(0.5f, 0.05f); }
                 else { Say(error); Haptic(0.7f, 0.1f); }
@@ -574,7 +585,9 @@ namespace Wonderland
                 {
                     var probe = new List<Vector3> { local };
                     var a = TrackPlanner.Attach(net, probe, true, out _);
+                    int bridge = World.Bridges.Pick(new Vector2(local.x, local.z));
                     if (a.Kind != AttachKind.None) World.TerrainView.SetBrush(new Vector3(a.Point.x, local.y, a.Point.y), 0.022f, new Color(0.45f, 0.9f, 1f), 0.95f);
+                    else if (bridge >= 0) { var c = World.Bridges.Bridges[bridge].Anchor; World.TerrainView.SetBrush(new Vector3(c.x, local.y, c.y), 0.05f, new Color(0.55f, 0.85f, 1f), 0.95f); }
                     else World.TerrainView.SetBrush(local, 0.012f, new Color(1f, 0.9f, 0.5f), 0.9f);
                 }
             }
@@ -601,6 +614,7 @@ namespace Wonderland
                     int sig = World.Track.PickSignal(drawn[0], 0.03f);
                     if (joint >= 0) { Say(World.FlipSwitch(joint)); Haptic(0.5f, 0.04f); }
                     else if (sig >= 0) { bool red = World.ToggleSignal(sig); Say(red ? "Signal red" : "Signal green"); Haptic(0.4f, 0.04f); }
+                    else { var bridge = World.CycleBridge(drawn[0]); if (bridge != null) { Say(bridge + " - tap again for another style"); Haptic(0.5f, 0.05f); } }
                     World.Track.HidePreview();
                     drawn.Clear();
                     return;
