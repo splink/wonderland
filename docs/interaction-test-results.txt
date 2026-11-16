@@ -9,9 +9,12 @@ PASS  Clicking the Forest tile selects the forest brush
 PASS  Painting with the trigger grows trees (30)
 PASS  Track tool selected
 PASS  Drawing a loop with the trigger lays a closed railway (2.79 m)
-PASS  Trigger on the railway places the train
-PASS  Start option sets the train running
+PASS  Drawing from the track outwards branches off with a switch (1 switch, 2 pieces; "New switch - trains can go both ways now")
+PASS  Tapping the switch throws it (and pins it)
+PASS  Trigger on the railway puts a running train on it
 PASS  Train moves (0.27 m)
+PASS  Stop all stops the trains
+PASS  Start all sets them running again
 PASS  Trigger places a house where the pointer is
 PASS  Stick rotated the house before placing
 PASS  House type chips choose the variant

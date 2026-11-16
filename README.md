@@ -33,9 +33,9 @@ The palette floats above the **left** controller; the **right** controller point
 | Right trigger | use the tool / press palette buttons |
 | Right stick ← → | brush size (Houses: rotate) |
 | Right stick ↑ ↓ | strength (Forest: density) |
-| A | next mode: Raise → Lower → Smooth → Flatten → Grow → Trim · Pond → Stream → Drain · Paint ↔ Erase · next house · Sheep → Cows → Villagers · train start/stop |
+| A | next mode: Raise → Lower → Smooth → Flatten → Grow → Trim · Pond → Stream → Drain · Paint ↔ Erase · next house · Sheep → Cows → Villagers · Track: draw ↔ signals · Trains: start/stop (the one pointed at, or all) |
 | B | undo |
-| Right grip | pick up a house to move it |
+| Right grip | pick up a house, lift a train, or bend a piece of track |
 | Left Y | hide / show the palette |
 
 **Growing the world:** it starts as a small patch of land (about 1 m²) in front of you. In the Terrain tool pick
@@ -43,10 +43,26 @@ The palette floats above the **left** controller; the **right** controller point
 The terrain grows to meet you, up to 8 m from where the world started (a memory backstop); the room scan only gives it a
 head start. **Trim** takes land away (never under the railway or houses).
 
-**Railway:** draw a loop and come back to where you started: it closes, even if you overshoot or stop a little short,
-wobble, or draw over bare floor (land grows under the track). Only a figure 8 is refused. The track follows the land:
-raise the ground under it and it climbs (up to a 9 % grade), with the bed regraded. Across a pond or stream it rises
-onto an arched stone bridge; through a hill taller than the train it runs in a tunnel with stone portals.
+**Railway network (Track tool: build).** Everything you draw connects:
+- start or end a stroke at a **dead end** to extend that line
+- start on a **piece of track** to branch off with a new switch; end on track to join it
+- a stroke that **crosses** track gets a diamond crossing (a figure 8 is fine now)
+- a free stroke that comes back to its start becomes a **loop**, even if you overshoot or stop a little short; drawn
+  over bare floor, land grows under it
+
+The planner bends new track so it leaves and meets the old one smoothly, like a real switch, and rounds tight curves.
+Adding never replaces anything. **Grip** a piece of track to bend it like a rope (its switches stay put), the
+**eraser** removes one piece (from switch to switch), and **Signal** mode puts up stop signals. The track follows the
+land when you sculpt under it (up to a 9 % grade), rises onto stone bridges over water, and runs in tunnels under hills
+taller than the train.
+
+**Trains (Train tool: play).** Tap the track to add a steam train, a goods train or a railcar; each gets its own
+colours and starts running. Tap a train to stop or start it, push the stick up/down to change its speed, grip to lift it
+onto other track. Tap a switch to throw it (it stays set until you tap it again), tap a stop signal to turn it red or
+green. Safety is automatic: trains reserve the track ahead of them and never share a switch or crossing, so they never
+collide; they wait at red signals, stop at stations, reverse at buffers, and back away when they meet head-on. The
+**Switches** option sets how switches behave when nobody has set them: **Explore** (they alternate, so trains roam the
+whole network), **Random**, or **Manual**.
 
 **Water:** in the Water tool, **Pond** digs a basin that fills with water (start inside a pond to extend it at the same
 level), **Stream** is drawn like the railway and flows only downhill, carving a channel, and **Drain** takes water
@@ -71,8 +87,8 @@ shaders: no downloaded or purchased models, textures or services.
 | Area | Code |
 |---|---|
 | Mesh toolkit, noise, palette | `Assets/Wonderland/Scripts/Core/` |
-| Trees (5 kinds, 17 variants), meadow plants, houses (cottage, townhouse, thatched, station × 4 styles), sheep, cows, villagers (6 outfits), locomotive + 2 coaches | `Assets/Wonderland/Scripts/Assets/` |
-| Terrain field + renderer, water, streams, forest, ground cover, railway planner + mesh (bridges, tunnels), buildings + platforms, train, animals, villagers, world (undo / save) | `Assets/Wonderland/Scripts/World/` |
+| Trees (5 kinds, 17 variants), meadow plants, houses (cottage, townhouse, thatched, station × 4 styles), sheep, cows, villagers (6 outfits), locomotives, coaches and railcars in 6 liveries, 4 goods wagons | `Assets/Wonderland/Scripts/Assets/` |
+| Terrain field + renderer, water, streams, forest, ground cover, railway network (graph, planner, mesh with switches, signals, bridges, tunnels), trains (reservations, routing), buildings + platforms, animals, villagers, world (undo / save) | `Assets/Wonderland/Scripts/World/` |
 | Palette UI, controller input, tools | `Assets/Wonderland/Scripts/Interaction/` |
 | Boot: permission, MRUK floor + free space, placement, autosave, foveation; frame-timing log (`PerfLog`) | `Assets/Wonderland/Scripts/App/` |
 | Shaders: `Wonderland/Lit` (vertex-coloured storybook shading, wind sway), `Wonderland/Terrain` (procedural grass, flowers, soil, rim fade, brush ring), `Wonderland/Water` (depth tint, ripples, glints, shore foam, flow), UI, steam | `Assets/Wonderland/Shaders/` |

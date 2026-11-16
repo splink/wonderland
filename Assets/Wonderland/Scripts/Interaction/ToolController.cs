@@ -29,6 +29,12 @@ namespace Wonderland
 
         private readonly float[] radius = { 0.16f, 0.12f, 0.13f, 0.05f, 0.05f, 0.05f, 0.03f, 0.06f };
         public int DecorKind { get; private set; }   // 0 sheep, 1 cows, 2 villagers
+        public bool SignalMode { get; private set; }  // Track tool: placing stop signals instead of drawing
+        public TrainKind TrainKind { get; private set; } = TrainKind.Passenger;
+        private Train hoveredTrain;
+        private Train carriedTrain; private Vector3 carriedFacing;
+        private float strokeStarted;
+        private int dragEdge = -1, dragIndex; private float dragPreviewAt; private string dragError;
         private Vector3 lastDrop; private float sinceDrop;
         public bool Draining { get; private set; }
         public bool StreamMode { get; private set; }
@@ -83,6 +89,7 @@ namespace Wonderland
         {
             if (stroking) EndStroke();
             if (carrying) DropCarried();
+            if (carriedTrain != null) { carriedTrain = null; World.Undo(); }
             Tool = tool;
             Palette.SetTool(tool);
             drawn.Clear(); World.Track.HidePreview();
@@ -123,6 +130,7 @@ namespace Wonderland
         private bool LandMode => Tool == Tool.Terrain && (TerrainMode == TerrainBrush.Grow || TerrainMode == TerrainBrush.Trim);
 
         public void Say(string text, float seconds = 3f) { message = text; messageUntil = Time.time + seconds; }
+        public string LastMessage => message;
 
         private void RefreshOptions()
         {
@@ -148,12 +156,29 @@ namespace Wonderland
                     o.Add(new PaletteUI.Option("Dense", density > 0.75f, () => { density = 0.95f; RefreshOptions(); }));
                     break;
                 case Tool.Track:
-                    o.Add(new PaletteUI.Option("Draw", true, null));
-                    o.Add(new PaletteUI.Option("Remove railway", false, () => { if (World.Track.HasTrack) { World.RemoveTrack(); Say("Railway removed"); } }, World.Track.HasTrack));
+                    o.Add(new PaletteUI.Option("Draw", !SignalMode, () => { SignalMode = false; RefreshOptions(); }));
+                    o.Add(new PaletteUI.Option("Signal", SignalMode, () => { SignalMode = true; RefreshOptions(); }));
+                    o.Add(new PaletteUI.Option("Remove all", false, () => { if (World.Track.HasTrack) { World.RemoveTrack(); Say("Railway removed"); RefreshOptions(); } }, World.Track.HasTrack));
                     break;
                 case Tool.Train:
-                    o.Add(new PaletteUI.Option(World.Train.Running ? "Stop" : "Start", World.Train.Running, ToggleTrain, World.Train.Placed));
-                    o.Add(new PaletteUI.Option("Remove train", false, () => { World.Checkpoint(); World.Train.Remove(); RefreshOptions(); }, World.Train.Placed));
+                    foreach (var (kind, label) in new[] { (TrainKind.Passenger, "Steam"), (TrainKind.Goods, "Goods"), (TrainKind.Railcar, "Railcar") })
+                    {
+                        var k = kind;
+                        o.Add(new PaletteUI.Option(label, TrainKind == k, () => { TrainKind = k; RefreshOptions(); }));
+                    }
+                    bool running = World.Trains.AnyRunning;
+                    o.Add(new PaletteUI.Option(running ? "Stop all" : "Start all", running, () => { ToggleAll(); }, World.Trains.Any));
+                    o.Add(new PaletteUI.Option("Switches: " + World.Trains.Mode, false, () =>
+                    {
+                        World.Trains.Mode = (SwitchMode)(((int)World.Trains.Mode + 1) % 3);
+                        Say(World.Trains.Mode switch
+                        {
+                            SwitchMode.Explore => "Switches alternate - trains explore everywhere",
+                            SwitchMode.Random => "Switches pick a way at random",
+                            _ => "Switches stay as you set them",
+                        });
+                        RefreshOptions();
+                    }));
                     break;
                 case Tool.Houses:
                     for (int i = 0; i < HouseFactory.VariantCount; i++)
@@ -168,18 +193,31 @@ namespace Wonderland
                     o.Add(new PaletteUI.Option("Villagers", DecorKind == 2, () => { DecorKind = 2; RefreshOptions(); }));
                     break;
                 case Tool.Eraser:
-                    o.Add(new PaletteUI.Option("Tap: house / animal / villager / train / track", false, null));
+                    o.Add(new PaletteUI.Option("Tap: house / animal / villager / train / track / signal", false, null));
                     o.Add(new PaletteUI.Option("Hold: trees", false, null));
                     break;
             }
             Palette.SetOptions(o);
         }
 
+        /// <summary>A: start / stop the train being pointed at, or all trains.</summary>
         private void ToggleTrain()
         {
-            if (!World.Train.Placed) { Say("Place the train on the railway first"); return; }
-            World.SetTrainRunning(!World.Train.Running);
-            Say(World.Train.Running ? "All aboard!" : "Train stopping");
+            if (!World.Trains.Any) { Say(World.Track.HasTrack ? "Tap the railway to put a train on it" : "Draw a railway first (Track tool)"); return; }
+            if (hoveredTrain != null && World.Trains.Trains.Contains(hoveredTrain))
+            {
+                hoveredTrain.Running = !hoveredTrain.Running;
+                Say(hoveredTrain.Running ? "All aboard!" : "Train stopping");
+            }
+            else ToggleAll();
+            RefreshOptions();
+        }
+
+        private void ToggleAll()
+        {
+            bool run = !World.Trains.AnyRunning;
+            World.SetTrainsRunning(run);
+            Say(run ? "All aboard!" : "All trains stopping");
             RefreshOptions();
         }
 
@@ -194,13 +232,17 @@ namespace Wonderland
             Tool.Water => StreamMode ? "Hold trigger and draw a stream - it flows downhill and the railway bridges it  ·  A: next mode"
                 : Draining ? "Hold trigger over water to drain it (tap a stream to remove it)  ·  A: next mode" : "Hold trigger to dig a pond; start in a pond to make it bigger  ·  A: next mode  ·  stick: size",
             Tool.Forest => ForestErase ? "Hold trigger to clear trees  ·  A: paint" : "Hold trigger to paint a forest  ·  A: erase  ·  stick: size / density",
-            Tool.Track => World.Track.HasTrack ? "Draw a new loop to replace the railway  ·  come back to the start to close it" : "Hold trigger and draw a loop - come back to the start and let go (over bare floor is fine)",
-            Tool.Train => World.Train.Placed ? "Trigger on the track: move train  ·  A: start / stop" : World.Track.HasTrack ? "Point at the railway and pull the trigger" : "Draw a railway first (Track tool)",
+            Tool.Track => SignalMode ? "Trigger beside the track: put up a stop signal  ·  tap a signal: red / green  ·  A: draw"
+                : World.Track.HasTrack ? "Draw from the track to branch off, from an end to extend, back onto track to join  ·  tap a switch to throw it  ·  grip: bend track  ·  A: signals"
+                : "Hold trigger and draw a railway - come back to the start for a loop (over bare floor is fine)",
+            Tool.Train => !World.Track.HasTrack ? "Draw a railway first (Track tool)"
+                : hoveredTrain != null ? "Trigger: stop / go  ·  stick up-down: speed  ·  grip: pick it up  ·  A: stop / go"
+                : "Trigger on the track: add a train  ·  tap a switch or signal to change it  ·  A: start / stop all",
             Tool.Houses => HouseVariant == HouseFactory.Station ? "Point beside the railway: the station snaps to it and the train will stop there"
                 : carrying ? "Trigger: put the house down  ·  stick: rotate" : "Trigger: place  ·  stick: rotate  ·  A: next house  ·  grip / trigger on a house: move it",
             Tool.Decor => DecorKind == 2 ? "Trigger: place a villager - they stroll to the neighbours, take the train and wave  ·  A: switch"
                 : "Trigger: place a " + (DecorKind == 0 ? "sheep" : "cow") + " - hold and sweep for a little herd  ·  A: switch",
-            _ => "Tap a house, an animal, a villager, the train or the railway to erase  ·  hold over trees to clear them",
+            _ => "Tap a house, an animal, a villager, a train, a signal or a piece of track to erase  ·  hold over trees to clear them",
         };
 
         private void Update()
@@ -255,7 +297,7 @@ namespace Wonderland
                 if (Tool == Tool.Houses) houseRotation += stick.x * 120f * dt;
                 else radius[(int)Tool] = Mathf.Clamp(Radius * (1f + stick.x * 1.2f * dt), 0.04f, 0.4f);
             }
-            if (Mathf.Abs(stick.y) > 0.4f)
+            if (Mathf.Abs(stick.y) > 0.4f && Tool != Tool.Train)
             {
                 if (Tool == Tool.Forest) { density = Mathf.Clamp01(density + stick.y * 0.6f * dt); }
                 else strength = Mathf.Clamp(strength + stick.y * 0.6f * dt, 0.15f, 1f);
@@ -269,12 +311,13 @@ namespace Wonderland
                 case Tool.Water: WaterTool(input, hit, local, dt, ref colour); break;
                 case Tool.Forest: ForestTool(input, hit, local, dt, ref colour); break;
                 case Tool.Track: TrackTool(input, hit, local, ref colour); break;
-                case Tool.Train: TrainTool(input, hit, local, ref colour); break;
+                case Tool.Train: TrainTool(input, hit, local, localDir, dt, ref colour); break;
                 case Tool.Houses: HouseTool(input, hit, local, localOrigin, localDir, ref colour); break;
                 case Tool.Decor: DecorTool(input, hit, local, dt, ref colour); break;
                 case Tool.Eraser: EraserTool(input, hit, local, localOrigin, localDir, dt, ref colour); break;
             }
             if (Tool != Tool.Houses) ghost.gameObject.SetActive(false);
+            if (Tool != Tool.Train) { hoveredTrain = null; if (World.Trains.Highlighted != null) World.Trains.Highlighted = null; }
             floorRing.gameObject.SetActive(LandMode && hit);
             DrawPointer(ray, rayLength, colour, hit);
         }
@@ -291,6 +334,7 @@ namespace Wonderland
                 case Tool.Decor: DecorKind = (DecorKind + 1) % 3; Say(DecorKind == 0 ? "Sheep" : DecorKind == 1 ? "Cows" : "Villagers"); break;
                 case Tool.Houses: HouseVariant = (HouseVariant + 1) % HouseFactory.VariantCount; Say(HouseFactory.Names[HouseVariant]); break;
                 case Tool.Train: ToggleTrain(); break;
+                case Tool.Track: SignalMode = !SignalMode; Say(SignalMode ? "Signals" : "Draw track"); break;
             }
             RefreshOptions();
             Haptic(0.3f, 0.02f);
@@ -410,23 +454,101 @@ namespace Wonderland
         private void TrackTool(PointerInput input, bool hit, Vector3 local, ref Color colour)
         {
             colour = new Color(1f, 0.9f, 0.55f, 0.85f);
-            World.TerrainView.SetBrush(local, 0.012f, new Color(1f, 0.9f, 0.5f), hit ? 0.9f : 0f);
-            if (input.TriggerDown && hit) { drawn.Clear(); drawn.Add(local); }
+            var net = World.Track.Network;
+            if (SignalMode)
+            {
+                int sig = hit ? World.Track.PickSignal(local, 0.03f) : -1;
+                World.TerrainView.SetBrush(local, sig >= 0 ? 0.02f : 0.015f, sig >= 0 ? new Color(1f, 0.6f, 0.4f) : new Color(1f, 0.9f, 0.5f), hit ? 0.9f : 0f);
+                if (input.TriggerDown && hit)
+                {
+                    if (sig >= 0) { bool red = World.ToggleSignal(sig); Say(red ? "Signal red: trains wait here" : "Signal green"); Haptic(0.4f, 0.04f); }
+                    else
+                    {
+                        string error = World.PlaceSignal(local);
+                        if (error != null) { Say(error); Haptic(0.7f, 0.1f); } else { Say("Stop signal up - tap it to turn it green"); Haptic(0.5f, 0.05f); }
+                    }
+                }
+                return;
+            }
+            // Grip on the track: bend it like a rope (the piece between its switches follows), let go to keep the shape.
+            if (dragEdge >= 0)
+            {
+                if (dragEdge >= net.Edges.Count) { dragEdge = -1; World.Track.HidePreview(); return; }
+                if (hit && Time.time - dragPreviewAt > 0.08f)
+                {
+                    dragPreviewAt = Time.time;
+                    dragError = World.ReshapePreview(dragEdge, dragIndex, local, out var preview);
+                    World.Track.ShowPreview(preview, false, dragError != null);
+                }
+                if (hit) World.TerrainView.SetBrush(local, 0.025f, dragError == null ? new Color(0.45f, 0.9f, 1f) : new Color(1f, 0.4f, 0.35f), 0.95f);
+                if (input.GripUp || !input.Grip)
+                {
+                    string error = hit ? World.Reshape(dragEdge, dragIndex, local) : "Point at the ground to put the track down";
+                    World.Track.HidePreview();
+                    if (error != null) { Say(error); Haptic(0.7f, 0.1f); } else { Say("Track reshaped"); Haptic(0.5f, 0.05f); }
+                    dragEdge = -1;
+                }
+                return;
+            }
+            if (drawn.Count == 0 && hit && input.GripDown && net.Nearest(local, out int grabEdge, out float grabS, out _, 0.05f))
+            {
+                dragEdge = grabEdge; dragIndex = TrackPlanner.IndexAt(net.Edges[grabEdge].Layout, grabS); dragError = null; dragPreviewAt = 0f;
+                Say("Move the track and let go");
+                Haptic(0.4f, 0.04f);
+                return;
+            }
+            // Hover: switches light up (tap to throw), dead ends and track show where a stroke would attach.
+            if (drawn.Count == 0 && hit)
+            {
+                int joint = World.Track.PickJoint(local, 0.045f);
+                if (joint >= 0) World.TerrainView.SetBrush(net.Joints[joint].Position, 0.035f, new Color(1f, 0.7f, 0.35f), 0.95f);
+                else
+                {
+                    var probe = new List<Vector3> { local };
+                    var a = TrackPlanner.Attach(net, probe, true, out _);
+                    if (a.Kind != AttachKind.None) World.TerrainView.SetBrush(new Vector3(a.Point.x, local.y, a.Point.y), 0.022f, new Color(0.45f, 0.9f, 1f), 0.95f);
+                    else World.TerrainView.SetBrush(local, 0.012f, new Color(1f, 0.9f, 0.5f), 0.9f);
+                }
+            }
+            else if (!hit) World.TerrainView.HideBrush();
+            if (input.TriggerDown && hit) { drawn.Clear(); drawn.Add(local); strokeStarted = Time.time; }
             if (input.Trigger && drawn.Count > 0 && hit)
             {
                 var last = drawn[^1];
                 if (new Vector2(local.x - last.x, local.z - last.z).magnitude > 0.012f) drawn.Add(local);
-                bool closing = TrackPlanner.WouldClose(drawn);
-                World.Track.ShowPreview(drawn, closing, false);
-                if (closing) Buzz(0.15f);
+                bool closing = TrackPlanner.WouldClose(drawn, net);
+                var a = TrackPlanner.Attach(net, drawn, true, out _);
+                var b = drawn.Count > 3 ? TrackPlanner.Attach(net, drawn, false, out _) : default;
+                Vector3? snapA = a.Kind != AttachKind.None ? new Vector3(a.Point.x, World.Terrain.SurfaceAt(a.Point.x, a.Point.y), a.Point.y) : null;
+                Vector3? snapB = b.Kind != AttachKind.None ? new Vector3(b.Point.x, World.Terrain.SurfaceAt(b.Point.x, b.Point.y), b.Point.y) : null;
+                World.Track.ShowPreview(drawn, closing, false, snapA, snapB);
+                if (closing || snapB.HasValue) Buzz(0.15f);
             }
             if ((input.TriggerUp || !input.Trigger) && drawn.Count > 0)
             {
+                // A tap (no stroke) on a switch throws it; on a stop signal toggles it.
+                if (TrackPlanner.Length(drawn) < 0.03f)
+                {
+                    int joint = World.Track.PickJoint(drawn[0], 0.045f);
+                    int sig = World.Track.PickSignal(drawn[0], 0.03f);
+                    if (joint >= 0) { Say(World.FlipSwitch(joint)); Haptic(0.5f, 0.04f); }
+                    else if (sig >= 0) { bool red = World.ToggleSignal(sig); Say(red ? "Signal red" : "Signal green"); Haptic(0.4f, 0.04f); }
+                    World.Track.HidePreview();
+                    drawn.Clear();
+                    return;
+                }
+                int before = net.Edges.Count, joints = net.Joints.Count;
                 var plan = World.BuildTrack(drawn);
                 if (plan.Ok)
                 {
                     World.Track.HidePreview();
-                    Say(plan.Layout.Closed ? $"Loop complete! {plan.Layout.Length:0.0} m of railway" : $"Railway laid ({plan.Layout.Length:0.0} m) - draw back to the start for a loop", 4f);
+                    var after = World.Track.Network;
+                    string what = plan.Closed ? $"Loop complete! {after.TotalLength:0.0} m of railway"
+                        : after.Joints.Count > joints ? "New switch - trains can go both ways now"
+                        : plan.Start.Kind == AttachKind.End || plan.Finish.Kind == AttachKind.End ? $"Railway extended ({after.TotalLength:0.0} m)"
+                        : $"Railway laid ({after.TotalLength:0.0} m) - draw back to the start for a loop";
+                    if (after.Crossings.Count > 0 && plan.Start.Kind == AttachKind.None && plan.Finish.Kind == AttachKind.None && !plan.Closed) what += " - with a crossing";
+                    Say(what, 4f);
                     Haptic(0.6f, 0.08f);
                     RefreshOptions();
                 }
@@ -442,22 +564,76 @@ namespace Wonderland
             if (drawn.Count == 0 && previewErrorUntil > 0f && Time.time > previewErrorUntil) { World.Track.HidePreview(); previewErrorUntil = 0f; }
         }
 
-        private void TrainTool(PointerInput input, bool hit, Vector3 local, ref Color colour)
+        private void TrainTool(PointerInput input, bool hit, Vector3 local, Vector3 direction, float dt, ref Color colour)
         {
             colour = new Color(1f, 0.6f, 0.5f, 0.85f);
-            bool onTrack = hit && World.Track.HasTrack && World.Track.DistanceTo(local) < 0.08f;
-            if (onTrack)
+            var net = World.Track.Network;
+            // Carrying a train (grip): show where it would go; let go over track to put it there.
+            if (carriedTrain != null)
             {
-                float s = World.Track.Layout.Nearest(local, out _);
-                var p = World.Track.Layout.Evaluate(s, out _);
+                bool onTrack = hit && net.Nearest(local, out _, out _, out _, 0.08f);
+                World.TerrainView.SetBrush(local, 0.05f, onTrack ? new Color(0.6f, 1f, 0.6f) : new Color(1f, 0.5f, 0.4f), hit ? 0.9f : 0f);
+                if (input.GripUp || !input.Grip)
+                {
+                    var kind = carriedTrain.Kind; bool running = carriedTrain.Running; float speed = carriedTrain.SpeedFactor;
+                    carriedTrain = null;
+                    // The pick-up was checkpointed: undo puts it back if the new spot doesn't work.
+                    Train placed = null;
+                    string error = onTrack ? World.PlaceTrainNoCheckpoint(local, kind, direction, out placed) : "Put trains down on the track";
+                    if (error != null) { World.Undo(); Say(error); Haptic(0.7f, 0.1f); }
+                    else { placed.Running = running; placed.SpeedFactor = speed; Say("Train moved"); Haptic(0.5f, 0.05f); }
+                    RefreshOptions();
+                }
+                return;
+            }
+            hoveredTrain = hit ? World.Trains.Near(local, 0.05f) : null;
+            World.Trains.Highlighted = hoveredTrain;
+            int joint = hit && hoveredTrain == null ? World.Track.PickJoint(local, 0.045f) : -1;
+            int sig = hit && hoveredTrain == null && joint < 0 ? World.Track.PickSignal(local, 0.03f) : -1;
+            if (hoveredTrain != null)
+            {
+                World.TerrainView.SetBrush(World.Trains.CentrePosition(hoveredTrain), 0.06f, TrainFactory.LiveryColour(hoveredTrain.Livery), 0.9f);
+                if (Mathf.Abs(input.Stick.y) > 0.4f)
+                {
+                    hoveredTrain.SpeedFactor = Mathf.Clamp(hoveredTrain.SpeedFactor + input.Stick.y * 0.8f * dt, 0.3f, 1.8f);
+                    Say($"Speed {hoveredTrain.SpeedFactor * 100f:0} %", 1f);
+                }
+                if (input.TriggerDown) { hoveredTrain.Running = !hoveredTrain.Running; Say(hoveredTrain.Running ? "All aboard!" : "Train stopping"); Haptic(0.5f, 0.05f); RefreshOptions(); }
+                if (input.GripDown)
+                {
+                    World.Checkpoint();
+                    carriedTrain = new Train { Kind = hoveredTrain.Kind, Running = hoveredTrain.Running, SpeedFactor = hoveredTrain.SpeedFactor };
+                    World.Trains.Remove(hoveredTrain);
+                    hoveredTrain = null;
+                    Say("Point at the track and let go");
+                }
+                return;
+            }
+            if (joint >= 0)
+            {
+                World.TerrainView.SetBrush(net.Joints[joint].Position, 0.035f, new Color(1f, 0.7f, 0.35f), 0.95f);
+                if (input.TriggerDown) { Say(World.FlipSwitch(joint)); Haptic(0.5f, 0.04f); }
+                return;
+            }
+            if (sig >= 0)
+            {
+                World.TerrainView.SetBrush(new Vector3(World.Track.Signals[sig].x, local.y, World.Track.Signals[sig].z), 0.02f, new Color(1f, 0.6f, 0.4f), 0.9f);
+                if (input.TriggerDown) { bool red = World.ToggleSignal(sig); Say(red ? "Signal red: trains wait here" : "Signal green"); Haptic(0.4f, 0.04f); }
+                return;
+            }
+            int edge = -1; float s = 0f;
+            bool onRails = hit && net.Nearest(local, out edge, out s, out _, 0.08f);
+            if (onRails)
+            {
+                var p = net.Edges[edge].Layout.Evaluate(s, out _);
                 World.TerrainView.SetBrush(p, 0.05f, new Color(1f, 0.85f, 0.4f), 0.8f);
             }
             else World.TerrainView.SetBrush(local, 0.03f, new Color(1f, 0.5f, 0.4f), hit ? 0.5f : 0f);
             if (input.TriggerDown && hit)
             {
-                string error = World.PlaceTrain(local);
+                string error = World.PlaceTrain(local, TrainKind, direction, out _);
                 if (error != null) { Say(error); Haptic(0.7f, 0.1f); }
-                else { Say("Train on the track - press Start (or A)"); Haptic(0.5f, 0.05f); }
+                else { Say("Off it goes! Tap a train to stop it"); Haptic(0.5f, 0.05f); }
                 RefreshOptions();
             }
         }
@@ -530,7 +706,7 @@ namespace Wonderland
             colour = new Color(1f, 0.45f, 0.45f, 0.85f);
             int house = World.Buildings.Pick(localOrigin, localDir);
             if (house != pickedHover) { World.Buildings.Highlight(house, new Color(1f, 0.25f, 0.2f, 0.45f)); pickedHover = house; }
-            bool target = house >= 0 || (hit && (World.Train.Near(local, 0.05f) || World.Track.DistanceTo(local) < 0.045f));
+            bool target = house >= 0 || (hit && (World.Trains.Near(local, 0.05f) != null || World.Track.DistanceTo(local) < 0.045f || World.Track.PickSignal(local, 0.025f) >= 0));
             if (hit) World.TerrainView.SetBrush(local, target ? 0.03f : Radius, new Color(1f, 0.4f, 0.35f), stroking ? 0.9f : 0.6f);
             else World.TerrainView.HideBrush();
             if (input.TriggerDown && (hit || house >= 0))

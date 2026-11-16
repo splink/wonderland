@@ -39,12 +39,13 @@ There are no headset screenshots; all images are editor renders.
 | Tunnels | ✓ Where the ground over the line stands more than 10 cm (taller than the train) above the bed, that stretch becomes a tunnel: the hill is kept, a short cutting is dug to each mouth, and stone portals with a dark arch are generated (the classic model-railway trick: the train vanishes into the dark). Steam stops underground | Journey: a loop under a 29 cm hill gets 30 cm of tunnel with the hill kept; the train runs through with steam off | ✗ |
 | Sheep and cows | ✓ Decor tool: tap, or hold and sweep for a herd. Each animal grazes head-down, picks a spot of free grass within 22 cm of home, turns, ambles over with a bob, and grazes again; it keeps off water, rails and houses | Journey: herd placed, refused in water and on the railway, wanders, stays on free grass, eraser, saved | ✗ |
 | Villagers | ✓ Decor tool, Villagers: 3 cm figures in 6 outfits (straw hats, flat caps, bonnets) with swinging arms and legs. They visit neighbours' doorsteps and gesture as they chat, look around quiet spots, walk to the station and wait on the platform, board when the train stops, ride, and get off at the next stop (and live near there from then on). Whenever the train passes within about 24 cm, they turn and wave. They keep to dry land, off the rails and out of houses, steering around obstacles; they move house if a pond or building covers theirs | Journey (4 simulated minutes): stroll, call at a door, wait on the platform, board, wave, never on rails / in water / in a house, eraser, saved | ✗ |
+| Railway network | ✓ Extend, branch, join, cross (diamond), loop, bend by grip, erase one piece; up to 8 trains (steam, goods with 4 wagons, railcar) in 6 liveries; automatic reservations, switch and stop signals, Explore / Random / Manual switches, per-train speed, lift and re-place trains | Journey: figure 8 crossing; branch to a dead end; extend; join; Manual and Explore switches; three trains for 3 minutes never closer than 5.5 cm between cars and none jammed; two crossings shared; head-on resolution; red / green signal; pinned switch; bend; erase + undo; save/load. Interaction: drawing a branch and tapping its switch with the controller, placing a running train, Stop all / Start all | ✗ |
 | Eraser, undo, save/load | ✓ eraser taps remove a house, a stream, an animal, a villager, the train or the railway, and holding it clears trees; undo restores whole-world snapshots (depth adapts to a 48 MB budget); Save/Load to one local JSON file, plus autosave on pause/quit and restore at launch | Journey: undo; save/load round trip preserves terrain exactly, trees, houses, railway and the running train (190 KB). Interaction: B undo, palette Undo, eraser tap | ✗ |
 | Palette UI | ✓ panel on the left controller: eight tool tiles with live 3D models of what they make, a contextual options row, a hint line, a status line, and Undo · Save · Load · Move · New (New needs a second press to confirm) | Interaction test clicks tiles, chips and buttons by ray; layout checked in `editor-palette.png` | ✗ |
 
 **Automated tests** (Unity batch mode on this Linux machine):
-- `scripts/unity.sh test` runs **96/96 checks PASS**. It is the scripted journey against the world API that the controllers drive.
-- `scripts/unity.sh interaction` runs **20/20 PASS**. It drives the real `ToolController` and `PaletteUI` with synthetic controller rays and buttons (UI hit-testing, tool switching, strokes, track drawing, placement, undo, eraser).
+- `scripts/unity.sh test` runs **131/131 checks PASS**. It is the scripted journey against the world API that the controllers drive.
+- `scripts/unity.sh interaction` runs **23/23 PASS**. It drives the real `ToolController` and `PaletteUI` with synthetic controller rays and buttons (UI hit-testing, tool switching, strokes, track drawing, placement, undo, eraser).
 
 What the tests do **not** cover: OVRInput and tracking, passthrough compositing, MRUK on a real room, the permission
 prompt, comfort, legibility at real viewing distances, and frame rate.
@@ -103,27 +104,51 @@ Risks that only a headset session can settle:
 
 ## Railway functionality (assessment c)
 
-The planner is built to forgive. If the stroke comes back to its start, it should just work:
-1. Find the loop: the nearest pair of points between the stroke's first quarter and its last 40 %, within 30 cm,
-   becomes the join. Overshooting or overlapping tails are trimmed, so a stroke that ends past the start or short of it
-   both close.
-2. Snip out small accidental loops (a wobble back over the line, under 40 % of the length).
-3. Apply Taubin denoising, then localised smoothing where the curvature radius is under 18 cm, then global smoothing
-   if needed, so tight curves are rounded rather than refused.
-4. Build a 1 cm Catmull-Rom centre line. Any part drawn over bare floor grows land under itself (0.22 m either side).
-5. Compute a smoothed, grade-limited height profile (≤ 9 %), raised to clear any water it crosses (bridges).
-6. Mark tunnel stretches (ground more than 10 cm above the bed, gaps under 3 cm filled, runs under 8 cm dropped).
+The railway is a **network**: a graph of track pieces joined by three-way switches, with diamond crossings where pieces
+cross. Construction never replaces anything, and every stroke is one of a few cases:
+- **Extend:** a stroke that starts or ends at a dead end extends that line.
+- **Branch or join:** a stroke that starts or ends on a piece splits it and adds a switch.
+- **Cross:** a stroke that crosses track gets a diamond crossing, at a shared height. It must cross at 22° or more and
+  stay clear of switches.
+- **Loop:** a free stroke that comes back to its start becomes a loop. Overshooting or stopping short (up to 30 cm)
+  both close, and small accidental loops are snipped out.
 
-Still refused: a figure 8 (the line would have to bridge itself), a loop under 0.9 m, and track beyond the 8 m reach. A refused
-stroke leaves the world exactly as it was.
+How the planner shapes the new track:
+- At a switch, the new track starts with a 4 cm straight in the old track's direction, then an arc of at least 20 cm
+  radius that turns until it heads for the drawn line.
+- That lead stays fixed while the rest of the stroke is smoothed to the 18 cm minimum radius, so the joint never kinks.
+- New track squeezed closer than 8.8 cm alongside other track is refused.
+- The network is then re-profiled: every switch and crossing gets one height from the ground, shared by all the pieces
+  meeting there, and each piece gets a grade-limited profile (≤ 9 %) between them.
+- After that come bridges over water, tunnels under tall ground, and grading of the corridors.
 
-The terrain is then graded and locked along the line. Open (unclosed) lines are allowed: they get buffer stops and the
-train shuttles. There is a single railway; drawing a new one replaces it, and the train moves onto the new line.
+Editing:
+- Grip-dragging bends one piece like a rope; its ends stay put at switches. The result is rounded and checked against
+  the rest of the network before it is applied.
+- The eraser removes one piece; switches left with two ends merge their pieces back into one.
 
-Bridges (over water) and tunnels (under tall ground) are now generated automatically; stations stop the train. The
-track also follows later sculpting. Not implemented: switches, multiple trains or lines, a line bridging itself or a
-valley without water, and extending an existing line from its end. Grades are clamped and the ground is graded to
-match, so very hilly strokes produce cuttings or tunnels rather than an error.
+**Operations.** Each train stands on a path of track spans and moves by growing it at the leading end.
+
+Safety is automatic:
+- Before moving, a train reserves its braking distance plus 6 cm of track ahead.
+- It never reserves track another train stands on or has reserved, and keeps 3 cm between trains.
+- It takes a switch (to 16 cm on every branch) or a crossing as a whole, so it never stops inside one.
+
+Switches:
+- Trains arriving from either branch always pass through onto the trunk.
+- Trains arriving from the trunk follow the switch's setting, which the global mode controls: Explore alternates
+  after each train, Random picks, Manual leaves it as set.
+- A switch tapped by hand is pinned until it is tapped again.
+
+Stopping and reversing:
+- Trains stop centred on station platforms.
+- They wait at red stop signals, and the automatic signals at every switch show which train holds it.
+- They reverse at buffers (a steam train pushes its coaches).
+- Two trains facing each other on single track resolve it by one backing away; a train stuck behind another for
+  12 s turns back too, unless the one ahead is at a signal or a station.
+
+Not implemented: flyovers (crossings are at grade only), a line bridging a dry valley, couplings and shunting, and
+sending a train to a chosen destination (routing is local, by switch settings).
 
 ## Ability to continue scaling the approach (assessment d)
 
@@ -192,7 +217,8 @@ MSAA 4× and one 1024 px shadow map remain the first knobs on the GPU side.
 
 - No Blender. All generation is Unity C#, which is simpler to keep runtime, reproducible and stylistically unified.
 - Added beyond the brief: Flatten brush, automatic ground cover, Move/New world, autosave/restore, free land growth,
-  water (ponds, streams), bridges, tunnels, the station, and a Decor tool with sheep, cows and villagers.
+  water (ponds, streams), bridges, tunnels, the station, a Decor tool with sheep, cows and villagers, and a railway
+  network with switches, crossings, signals and several kinds of train.
 
 ## Build
 
@@ -201,7 +227,7 @@ scripts/unity.sh build   # -> Builds/Android/Wonderland.apk
 metavr app install Builds/Android/Wonderland.apk && metavr app launch com.splink.wonderland
 ```
 
-Built 2026-11-15: `Builds/Android/Wonderland.apk`, 57.8 MB, sha256 `7f887a042a0d5ffe…`, package `com.splink.wonderland`
+Built 2026-11-16: `Builds/Android/Wonderland.apk`, 58.0 MB, sha256 `219a523c88f91bd7…`, package `com.splink.wonderland`
 0.1.0 (versionCode 1), minSdk 32 / targetSdk 34. Shader-error check clean. The APK manifest declares USE_SCENE,
 USE_ANCHOR_API, BOUNDARY_VISIBILITY, HEADSET_CAMERA and INTERNET (the last added by Unity/Meta SDK defaults).
 

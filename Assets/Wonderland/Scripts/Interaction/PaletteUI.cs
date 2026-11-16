@@ -307,7 +307,7 @@ namespace Wonderland
                 Tool.Water => PondIcon(),
                 Tool.Forest => TreeFactory.Get(TreeKind.Oak, 0),
                 Tool.Track => TrackIcon(),
-                Tool.Train => TrainFactory.LocoMesh,
+                Tool.Train => TrainFactory.LocoMesh(),
                 Tool.Houses => HouseFactory.Get(0),
                 Tool.Decor => SheepIcon(),
                 _ => EraserIcon(),

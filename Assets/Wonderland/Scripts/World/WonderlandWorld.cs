@@ -26,7 +26,7 @@ namespace Wonderland
         public ForestSystem Forest { get; private set; }
         public TrackSystem Track { get; private set; }
         public BuildingSystem Buildings { get; private set; }
-        public TrainSystem Train { get; private set; }
+        public TrainSystem Trains { get; private set; }
         public GroundCover Cover { get; private set; }
         public WaterRenderer WaterView { get; private set; }
         public AnimalSystem Animals { get; private set; }
@@ -65,17 +65,8 @@ namespace Wonderland
             Buildings = Child<BuildingSystem>("Buildings");
             Buildings.Init(Terrain, materials.Lit);
             Terrain.Protect = (x, z) => Buildings.Contains(new Vector2(x, z), 0.03f);
-            Train = Child<TrainSystem>("Train");
-            Train.Init(materials.Lit, materials.Smoke);
-            Train.InTunnel = arc =>
-            {
-                var t = Track.Tunnel; var l = Track.Layout;
-                if (t == null || l == null) return false;
-                float s = l.Wrap(arc);
-                int lo = 0, hi = l.Points.Count - 1;
-                while (hi - lo > 1) { int mid = (lo + hi) >> 1; if (l.Cum[mid] <= s) lo = mid; else hi = mid; }
-                return t[lo];
-            };
+            Trains = Child<TrainSystem>("Trains");
+            Trains.Init(Track, materials.Lit, materials.Smoke, materials.UI);
             Cover = Child<GroundCover>("Ground cover");
             Cover.Init(Terrain, materials.Lit, seed, p => Buildings.Contains(p, 0.01f) || IsWet(p));
             WaterView = Child<WaterRenderer>("Water");
@@ -102,8 +93,8 @@ namespace Wonderland
                 var need = roomLocal.Bounds;
                 var land = Terrain.LandBounds();
                 if (land.width > 0f) need = Union(need, Grow(land, TerrainField.RimWidth));
-                if (Track.Layout != null)
-                    foreach (var p in Track.Layout.Points) need = Union(need, new Rect(p.x - 0.15f, p.z - 0.15f, 0.3f, 0.3f));
+                foreach (var e in Track.Network.Edges)
+                    foreach (var p in e.Layout.Points) need = Union(need, new Rect(p.x - 0.15f, p.z - 0.15f, 0.3f, 0.3f));
                 need = Grow(need, 0.08f);
                 var cells = TerrainField.CellsCovering(need);
                 // Very large rooms: keep the grid within budget, centred on the world.
@@ -205,28 +196,82 @@ namespace Wonderland
         }
 
         /// <summary>
-        /// Re-fits the railway's height profile to the (sculpted) ground along the same route, regrades its bed and keeps
-        /// the train running. The track rises and falls with the land, within its gentle grade limit.
+        /// Re-fits the railway's height profiles to the (sculpted) ground along the same routes, regrades the bed under
+        /// pieces that moved and keeps the trains running. The track rises and falls with the land, within its grade limit.
         /// </summary>
         public void UpdateTrackFromTerrain()
         {
             trackDirty = false;
             trackUpdated = Time.realtimeSinceStartup;
-            var old = Track.Layout;
-            if (old == null) return;
-            var xz = new List<Vector2>(old.Points.Count);
-            foreach (var p in old.Points) xz.Add(new Vector2(p.x, p.z));
-            var heights = TrackPlanner.Profile(xz, Terrain, old.Closed, WaterLevelFor);
-            var points = new List<Vector3>(xz.Count);
-            for (int i = 0; i < xz.Count; i++) points.Add(new Vector3(xz[i].x, heights[i], xz[i].y));
-            var layout = new TrackLayout(points, old.Closed);
-            var tunnel = TrackSystem.TunnelMask(Terrain, layout);
-            Track.SetLayout(layout, WaterLevelFor, Terrain, tunnel);
-            var region = TrackSystem.GradeTerrain(Terrain, layout, WaterLevelFor, tunnel);
-            TerrainView.Rebuild(region);
-            Train.SwapLayout(layout);
+            if (!Track.HasTrack) return;
+            var net = Track.Network;
+            var changed = Reprofile(net, false);
+            if (changed.Count == 0) return;
+            net.Reindex();
+            var region = new RectInt(0, 0, 0, 0);
+            foreach (int e in changed)
+            {
+                var edge = net.Edges[e];
+                edge.Tunnel = TrackSystem.TunnelMask(Terrain, edge.Layout);
+                Track.RebuildPiece(e, WaterLevelFor, Terrain);
+                var r = TrackSystem.GradeTerrain(Terrain, edge.Layout, WaterLevelFor, edge.Tunnel);
+                TerrainView.Rebuild(r);
+            }
+            Track.SnapSignals();
+            Track.RebuildFixtures();
             RebuildStations();
             Cover.MarkAllDirty();
+        }
+
+        /// <summary>
+        /// Gives every piece a smooth, grade-limited height profile from the ground. Switches and crossings get one
+        /// height from the ground there, shared by all the pieces meeting at them. Returns the pieces that changed.
+        /// </summary>
+        private List<int> Reprofile(TrackNetwork net, bool all)
+        {
+            var jointH = new float[net.Joints.Count];
+            for (int j = 0; j < net.Joints.Count; j++) jointH[j] = BedHeightAt(net.Joints[j].Position);
+            var crossingH = new float[net.Crossings.Count];
+            for (int c = 0; c < net.Crossings.Count; c++) crossingH[c] = BedHeightAt(net.Crossings[c].Position);
+            var changed = new List<int>();
+            for (int e = 0; e < net.Edges.Count; e++)
+            {
+                var old = net.Edges[e].Layout;
+                var xz = new List<Vector2>(old.Points.Count);
+                foreach (var p in old.Points) xz.Add(new Vector2(p.x, p.z));
+                var pinned = new Dictionary<int, float>();
+                if (net.Edges[e].Joint[0] >= 0) pinned[0] = jointH[net.Edges[e].Joint[0]];
+                if (net.Edges[e].Joint[1] >= 0) pinned[xz.Count - 1] = jointH[net.Edges[e].Joint[1]];
+                for (int c = 0; c < net.Crossings.Count; c++)
+                {
+                    var x = net.Crossings[c];
+                    if (x.EdgeA == e) pinned[TrackPlanner.IndexAt(old, x.SA)] = crossingH[c];
+                    if (x.EdgeB == e) pinned[TrackPlanner.IndexAt(old, x.SB)] = crossingH[c];
+                }
+                var heights = TrackPlanner.Profile(xz, Terrain, old.Closed, WaterLevelFor, pinned);
+                float diff = 0f;
+                for (int i = 0; i < xz.Count; i++) diff = Mathf.Max(diff, Mathf.Abs(heights[i] - old.Points[i].y));
+                if (!all && diff < 0.0005f) continue;
+                var points = new List<Vector3>(xz.Count);
+                for (int i = 0; i < xz.Count; i++) points.Add(new Vector3(xz[i].x, heights[i], xz[i].y));
+                net.Edges[e].Layout = new TrackLayout(points, old.Closed);
+                changed.Add(e);
+            }
+            // Joint positions follow the bed height.
+            for (int j = 0; j < net.Joints.Count; j++) { var q = net.Joints[j].Position; q.y = jointH[j]; net.Joints[j].Position = q; }
+            return changed;
+        }
+
+        /// <summary>The bed height the ground suggests at a point (averaged over a few centimetres; clear of water).</summary>
+        private float BedHeightAt(Vector3 p)
+        {
+            float h = Terrain.SurfaceAt(p.x, p.z) * 2f;
+            foreach (var o in new[] { new Vector2(0.05f, 0f), new Vector2(-0.05f, 0f), new Vector2(0f, 0.05f), new Vector2(0f, -0.05f) })
+                h += Terrain.SurfaceAt(p.x + o.x, p.z + o.y);
+            h = h / 6f + TrackSystem.BedSink;
+            float lvl = WaterLevelFor(new Vector2(p.x, p.z));
+            if (lvl >= 0f) h = Mathf.Max(h, lvl + TrackPlanner.BridgeClearance);
+            return Mathf.Max(h, TerrainField.MinHeight + 0.006f);
         }
 
         /// <summary>
@@ -281,10 +326,8 @@ namespace Wonderland
         /// </summary>
         public HouseInstance? StationAt(Vector3 local, int style)
         {
-            if (!Track.HasTrack) return null;
-            float s = Track.Layout.Nearest(local, out float d);
-            if (d > 0.35f) return null;
-            var p = Track.Layout.Evaluate(s, out var tangent);
+            if (!Track.HasTrack || !Track.Network.Nearest(local, out int edge, out float s, out _, 0.35f)) return null;
+            var p = Track.Network.Edges[edge].Layout.Evaluate(s, out var tangent);
             tangent.y = 0f; tangent.Normalize();
             var normal = Vector3.Cross(Vector3.up, tangent);
             float side = Vector3.Dot(normal, local - p) >= 0f ? 1f : -1f;
@@ -296,13 +339,12 @@ namespace Wonderland
         private string ValidateStation(HouseInstance h)
         {
             if (!Track.HasTrack) return "Draw a railway first";
-            Track.Layout.Nearest(new Vector3(h.x, 0f, h.z), out float d);
-            if (Mathf.Abs(d - StationSetback) > 0.03f) return "A station goes right beside the railway";
-            if (Track.Layout.Length < PlatformLength + 0.3f) return "The railway is too short for a station";
+            if (!Track.Network.Nearest(new Vector3(h.x, 0f, h.z), out int edge, out _, out float d, 0.3f) || Mathf.Abs(d - StationSetback) > 0.03f) return "A station goes right beside the railway";
+            if (Track.Network.Edges[edge].Layout.Length < PlatformLength * 0.6f) return "The track is too short here for a station";
             return null;
         }
 
-        /// <summary>Generates every station's platform along the rails and tells the train where to stop.</summary>
+        /// <summary>Generates every station's platform along the rails and tells the trains where to stop.</summary>
         public void RebuildStations()
         {
             if (platforms == null)
@@ -316,21 +358,22 @@ namespace Wonderland
             }
             var mesh = platforms.sharedMesh;
             mesh.Clear();
-            Train.Stops.Clear();
+            Trains.Stations.Clear();
             if (!Track.HasTrack) return;
-            var layout = Track.Layout;
+            var net = Track.Network;
             var b = new MeshBuilder();
             foreach (var h in Buildings.Houses)
             {
                 if (h.variant != HouseFactory.Station) continue;
                 var c = new Vector3(h.x, 0f, h.z);
-                float s = layout.Nearest(c, out _);
+                if (!net.Nearest(c, out int edge, out float s, out _, 0.3f)) continue;
+                var layout = net.Edges[edge].Layout;
                 var p = layout.Evaluate(s, out var tangent); tangent.y = 0f; tangent.Normalize();
                 int side = Vector3.Dot(Vector3.Cross(Vector3.up, tangent), c - p) >= 0f ? 1 : -1;
                 float s0 = s - PlatformLength / 2f, s1 = s + PlatformLength / 2f;
                 if (!layout.Closed) { s0 = Mathf.Max(0.02f, s0); s1 = Mathf.Min(layout.Length - 0.02f, s1); }
                 HouseFactory.Platform(b, layout, s0, s1, side);
-                Train.Stops.Add(s);
+                Trains.Stations.Add(new StationStop { Edge = edge, S = s, Side = side, House = new Vector2(h.x, h.z) });
             }
             b.ToMesh("Platforms", mesh);
             mesh.RecalculateBounds();
@@ -348,9 +391,10 @@ namespace Wonderland
             public AnimalInstance[] Animals;
             public PersonInstance[] People;
             public List<StreamPath> Streams;
-            public List<Vector3> Track;
-            public bool TrackClosed, TrainPlaced, TrainRunning;
-            public float TrainS;
+            public TrackNetwork.Data Network;
+            public List<TrainSystem.TrainData> TrainList;
+            public List<SignalInstance> Signals;
+            public SwitchMode Mode;
         }
 
         private static byte[] Quantise(float[] v)
@@ -374,8 +418,7 @@ namespace Wonderland
             Water = Quantise(Terrain.Water), WaterLevel = (float[])Terrain.WaterLevel.Clone(),
             Trees = Forest.Trees.ToArray(), Houses = Buildings.Houses.ToArray(), Animals = Animals.Animals.ToArray(), People = People.People.ToArray(),
             Streams = CopyStreams(Streams.Streams),
-            Track = Track.Layout != null ? new List<Vector3>(Track.Layout.Points) : null, TrackClosed = Track.Layout?.Closed ?? false,
-            TrainPlaced = Train.Placed, TrainRunning = Train.Running, TrainS = Train.S,
+            Network = Track.Network.ToData(), TrainList = Trains.ToData(), Signals = new List<SignalInstance>(Track.Signals), Mode = Trains.Mode,
         };
 
         private static List<StreamPath> CopyStreams(List<StreamPath> streams)
@@ -397,10 +440,11 @@ namespace Wonderland
             Animals.SetAnimals(s.Animals ?? new AnimalInstance[0]);
             People.SetPeople(s.People ?? new PersonInstance[0]);
             Streams.SetStreams(s.Streams ?? new List<StreamPath>());
-            var restored = s.Track != null ? new TrackLayout(new List<Vector3>(s.Track), s.TrackClosed) : null;
-            Track.SetLayout(restored, WaterLevelFor, Terrain, restored != null ? TrackSystem.TunnelMask(Terrain, restored) : null);
-            if (s.TrainPlaced && Track.Layout != null && Train.Place(Track.Layout, s.TrainS)) Train.Running = s.TrainRunning;
-            else Train.Remove();
+            Track.Signals.Clear();
+            if (s.Signals != null) Track.Signals.AddRange(s.Signals);
+            Trains.Mode = s.Mode;
+            Track.SetNetwork(TrackNetwork.FromData(s.Network), WaterLevelFor, Terrain);
+            Trains.FromData(s.TrainList);
             RebuildStations();
             Cover.MarkAllDirty();
             if (room != null) FitToRoom();
@@ -434,7 +478,7 @@ namespace Wonderland
             var region = Terrain.ApplyBrush(brush, centre, radius, strength, dt, flattenTarget);
             if (region.width == 0) return;
             TerrainView.Rebuild(region);
-            if (Track.Layout != null && brush != TerrainBrush.Grow && brush != TerrainBrush.Trim && TouchesTrack(centre, radius)) trackDirty = true;
+            if (Track.HasTrack && brush != TerrainBrush.Grow && brush != TerrainBrush.Trim && TouchesTrack(centre, radius)) trackDirty = true;
             if (Streams.Streams.Count > 0 && brush != TerrainBrush.Grow && brush != TerrainBrush.Trim && Streams.DistanceTo(centre, out _) < radius + 0.05f) streamsDirty = true;
             // Land edits move the shore (and its taper) up to a rim width beyond the brush.
             float reach = brush == TerrainBrush.Grow || brush == TerrainBrush.Trim ? radius + TerrainField.RimWidth : radius;
@@ -570,12 +614,15 @@ namespace Wonderland
 
         // ------------------------------------------------------------------ railway
 
-        /// <summary>Plans a railway from a drawn stroke and, when valid, replaces the existing one (checkpointed).</summary>
+        /// <summary>
+        /// Plans new track from a drawn stroke and, when valid, adds it to the network (checkpointed): extending a line,
+        /// branching off or joining with switches, crossing other track, or a new loop. Nothing existing is replaced.
+        /// </summary>
         public TrackPlan BuildTrack(IReadOnlyList<Vector3> drawn)
         {
             // Railway drawn over bare floor grows its own land: checkpoint first so undo also takes the new land back.
             Checkpoint();
-            var plan = TrackPlanner.Plan(drawn, Terrain, ensureLand: path =>
+            var plan = TrackPlanner.Plan(drawn, Terrain, Track.Network, ensureLand: path =>
             {
                 float minX = float.MaxValue, minZ = float.MaxValue, maxX = float.MinValue, maxZ = float.MinValue;
                 foreach (var p in path) { minX = Mathf.Min(minX, p.x); maxX = Mathf.Max(maxX, p.x); minZ = Mathf.Min(minZ, p.y); maxZ = Mathf.Max(maxZ, p.y); }
@@ -584,17 +631,81 @@ namespace Wonderland
                 TerrainView.Rebuild(region);
                 Cover.MarkAllDirty();
                 return true;
-            }, waterLevel: WaterLevelFor);
+            });
             if (!plan.Ok) { Undo(); return plan; }
-            bool trainWasRunning = Train.Running;
+            var net = Track.Network;
+            Attach(net, plan);
+            AfterNetworkChanged();
+            return plan;
+        }
+
+        /// <summary>Adds a planned piece to the network: splits pieces where it branches off or joins, makes the switches.</summary>
+        private void Attach(TrackNetwork net, TrackPlan plan)
+        {
+            var pts = plan.Path.ConvertAll(p => new Vector3(p.x, Terrain.SurfaceAt(p.x, p.y), p.y));
+            if (plan.Closed) { net.AddEdge(new TrackLayout(pts, true)); return; }
+            var startEnds = PrepareAttach(net, plan.Start, out var startAt);
+            var finishEnds = PrepareAttach(net, plan.Finish, out var finishAt);
+            if (startEnds != null) pts[0] = startAt;
+            if (finishEnds != null) pts[^1] = finishAt;
+            int e = net.AddEdge(new TrackLayout(pts, false));
+            if (startEnds != null) { startEnds.Add(new EdgeEnd(e, 0)); net.Join(startAt, startEnds.ToArray()); }
+            if (finishEnds != null) { finishEnds.Add(new EdgeEnd(e, 1)); net.Join(finishAt, finishEnds.ToArray()); }
+            net.Normalize();
+        }
+
+        /// <summary>The track ends a new piece joins at an attachment (splitting a piece for a new switch), and the point.</summary>
+        private static List<EdgeEnd> PrepareAttach(TrackNetwork net, TrackAttach a, out Vector3 at)
+        {
+            at = default;
+            var p = new Vector3(a.Point.x, 0f, a.Point.y);
+            if (a.Kind == AttachKind.End)
+            {
+                float best = 0.02f; var found = new EdgeEnd(-1, 0);
+                for (int e = 0; e < net.Edges.Count; e++)
+                {
+                    if (net.Edges[e].Closed) continue;
+                    for (int k = 0; k < 2; k++)
+                    {
+                        if (net.Edges[e].Joint[k] >= 0) continue;
+                        var q = net.EndPoint(new EdgeEnd(e, k));
+                        float d = new Vector2(q.x - p.x, q.z - p.z).magnitude;
+                        if (d < best) { best = d; found = new EdgeEnd(e, k); }
+                    }
+                }
+                if (found.Edge < 0) return null;
+                at = net.EndPoint(found);
+                return new List<EdgeEnd> { found };
+            }
+            if (a.Kind == AttachKind.Mid)
+            {
+                net.Reindex();
+                if (!net.Nearest(p, out int edge, out float s, out _, 0.02f)) return null;
+                var l = net.Edges[edge].Layout;
+                int index = TrackPlanner.IndexAt(l, s);
+                at = l.Points[index];
+                var (arriving, leaving) = net.Split(edge, index);
+                net.Reindex();
+                return new List<EdgeEnd> { arriving, leaving };
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// After pieces were added or removed: profiles the network, regrades the corridors, rebuilds the meshes, clears
+        /// trees and houses in the way, puts the trains back on their track and refreshes stations and signals.
+        /// </summary>
+        private void AfterNetworkChanged(System.Action placeTrains = null)
+        {
+            var net = Track.Network;
+            net.Reindex();
+            Reprofile(net, true);
             TrackSystem.UnlockTerrain(Terrain);
-            var tunnel = TrackSystem.TunnelMask(Terrain, plan.Layout);
-            Track.SetLayout(plan.Layout, WaterLevelFor, Terrain, tunnel);
-            TrackSystem.GradeTerrain(Terrain, plan.Layout, WaterLevelFor, tunnel);
+            Track.SetNetwork(net, WaterLevelFor, Terrain);
+            foreach (var e in net.Edges) TrackSystem.GradeTerrain(Terrain, e.Layout, WaterLevelFor, e.Tunnel);
             Terrain.UpdateSurface(Terrain.All);
             TerrainView.RebuildAll();
-            var layout = plan.Layout;
-            Forest.RemoveWhere(t => { layout.Nearest(new Vector3(t.x, 0f, t.z), out float d); return d < TrackSystem.BedHalfWidth + TreeFactory.Radius((TreeKind)t.kind) * t.scale * 0.5f + 0.006f; });
+            Forest.RemoveWhere(t => net.DistanceTo(new Vector3(t.x, 0f, t.z)) < TrackSystem.BedHalfWidth + TreeFactory.Radius((TreeKind)t.kind) * t.scale * 0.5f + 0.006f);
             Forest.MarkAllDirty();
             for (int i = Buildings.Houses.Count - 1; i >= 0; i--)
             {
@@ -603,42 +714,144 @@ namespace Wonderland
                     : Buildings.Validate(h, i, p => Track.DistanceTo(new Vector3(p.x, 0f, p.y))) == "That's the railway";
                 if (gone) Buildings.RemoveAt(i);
             }
+            for (int i = Track.Signals.Count - 1; i >= 0; i--)
+                if (i >= Track.SignalSpots.Count || Track.SignalSpots[i].edge < 0) Track.Signals.RemoveAt(i);
+            Track.SnapSignals();
+            Track.RebuildFixtures();
             ApplyPads();
             RemoveStrandedAnimals();
+            People.Rehome();
             Buildings.Resit();
             Cover.MarkAllDirty();
-            if (Train.Placed)
-            {
-                if (Train.Place(layout, 0f)) Train.Running = trainWasRunning; else Train.Remove();
-            }
-            return plan;
+            if (placeTrains != null) placeTrains(); else Trains.Relocate();
+            RebuildStations();
         }
 
+        /// <summary>Where a grip on a piece of track would bend it to (no change yet): an error, and the preview line.</summary>
+        public string ReshapePreview(int edge, int index, Vector3 target, out List<Vector3> preview) =>
+            TrackPlanner.Reshape(Track.Network, edge, index, new Vector2(target.x, target.z), out _, out preview, Terrain);
+
+        /// <summary>Bends a piece of track (checkpointed): its point <paramref name="index"/> moves to <paramref name="target"/>.</summary>
+        public string Reshape(int edge, int index, Vector3 target)
+        {
+            var net = Track.Network;
+            string error = TrackPlanner.Reshape(net, edge, index, new Vector2(target.x, target.z), out var dense, out _, Terrain);
+            if (error != null) return error;
+            Checkpoint();
+            var old = net.Edges[edge].Layout;
+            var pts = dense.ConvertAll(p => new Vector3(p.x, Terrain.SurfaceAt(p.x, p.y), p.y));
+            net.Edges[edge].Layout = new TrackLayout(pts, old.Closed);
+            float ratio = net.Edges[edge].Layout.Length / Mathf.Max(0.01f, old.Length);
+            AfterNetworkChanged(() => Trains.Rebase(edge, ratio));
+            return null;
+        }
+
+        /// <summary>Takes away the whole railway (checkpointed).</summary>
         public void RemoveTrack()
         {
             Checkpoint();
-            Train.Remove();
-            Track.SetLayout(null);
+            Trains.RemoveAll();
+            Track.Signals.Clear();
+            Track.SetNetwork(new TrackNetwork());
             TrackSystem.UnlockTerrain(Terrain);
             TerrainView.RebuildAll();
             RebuildStations();
             Cover.MarkAllDirty();
         }
 
-        // ------------------------------------------------------------------ train
-
-        /// <summary>Puts the train on the track at the point nearest <paramref name="local"/>; returns an error or null.</summary>
-        public string PlaceTrain(Vector3 local)
+        /// <summary>Erases the piece of track under a point (from switch to switch); returns whether one went.</summary>
+        public bool RemovePieceAt(Vector3 local)
         {
-            if (!Track.HasTrack) return "Draw a railway first";
-            float s = Track.Layout.Nearest(local, out float d);
-            if (d > 0.08f) return "Point at the railway to place the train";
+            var net = Track.Network;
+            if (!net.Nearest(local, out int edge, out _, out _, 0.045f)) return false;
             Checkpoint();
-            if (!Train.Place(Track.Layout, s)) { Undo(); return "This railway is too short for the train"; }
+            net.RemoveEdge(edge);
+            AfterNetworkChanged();
+            return true;
+        }
+
+        // ------------------------------------------------------------------ trains, switches, signals
+
+        /// <summary>Puts a new train on the track at the point nearest <paramref name="local"/>, its locomotive towards
+        /// <paramref name="facing"/>, and sets it running; returns an error or null.</summary>
+        public string PlaceTrain(Vector3 local, TrainKind kind, Vector3 facing, out Train train)
+        {
+            train = null;
+            if (!Track.HasTrack) return "Draw a railway first";
+            if (!Track.Network.Nearest(local, out int edge, out float s, out _, 0.08f)) return "Point at the railway to place a train";
+            Track.Network.Edges[edge].Layout.Evaluate(s, out var tangent);
+            int orientation = Vector3.Dot(new Vector3(tangent.x, 0f, tangent.z), new Vector3(facing.x, 0f, facing.z)) >= 0f ? 1 : -1;
+            int livery = NextLivery();
+            Checkpoint();
+            train = Trains.Add(kind, livery, edge, s, orientation, out string error);
+            if (train == null) { Undo(); return error; }
+            train.Running = true;
             return null;
         }
 
-        public void SetTrainRunning(bool running) { if (Train.Placed) Train.Running = running; }
+        /// <summary>Puts a train down without a checkpoint (moving a train that was picked up, already checkpointed).</summary>
+        public string PlaceTrainNoCheckpoint(Vector3 local, TrainKind kind, Vector3 facing, out Train train)
+        {
+            train = null;
+            if (!Track.Network.Nearest(local, out int edge, out float s, out _, 0.08f)) return "Put trains down on the track";
+            Track.Network.Edges[edge].Layout.Evaluate(s, out var tangent);
+            int orientation = Vector3.Dot(new Vector3(tangent.x, 0f, tangent.z), new Vector3(facing.x, 0f, facing.z)) >= 0f ? 1 : -1;
+            train = Trains.Add(kind, NextLivery(), edge, s, orientation, out string error);
+            return train == null ? error : null;
+        }
+
+        private int NextLivery()
+        {
+            for (int k = 0; k < TrainSystem.LiveryCount; k++)
+            {
+                bool used = false;
+                foreach (var t in Trains.Trains) used |= t.Livery == k;
+                if (!used) return k;
+            }
+            return Trains.Trains.Count % TrainSystem.LiveryCount;
+        }
+
+        public void SetTrainsRunning(bool running) { foreach (var t in Trains.Trains) t.Running = running; }
+
+        /// <summary>Throws a switch by hand. In Explore / Random mode the first tap also pins it (trains leave it alone), the
+        /// next tap throws it back and lets the trains decide again. Returns a message for the player.</summary>
+        public string FlipSwitch(int joint)
+        {
+            if (joint < 0 || joint >= Track.Network.Joints.Count) return null;
+            if (Trains.JointLocked(joint)) return "Wait - a train is on the switch";
+            var j = Track.Network.Joints[joint];
+            j.Setting = 1 - j.Setting;
+            j.FlipPending = false;
+            string message;
+            if (Trains.Mode == SwitchMode.Manual) { j.Pinned = false; message = "Switch thrown"; }
+            else { j.Pinned = !j.Pinned; message = j.Pinned ? "Switch set - trains will keep this way" : "Switch free - trains choose again"; }
+            Track.RebuildFixtures();
+            return message;
+        }
+
+        /// <summary>Puts a stop signal beside the track next to <paramref name="local"/> (checkpointed).</summary>
+        public string PlaceSignal(Vector3 local)
+        {
+            if (!Track.HasTrack || !Track.Network.Nearest(local, out int edge, out float s, out _, 0.12f)) return "Point beside the railway";
+            if (Track.Network.DistanceToJoint(edge, s) < TrackNetwork.FoulDistance + 0.05f) return "Too close to a switch";
+            var p = Track.Network.Edges[edge].Layout.Evaluate(s, out var t); t.y = 0f;
+            var normal = Vector3.Cross(Vector3.up, t.normalized);
+            float side = Vector3.Dot(normal, local - p) >= 0f ? 1f : -1f;
+            var at = p + normal * side * 0.055f;
+            if (Track.PickSignal(at, 0.08f) >= 0) return "There is a signal here already";
+            Checkpoint();
+            Track.Signals.Add(new SignalInstance { x = at.x, z = at.z, red = true });
+            Track.SnapSignals();
+            Track.RebuildFixtures();
+            return null;
+        }
+
+        public bool ToggleSignal(int i)
+        {
+            if (i < 0 || i >= Track.Signals.Count) return false;
+            var sig = Track.Signals[i]; sig.red = !sig.red; Track.Signals[i] = sig;
+            return sig.red;
+        }
 
         // ------------------------------------------------------------------ houses
 
@@ -654,9 +867,7 @@ namespace Wonderland
         private bool TouchesTrack(Vector2 centre, float radius)
         {
             float reach = radius + TrackSystem.CorridorHalfWidth;
-            foreach (var p in Track.Layout.Points)
-                if ((new Vector2(p.x, p.z) - centre).sqrMagnitude < reach * reach) return true;
-            return false;
+            return Track.Network.Nearest(new Vector3(centre.x, 0f, centre.y), out _, out _, out _, reach);
         }
 
         public string PlaceHouse(HouseInstance h, bool checkpoint = true)
@@ -698,8 +909,11 @@ namespace Wonderland
             if (animal >= 0) { Checkpoint(); var a = Animals.RemoveAt(animal); return (AnimalKind)a.kind + " removed"; }
             int person = People.Nearest(hit, 0.02f);
             if (person >= 0) { Checkpoint(); People.RemoveAt(person); return "Villager removed"; }
-            if (Train.Near(hit, 0.05f)) { Checkpoint(); Train.Remove(); return "Train removed"; }
-            if (Track.DistanceTo(hit) < 0.045f) { RemoveTrack(); return "Railway removed"; }
+            var train = Trains.Near(hit, 0.05f);
+            if (train != null) { Checkpoint(); Trains.Remove(train); return "Train removed"; }
+            int signal = Track.PickSignal(hit, 0.025f);
+            if (signal >= 0) { Checkpoint(); Track.Signals.RemoveAt(signal); Track.SnapSignals(); Track.RebuildFixtures(); return "Signal removed"; }
+            if (RemovePieceAt(hit)) return "Track removed";
             return null;
         }
 
@@ -708,7 +922,7 @@ namespace Wonderland
         [Serializable]
         private sealed class SaveData
         {
-            public int version = 2;
+            public int version = 3;
             public int gx, gz, nx, nz;       // v2: the grid in global cells
             public float size;               // v1: island size (its grid spanned exactly this); v2: starting patch size
             public int seed;
@@ -718,7 +932,11 @@ namespace Wonderland
             public List<AnimalInstance> animals;
             public List<PersonInstance> people;
             public List<StreamPath> streams;
-            public List<Vector3> track;
+            public TrackNetwork.Data network;          // v3: the railway network
+            public List<TrainSystem.TrainData> trains;
+            public List<SignalInstance> signals;
+            public int switchMode;
+            public List<Vector3> track;                // v1 / v2: the single railway and its train
             public bool trackClosed, trainPlaced, trainRunning;
             public float trainS;
         }
@@ -745,18 +963,16 @@ namespace Wonderland
             height = Pack(Terrain.Height), land = Pack(Terrain.Land), locks = Pack(Terrain.Lock), soil = Pack(Terrain.Soil),
             water = Pack(Terrain.Water), waterLevel = Pack(Terrain.WaterLevel),
             trees = new List<TreeInstance>(Forest.Trees), houses = new List<HouseInstance>(Buildings.Houses), animals = new List<AnimalInstance>(Animals.Animals), people = new List<PersonInstance>(People.People), streams = CopyStreams(Streams.Streams),
-            track = Track.Layout != null ? new List<Vector3>(Track.Layout.Points) : new List<Vector3>(),
-            trackClosed = Track.Layout?.Closed ?? false,
-            trainPlaced = Train.Placed, trainRunning = Train.Running, trainS = Train.S,
+            network = Track.Network.ToData(), trains = Trains.ToData(), signals = new List<SignalInstance>(Track.Signals), switchMode = (int)Trains.Mode,
         });
 
         public void Deserialize(string json, WorldMaterials materials)
         {
             var d = JsonUtility.FromJson<SaveData>(json);
-            if (d == null || d.size <= 0f || (d.version != 1 && d.version != 2)) throw new InvalidDataException("Not a Wonderland save.");
+            if (d == null || d.size <= 0f || (d.version < 1 || d.version > 3)) throw new InvalidDataException("Not a Wonderland save.");
             float[] height, land, locks, soil, water = null, waterLevel = null;
             RectInt cells;
-            if (d.version == 2)
+            if (d.version >= 2)
             {
                 cells = new RectInt(d.gx, d.gz, d.nx, d.nz);
                 int count = d.nx * d.nz;
@@ -765,14 +981,29 @@ namespace Wonderland
                 if (!string.IsNullOrEmpty(d.water)) { water = Unpack(d.water, count); waterLevel = Unpack(d.waterLevel, count); }
             }
             else MigrateV1(d, out cells, out height, out land, out locks, out soil);
+            // Saves before the railway network (v1 / v2) had one railway and at most one train: one piece of track.
+            var network = d.network;
+            var trains = d.trains;
+            if ((network == null || network.edges == null || network.edges.Count == 0) && d.track != null && d.track.Count > 2)
+            {
+                network = new TrackNetwork.Data();
+                network.edges.Add(new TrackNetwork.EdgeData { points = d.track, closed = d.trackClosed });
+                trains = new List<TrainSystem.TrainData>();
+                if (d.trainPlaced)
+                {
+                    var old = new TrackLayout(new List<Vector3>(d.track), d.trackClosed);
+                    var front = old.Evaluate(d.trainS + TrainFactory.Loco.Front, out var tangent);
+                    trains.Add(new TrainSystem.TrainData { x = front.x, z = front.z, fx = tangent.x, fz = tangent.z, running = d.trainRunning });
+                }
+            }
             var keepRoom = room; room = null;   // fit once, after the data is in
             Create(d.size, materials, d.seed, false);
             Restore(new Snapshot
             {
                 Cells = cells, Height = height, Land = Quantise(land), Lock = Quantise(locks), Soil = Quantise(soil),
                 Water = water != null ? Quantise(water) : null, WaterLevel = waterLevel, Trees = (d.trees ?? new List<TreeInstance>()).ToArray(),
-                Houses = (d.houses ?? new List<HouseInstance>()).ToArray(), Animals = (d.animals ?? new List<AnimalInstance>()).ToArray(), People = (d.people ?? new List<PersonInstance>()).ToArray(), Streams = d.streams, Track = d.track != null && d.track.Count > 2 ? d.track : null,
-                TrackClosed = d.trackClosed, TrainPlaced = d.trainPlaced, TrainRunning = d.trainRunning, TrainS = d.trainS,
+                Houses = (d.houses ?? new List<HouseInstance>()).ToArray(), Animals = (d.animals ?? new List<AnimalInstance>()).ToArray(), People = (d.people ?? new List<PersonInstance>()).ToArray(), Streams = d.streams,
+                Network = network, TrainList = trains, Signals = d.signals, Mode = (SwitchMode)Mathf.Clamp(d.switchMode, 0, 2),
             });
             Terrain.CopyFrom(height, land, locks, soil, water, waterLevel);   // exact values (snapshots are quantised)
             TerrainView.RebuildAll();

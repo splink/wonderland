@@ -24,10 +24,10 @@ namespace Wonderland
         public const float WanderRadius = 0.3f, Speed = 0.022f, Radius = 0.005f;
         public readonly List<PersonInstance> People = new();
         private readonly List<Agent> agents = new();
-        private readonly List<Stop> stations = new();
         private WonderlandWorld world;
         private Material material;
-        private float clock, stationsAt = -1f;
+        private float clock;
+        private List<StationStop> stations => world.Trains.Stations;
 
         public enum Activity { Idle, Walking, Chatting, Waiting, Riding, Waving }
 
@@ -39,10 +39,9 @@ namespace Wonderland
             public float Heading, Timer, Phase, Height, Cooldown, Ride, WaveHeading, ResumeTimer;
             public Activity State, Resume;
             public bool ToStation, Cheering;
+            public Train Riding;
             public Rng Rng;
         }
-
-        private struct Stop { public float S; public int Side; }
 
         public void Init(WonderlandWorld owner, Material lit) { world = owner; material = lit; }
 
@@ -181,51 +180,32 @@ namespace Wonderland
             return false;
         }
 
-        private void RefreshStations()
-        {
-            if (Mathf.Abs(clock - stationsAt) < 0.5f && stationsAt >= 0f) return;
-            stationsAt = clock;
-            stations.Clear();
-            if (!world.Track.HasTrack) return;
-            var layout = world.Track.Layout;
-            foreach (var h in world.Buildings.Houses)
-            {
-                if (h.variant != HouseFactory.Station) continue;
-                var c = new Vector3(h.x, 0f, h.z);
-                float s = layout.Nearest(c, out _);
-                var p = layout.Evaluate(s, out var tangent); tangent.y = 0f; tangent.Normalize();
-                stations.Add(new Stop { S = s, Side = Vector3.Dot(Vector3.Cross(Vector3.up, tangent), c - p) >= 0f ? 1 : -1 });
-            }
-        }
-
         /// <summary>Whether a point is on a platform's paving, with the paving's height.</summary>
         public bool OnPlatform(Vector2 p, out float top)
         {
             top = 0f;
-            RefreshStations();
             if (stations.Count == 0) return false;
-            var layout = world.Track.Layout;
+            var net = world.Track.Network;
             var q = new Vector3(p.x, 0f, p.y);
-            float s = layout.Nearest(q, out float d);
+            if (!net.Nearest(q, out int edge, out float s, out float d, 0.09f)) return false;
             if (d < 0.046f || d > 0.076f) return false;   // keep back from the edge, where the coaches overhang
+            var layout = net.Edges[edge].Layout;
             var pt = layout.Evaluate(s, out var tangent); tangent.y = 0f; tangent.Normalize();
             int side = Vector3.Dot(Vector3.Cross(Vector3.up, tangent), q - pt) >= 0f ? 1 : -1;
             foreach (var st in stations)
             {
-                if (st.Side != side) continue;
-                float along = Mathf.Abs(s - st.S);
-                if (layout.Closed) along = Mathf.Min(along, layout.Length - along);
-                if (along > WonderlandWorld.PlatformLength / 2f - 0.012f) continue;
+                if (st.Edge != edge || st.Side != side) continue;
+                if (TrackNetwork.ArcGap(layout, s, st.S) > WonderlandWorld.PlatformLength / 2f - 0.012f) continue;
                 top = pt.y + 0.0135f;
                 return true;
             }
             return false;
         }
 
-        private Vector2 PlatformSpot(Stop st, float offset)
+        private Vector2 PlatformSpot(StationStop st, float offset)
         {
-            var layout = world.Track.Layout;
-            var p = layout.Evaluate(layout.Closed ? layout.Wrap(st.S + offset) : Mathf.Clamp(st.S + offset, 0f, layout.Length), out var tangent);
+            var layout = world.Track.Network.Edges[st.Edge].Layout;
+            var p = layout.Evaluate(layout.Closed ? layout.Wrap(st.S + offset) : Mathf.Clamp(st.S + offset, 0.02f, layout.Length - 0.02f), out var tangent);
             tangent.y = 0f; tangent.Normalize();
             var q = p + Vector3.Cross(Vector3.up, tangent) * st.Side * 0.052f;
             return new Vector2(q.x, q.z);
@@ -233,7 +213,7 @@ namespace Wonderland
 
         private float GroundAt(Vector2 p) => OnPlatform(p, out float top) ? top : world.Terrain.SurfaceAt(p.x, p.y);
 
-        private bool TrainRunning => world.Train.Placed && world.Train.Running;
+        private bool TrainRunning => world.Trains.AnyRunning;
 
         // ------------------------------------------------------------------ behaviour
 
@@ -274,8 +254,9 @@ namespace Wonderland
                         break;
                     case Activity.Waiting:
                         a.Heading = Mathf.MoveTowardsAngle(a.Heading, FacingTrack(a), 90f * dt);
-                        if (TrainRunning && world.Train.Dwell > 0f && world.Train.Near(new Vector3(a.Position.x, 0f, a.Position.y), 0.17f))
-                        { a.State = Activity.Riding; a.Ride = 0f; a.Root.gameObject.SetActive(false); }
+                        var here = world.Trains.Near(new Vector3(a.Position.x, 0f, a.Position.y), 0.17f);
+                        if (here != null && here.Dwell > 0f && here.Kind != TrainKind.Goods)
+                        { a.State = Activity.Riding; a.Riding = here; a.Ride = 0f; a.Root.gameObject.SetActive(false); }
                         else if (a.Timer <= 0f || !TrainRunning) { a.ToStation = false; Decide(a); }
                         break;
                     case Activity.Waving:
@@ -292,25 +273,28 @@ namespace Wonderland
         private bool TrainPassing(Agent a, out Vector2 toTrain)
         {
             toTrain = Vector2.zero;
-            if (!TrainRunning || world.Train.Speed < 0.03f) return false;
-            var loco = world.Train.LocoPosition;
-            if (world.Train.InTunnel != null && world.Train.InTunnel(world.Train.S)) return false;
-            toTrain = new Vector2(loco.x, loco.z) - a.Position;
-            return toTrain.magnitude < 0.24f;
+            float best = 0.24f; bool any = false;
+            foreach (var t in world.Trains.Trains)
+            {
+                if (!t.Running || t.Speed < 0.03f || world.Trains.InTunnel(t)) continue;
+                var loco = world.Trains.LocoPosition(t);
+                var to = new Vector2(loco.x, loco.z) - a.Position;
+                if (to.magnitude < best) { best = to.magnitude; toTrain = to; any = true; }
+            }
+            return any;
         }
 
         private float FacingTrack(Agent a)
         {
-            if (!world.Track.HasTrack) return a.Heading;
-            var layout = world.Track.Layout;
-            var p = layout.Evaluate(layout.Nearest(new Vector3(a.Position.x, 0f, a.Position.y), out _), out _);
+            var net = world.Track.Network;
+            if (!net.Nearest(new Vector3(a.Position.x, 0f, a.Position.y), out int edge, out float s, out _, 0.2f)) return a.Heading;
+            var p = net.Edges[edge].Layout.Evaluate(s, out _);
             return Mathf.Atan2(p.x - a.Position.x, p.z - a.Position.y) * Mathf.Rad2Deg;
         }
 
         /// <summary>Picks what to do next: the station, a neighbour's door, or a quiet spot near home.</summary>
         private void Decide(Agent a)
         {
-            RefreshStations();
             float roll = a.Rng.Value;
             if (TrainRunning && stations.Count > 0 && roll < 0.3f)
             {
@@ -412,16 +396,16 @@ namespace Wonderland
         private void StepRiding(Agent a, float dt)
         {
             a.Ride += dt;
-            if (!TrainRunning)
+            var train = a.Riding;
+            if (train == null || !world.Trains.Trains.Contains(train) || !train.Running)
             {
                 a.Position = a.Home; a.Height = GroundAt(a.Home);
                 Alight(a);
                 return;
             }
-            if (a.Ride < 6f || world.Train.Dwell <= 0f) return;
+            if (a.Ride < 6f || train.Dwell <= 0f) return;
             // The train has stopped at a station: get off there, and live near it from now on.
-            RefreshStations();
-            var loco = world.Train.LocoPosition;
+            var loco = world.Trains.CentrePosition(train);
             int best = -1; float bestD = float.MaxValue;
             for (int i = 0; i < stations.Count; i++)
             {
@@ -443,6 +427,7 @@ namespace Wonderland
         private void Alight(Agent a)
         {
             a.Root.gameObject.SetActive(true);
+            a.Riding = null;
             a.State = Activity.Idle; a.Timer = a.Rng.Range(1f, 2f); a.Cooldown = 6f; a.ToStation = false;
             // Find a new home a little away from the platform, on ordinary ground.
             for (int k = 0; k < 10; k++)

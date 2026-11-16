@@ -14,15 +14,40 @@ namespace Wonderland
     }
 
     /// <summary>
-    /// A storybook steam locomotive (about 8 cm tall: the scale yardstick) and two coaches for 24 mm gauge track, built from
-    /// procedural parts in the shared palette. Wheel sets are separate meshes so they can spin.
+    /// Storybook rolling stock for 24 mm gauge track, built from procedural parts in the shared palette: a steam
+    /// locomotive (about 8 cm tall: the scale yardstick), passenger coaches, four goods wagons (logs, van, tank, coal) and
+    /// a double-ended railcar. Locomotives, coaches and railcars come in six liveries so every train has its own colour.
+    /// Wheel sets are separate meshes so they can spin.
     /// </summary>
     public static class TrainFactory
     {
         public const float Gauge = 0.024f;
-        private static Mesh loco, rods;
-        private static readonly Mesh[] Coaches = new Mesh[2];
-        private static readonly System.Collections.Generic.Dictionary<int, Mesh> Axles = new();
+        public const int WagonVariants = 4;
+        private static Mesh rods;
+        private static readonly System.Collections.Generic.Dictionary<int, Mesh> Cache = new();
+
+        // Liveries: locomotive / railcar colour, its dark shade, and the two coach colours.
+        private static readonly string[,] Liveries =
+        {
+            { "#C3312A", "#8E1F1C", "#7E2A2F", "#2F6B4F" },
+            { "#2F62B0", "#1E3F78", "#2B4A7E", "#6A3A6E" },
+            { "#2F8A4E", "#1D5A32", "#2F6B4F", "#8A5A2A" },
+            { "#E2A72E", "#A0701A", "#3A5A8A", "#7E2A2F" },
+            { "#7A4AA6", "#50306E", "#50306E", "#2F6B4F" },
+            { "#3A3B44", "#22232A", "#7E2A2F", "#2B4A7E" },
+        };
+
+        public static Color LiveryColour(int livery) => Pal.Hex(Liveries[Mod(livery), 0]);
+        private static Color LiveryDark(int livery) => Pal.Hex(Liveries[Mod(livery), 1]);
+        private static Color CoachColour(int livery, int variant) => Pal.Hex(Liveries[Mod(livery), 2 + (variant & 1)]);
+        private static int Mod(int livery) => ((livery % Liveries.GetLength(0)) + Liveries.GetLength(0)) % Liveries.GetLength(0);
+
+        private static Mesh Cached(int kind, int a, int b, System.Func<Mesh> build)
+        {
+            int key = kind * 1000000 + a * 1000 + b;
+            if (!Cache.TryGetValue(key, out var mesh)) Cache[key] = mesh = build();
+            return mesh;
+        }
 
         public static readonly CarLayout Loco = new()
         {
@@ -40,16 +65,28 @@ namespace Wonderland
             WheelRadius = new[] { 0.0075f, 0.0075f, 0.0075f, 0.0075f },
         };
 
-        public static Mesh LocoMesh => loco ??= BuildLoco();
-        public static Mesh RodMesh => rods ??= BuildRods();
-        public static Mesh CoachMesh(int variant) => Coaches[variant] ??= BuildCoach(variant);
-
-        public static Mesh AxleMesh(float radius)
+        public static readonly CarLayout Wagon = new()
         {
-            int key = Mathf.RoundToInt(radius * 100000f);
-            if (!Axles.TryGetValue(key, out var mesh)) Axles[key] = mesh = BuildAxle(radius);
-            return mesh;
-        }
+            Front = 0.045f, Rear = -0.045f, PivotHalf = 0.026f,
+            Axles = new[] { new Vector3(0f, 0.0075f, -0.026f), new Vector3(0f, 0.0075f, 0.026f) },
+            WheelRadius = new[] { 0.0075f, 0.0075f },
+        };
+
+        public static readonly CarLayout Railcar = new()
+        {
+            Front = 0.074f, Rear = -0.074f, PivotHalf = 0.047f,
+            Axles = new[] { new Vector3(0f, 0.0075f, -0.058f), new Vector3(0f, 0.0075f, -0.036f), new Vector3(0f, 0.0075f, 0.036f), new Vector3(0f, 0.0075f, 0.058f) },
+            WheelRadius = new[] { 0.0075f, 0.0075f, 0.0075f, 0.0075f },
+        };
+
+        public static Mesh LocoMesh(int livery = 0) => Cached(1, Mod(livery), 0, () => BuildLoco(Mod(livery)));
+        public static Mesh RodMesh => rods ??= BuildRods();
+        public static Mesh CoachMesh(int variant, int livery = 0) => Cached(2, Mod(livery), variant & 1, () => BuildCoach(variant & 1, Mod(livery)));
+        public static Mesh WagonMesh(int variant) => Cached(3, variant % WagonVariants, 0, () => BuildWagon(variant % WagonVariants));
+        public static Mesh RailcarMesh(int livery = 0) => Cached(4, Mod(livery), 0, () => BuildRailcar(Mod(livery)));
+
+        public static Mesh AxleMesh(float radius, int livery = 0) =>
+            Cached(5, Mathf.RoundToInt(radius * 10000f), Mod(livery), () => BuildAxle(radius, LiveryColour(livery)));
 
         private static readonly Quaternion AlongZ = Quaternion.Euler(90f, 0f, 0f);
         private static readonly Quaternion AlongX = Quaternion.Euler(0f, 0f, -90f);
@@ -61,10 +98,10 @@ namespace Wonderland
             b.Pop();
         }
 
-        private static Mesh BuildLoco()
+        private static Mesh BuildLoco(int livery)
         {
             var b = new MeshBuilder();
-            var red = Pal.TrainRed; var redDark = Pal.TrainRedDark; var black = Pal.TrainBlack; var brass = Pal.Brass;
+            var red = LiveryColour(livery); var redDark = LiveryDark(livery); var black = Pal.TrainBlack; var brass = Pal.Brass;
 
             // Frame, valance and running boards.
             b.AddBox(new Vector3(0f, 0.012f, 0.004f), new Vector3(0.017f, 0.008f, 0.12f), black);
@@ -159,13 +196,13 @@ namespace Wonderland
             b.AddBox(Vector3.zero, new Vector3(0.036f, 0.002f, 0.015f), Pal.Shade(red, 0.9f), red, redDark, false);
             for (int i = -2; i <= 2; i++) b.AddBox(new Vector3(i * 0.0065f, 0.0014f, 0f), new Vector3(0.0012f, 0.0012f, 0.015f), black);
             b.Pop();
-            return b.ToMesh("Locomotive");
+            return b.ToMesh("Locomotive" + livery);
         }
 
-        private static Mesh BuildCoach(int variant)
+        private static Mesh BuildCoach(int variant, int livery)
         {
             var b = new MeshBuilder();
-            var lower = variant == 0 ? Pal.CoachMaroon : Pal.Hex("#2F6B4F");
+            var lower = CoachColour(livery, variant);
             var upper = Pal.CoachCream; var roof = Pal.CoachRoof; var black = Pal.TrainBlack; var brass = Pal.Brass;
             const float L = 0.118f, W = 0.044f, y0 = 0.018f, yMid = 0.037f, y1 = 0.06f;
 
@@ -230,13 +267,12 @@ namespace Wonderland
                 CylinderZ(b, new Vector3(s * 0.016f, 0.0155f, e > 0 ? L / 2f : -L / 2f - 0.003f), 0.0014f, 0.0014f, 0.003f, 8, black, black);
                 CylinderZ(b, new Vector3(s * 0.016f, 0.0155f, e > 0 ? L / 2f + 0.003f : -L / 2f - 0.0038f), 0.0026f, 0.0026f, 0.0008f, 10, brass, brass);
             }
-            return b.ToMesh("Coach" + variant);
+            return b.ToMesh("Coach" + variant + "-" + livery);
         }
 
-        private static Mesh BuildAxle(float r)
+        private static Mesh BuildAxle(float r, Color red)
         {
-            var b = new MeshBuilder();
-            var red = Pal.TrainRed; var black = Pal.TrainBlack; var brass = Pal.Brass;
+            var b = new MeshBuilder(); var black = Pal.TrainBlack; var brass = Pal.Brass;
             const float t = 0.0032f, rail = Gauge / 2f;
             b.Push(new Vector3(-rail, 0f, 0f), AlongX);
             b.AddCylinder(Vector3.zero, 0.0011f, 0.0011f, Gauge, 6, black, black, false);
@@ -271,6 +307,164 @@ namespace Wonderland
                 if (r > 0.009f) b.AddBox(new Vector3(face + s * 0.0008f, r * 0.45f, 0f), new Vector3(0.0012f, 0.0016f, 0.0016f), brass);
             }
             return b.ToMesh("Axle" + r.ToString("0.0000"));
+        }
+
+        /// <summary>Goods wagons: 0 open wagon with logs, 1 covered van, 2 tank wagon, 3 open wagon with coal.</summary>
+        private static Mesh BuildWagon(int variant)
+        {
+            var b = new MeshBuilder();
+            var black = Pal.TrainBlack; var brass = Pal.Brass;
+            const float L = 0.084f, W = 0.042f;
+            // Underframe, buffers, axle boxes.
+            b.AddBox(new Vector3(0f, 0.0135f, 0f), new Vector3(0.034f, 0.005f, L), black);
+            foreach (int e in new[] { -1, 1 })
+            {
+                b.AddBox(new Vector3(0f, 0.0155f, e * (L / 2f + 0.001f)), new Vector3(0.044f, 0.007f, 0.002f), Pal.Hex("#5A3826"));
+                foreach (int s in new[] { -1, 1 })
+                {
+                    CylinderZ(b, new Vector3(s * 0.015f, 0.0155f, e > 0 ? L / 2f + 0.002f : -L / 2f - 0.005f), 0.0013f, 0.0013f, 0.003f, 8, black, black);
+                    CylinderZ(b, new Vector3(s * 0.015f, 0.0155f, e > 0 ? L / 2f + 0.005f : -L / 2f - 0.0058f), 0.0024f, 0.0024f, 0.0008f, 10, brass, brass);
+                    b.AddBox(new Vector3(s * 0.0172f, 0.0085f, e * 0.026f), new Vector3(0.0022f, 0.006f, 0.008f), Pal.Shade(black, 1.5f));
+                }
+            }
+            switch (variant)
+            {
+                case 0:
+                case 3:
+                {
+                    // Open wagon: plank sides with iron strapping.
+                    var plank = variant == 0 ? Pal.Hex("#9A6A42") : Pal.Hex("#6E7378");
+                    b.AddBox(new Vector3(0f, 0.0175f, 0f), new Vector3(W, 0.003f, L), Pal.Shade(plank, 0.8f));
+                    foreach (int s in new[] { -1, 1 })
+                    {
+                        b.AddBox(new Vector3(s * (W / 2f - 0.0012f), 0.0255f, 0f), new Vector3(0.0024f, 0.014f, L), plank, Pal.Shade(plank, 1.15f), plank);
+                        b.AddBox(new Vector3(0f, 0.0255f, s * (L / 2f - 0.0012f)), new Vector3(W, 0.014f, 0.0024f), plank, Pal.Shade(plank, 1.15f), plank);
+                        for (int k = -2; k <= 2; k++)
+                            b.AddBox(new Vector3(s * (W / 2f + 0.0001f), 0.0255f, k * 0.018f), new Vector3(0.0006f, 0.014f, 0.0016f), black);
+                        for (int r = 0; r < 3; r++)
+                            b.AddBox(new Vector3(s * (W / 2f + 0.0002f), 0.0205f + r * 0.0048f, 0f), new Vector3(0.0003f, 0.0004f, L), Pal.Shade(plank, 0.7f));
+                    }
+                    if (variant == 0)
+                    {
+                        // A load of logs, chained down.
+                        var rng = new Rng(17);
+                        for (int row = 0; row < 2; row++)
+                        for (int k = 0; k < 4 - row; k++)
+                        {
+                            float x = (k - (3 - row) / 2f) * 0.0092f, y = 0.0235f + row * 0.0082f;
+                            float r = 0.0046f * rng.Range(0.85f, 1.1f);
+                            CylinderZ(b, new Vector3(x, y, -L / 2f + 0.003f), r, r, L - 0.006f, 8, Pal.Bark, Pal.Shade(Pal.Bark, 1.15f));
+                            b.Push(new Vector3(x, y, L / 2f - 0.0028f), Quaternion.Euler(90f, 0f, 0f));
+                            b.AddDisc(Vector3.zero, r * 0.92f, 8, Pal.Hex("#D9B27A"), true);
+                            b.Pop();
+                            b.Push(new Vector3(x, y, -L / 2f + 0.0028f), Quaternion.Euler(-90f, 0f, 0f));
+                            b.AddDisc(Vector3.zero, r * 0.92f, 8, Pal.Hex("#D9B27A"), true);
+                            b.Pop();
+                        }
+                        foreach (float z in new[] { -0.022f, 0.022f })
+                            b.AddBox(new Vector3(0f, 0.0365f, z), new Vector3(W * 0.82f, 0.0007f, 0.0012f), Pal.Hex("#B9BCC2"));
+                    }
+                    else
+                        b.AddBlob(new Vector3(0f, 0.029f, 0f), new Vector3(W * 0.45f, 0.006f, L * 0.46f), 2, 0.35f, 9, (d, _) => Pal.Hex("#1E1E22"), 9f);
+                    break;
+                }
+                case 1:
+                {
+                    // Covered van: planked body, sliding door, arched white roof.
+                    var body = Pal.Hex("#8A3A2A");
+                    b.AddBox(new Vector3(0f, 0.034f, 0f), new Vector3(W, 0.036f, L), body, body, black);
+                    foreach (int s in new[] { -1, 1 })
+                    {
+                        for (int k = -3; k <= 3; k++)
+                            b.AddBox(new Vector3(s * (W / 2f + 0.0002f), 0.034f, k * 0.0115f), new Vector3(0.0004f, 0.034f, 0.0006f), Pal.Shade(body, 0.75f));
+                        b.AddBox(new Vector3(s * (W / 2f + 0.0006f), 0.033f, 0f), new Vector3(0.0008f, 0.028f, 0.022f), Pal.Shade(body, 1.12f));
+                        b.AddBox(new Vector3(s * (W / 2f + 0.0011f), 0.033f, 0f), new Vector3(0.0006f, 0.0006f, 0.024f), black);
+                        b.AddBox(new Vector3(s * (W / 2f + 0.0011f), 0.033f, 0f), new Vector3(0.0006f, 0.026f, 0.0006f), black);
+                    }
+                    var path = new[] { new Vector3(0f, 0.052f, -L / 2f - 0.002f), new Vector3(0f, 0.052f, L / 2f + 0.002f) };
+                    const int arc = 8;
+                    var profile = new Vector2[arc + 1]; var colours = new Color[arc + 1];
+                    for (int i = 0; i <= arc; i++)
+                    {
+                        float a = Mathf.PI * (1f - i / (float)arc);
+                        profile[i] = new Vector2(Mathf.Cos(a) * (W / 2f + 0.002f), Mathf.Sin(a) * 0.007f);
+                        colours[i] = Color.Lerp(Pal.Hex("#C9C6BE"), Pal.Hex("#F2EEE4"), Mathf.Sin(a));
+                    }
+                    b.AddExtrusion(path, new[] { Vector3.right, Vector3.right }, new[] { Vector3.up, Vector3.up }, profile, colours, false);
+                    foreach (int e in new[] { -1, 1 })
+                    {
+                        var centre = new Vector3(0f, 0.052f, e * (L / 2f + 0.002f));
+                        for (int i = 0; i < arc; i++)
+                            b.AddTriangleOutward(centre, centre + (Vector3)profile[i], centre + (Vector3)profile[i + 1], new Vector3(0f, 0.052f, 0f), Pal.Hex("#E0DCD2"));
+                    }
+                    break;
+                }
+                default:
+                {
+                    // Tank wagon: a cream barrel with a red band, a dome and ladders.
+                    var tank = Pal.Hex("#EDE3C8");
+                    b.AddBox(new Vector3(0f, 0.0185f, 0f), new Vector3(0.03f, 0.004f, L * 0.9f), black);
+                    CylinderZ(b, new Vector3(0f, 0.0335f, -L / 2f + 0.004f), 0.0145f, 0.0145f, L - 0.008f, 18, tank, tank);
+                    CylinderZ(b, new Vector3(0f, 0.0335f, -0.006f), 0.0149f, 0.0149f, 0.012f, 18, Pal.TrainRed, Pal.TrainRed, false);
+                    foreach (int e in new[] { -1, 1 })
+                        b.AddBlob(new Vector3(0f, 0.0335f, e * (L / 2f - 0.004f)), new Vector3(0.0145f, 0.0145f, 0.004f), 2, 0f, 30 + e, (d, _) => Pal.Shade(tank, 0.92f));
+                    b.AddCylinder(new Vector3(0f, 0.046f, 0.018f), 0.0055f, 0.005f, 0.005f, 12, tank, Pal.Shade(tank, 1.05f), true);
+                    foreach (float z in new[] { -0.028f, 0.028f })
+                        b.AddBox(new Vector3(0f, 0.0335f, z), new Vector3(0.0305f, 0.0015f, 0.0012f), black);
+                    break;
+                }
+            }
+            return b.ToMesh("Wagon" + variant);
+        }
+
+        /// <summary>A rounded little railcar with a driving cab at each end, so it simply reverses at the buffers.</summary>
+        private static Mesh BuildRailcar(int livery)
+        {
+            var b = new MeshBuilder();
+            var lower = LiveryColour(livery); var upper = Pal.CoachCream; var roof = Pal.CoachRoof; var black = Pal.TrainBlack; var brass = Pal.Brass;
+            const float L = 0.13f, W = 0.044f, y0 = 0.018f, yMid = 0.035f, y1 = 0.058f;
+            b.AddBox(new Vector3(0f, 0.014f, 0f), new Vector3(0.03f, 0.006f, L - 0.02f), black);
+            b.AddBox(new Vector3(0f, (y0 + yMid) / 2f, 0f), new Vector3(W, yMid - y0, L), lower, lower, black, false);
+            b.AddBox(new Vector3(0f, (yMid + y1) / 2f, 0f), new Vector3(W - 0.001f, y1 - yMid, L - 0.001f), upper, upper, upper);
+            b.AddBox(new Vector3(0f, yMid, 0f), new Vector3(W + 0.0008f, 0.0011f, L + 0.0008f), brass);
+            // Side windows.
+            for (int i = 0; i < 6; i++)
+            {
+                float z = -L / 2f + 0.022f + i * (L - 0.044f) / 5f;
+                foreach (int s in new[] { -1, 1 })
+                    b.AddFace(new Vector3(s * (W / 2f + 0.0002f), 0.047f, z), new Vector3(s, 0f, 0f), Vector3.up, 0.0062f, 0.0065f, Pal.Glow(Pal.WindowGlow));
+            }
+            // Rounded cab ends: a sloped nose, wide front windows, a headlamp and a whistle.
+            foreach (int e in new[] { -1, 1 })
+            {
+                var end = new Vector3(0f, 0f, e * L / 2f);
+                b.AddBlob(end + new Vector3(0f, 0.027f, 0f), new Vector3(W / 2f, 0.0095f, 0.012f), 2, 0f, 40 + e, (d, _) => lower);
+                b.AddBlob(end + new Vector3(0f, 0.046f, -e * 0.002f), new Vector3(W / 2f - 0.0006f, 0.012f, 0.009f), 2, 0f, 42 + e, (d, _) => upper);
+                b.AddFace(end + new Vector3(0f, 0.048f, e * 0.0068f), new Vector3(0f, 0.25f, e).normalized, Vector3.up, 0.015f, 0.0055f, Pal.Glow(Pal.Hex("#CFE6F2")));
+                b.AddFace(end + new Vector3(0f, 0.024f, e * 0.0122f), new Vector3(0f, 0f, e), Vector3.up, 0.0035f, 0.0028f, Pal.Glow(Pal.Hex("#FFF2C8")));
+                foreach (int s in new[] { -1, 1 })
+                {
+                    CylinderZ(b, new Vector3(s * 0.016f, 0.0155f, e > 0 ? L / 2f + 0.006f : -L / 2f - 0.009f), 0.0013f, 0.0013f, 0.003f, 8, black, black);
+                    CylinderZ(b, new Vector3(s * 0.016f, 0.0155f, e > 0 ? L / 2f + 0.009f : -L / 2f - 0.0098f), 0.0024f, 0.0024f, 0.0008f, 10, brass, brass);
+                }
+            }
+            // Roof with a radiator housing and exhaust.
+            var path = new[] { new Vector3(0f, y1, -L / 2f), new Vector3(0f, y1, L / 2f) };
+            const int arc = 9;
+            var profile = new Vector2[arc + 1]; var colours = new Color[arc + 1];
+            for (int i = 0; i <= arc; i++)
+            {
+                float a = Mathf.PI * (1f - i / (float)arc);
+                profile[i] = new Vector2(Mathf.Cos(a) * (W / 2f + 0.002f), Mathf.Sin(a) * 0.008f);
+                colours[i] = Color.Lerp(Pal.Shade(roof, 0.8f), Pal.Shade(roof, 1.15f), Mathf.Sin(a));
+            }
+            b.AddExtrusion(path, new[] { Vector3.right, Vector3.right }, new[] { Vector3.up, Vector3.up }, profile, colours, false);
+            b.AddBox(new Vector3(0f, y1 + 0.009f, 0f), new Vector3(0.022f, 0.004f, 0.03f), Pal.Shade(roof, 0.75f));
+            b.AddCylinder(new Vector3(0.006f, y1 + 0.011f, 0.009f), 0.0016f, 0.0014f, 0.006f, 8, black, black, true);
+            // Bogies.
+            foreach (float z in new[] { -0.047f, 0.047f })
+                b.AddBox(new Vector3(0f, 0.0085f, z), new Vector3(0.033f, 0.006f, 0.032f), black);
+            return b.ToMesh("Railcar" + livery);
         }
 
         private static Mesh BuildRods()

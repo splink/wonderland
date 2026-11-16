@@ -81,6 +81,19 @@ namespace Wonderland.Editor
             Capture(cam, "editor-train-front.png", 1600, 900);
             Object.DestroyImmediate(root.gameObject);
 
+            // Rolling stock: locomotives in their liveries, coaches, the four goods wagons and railcars.
+            root = new GameObject("Gallery").transform;
+            for (int liv = 0; liv < TrainSystem.LiveryCount; liv++)
+            {
+                Stock(root, TrainFactory.LocoMesh(liv), TrainFactory.Loco, lit, new Vector3((liv - 2.5f) * 0.105f, 0f, 0.3f), liv);
+                Stock(root, TrainFactory.CoachMesh(liv % 2, liv), TrainFactory.Coach, lit, new Vector3((liv - 2.5f) * 0.105f, 0f, 0.1f), liv);
+            }
+            for (int v = 0; v < TrainFactory.WagonVariants; v++) Stock(root, TrainFactory.WagonMesh(v), TrainFactory.Wagon, lit, new Vector3((v - 1.5f) * 0.105f, 0f, -0.08f), 0);
+            for (int liv = 0; liv < 3; liv++) Stock(root, TrainFactory.RailcarMesh(liv * 2 + 1), TrainFactory.Railcar, lit, new Vector3((liv - 1f) * 0.12f, 0f, -0.28f), liv * 2 + 1);
+            cam = CreateCamera(new Vector3(0.0f, 0.62f, -0.82f), new Vector3(0f, 0.02f, 0.0f), 40f);
+            Capture(cam, "editor-rolling-stock.png", 1800, 1350);
+            Object.DestroyImmediate(root.gameObject);
+
             // Villagers: the six outfits standing, walking and waving, with a sheep and a cow for scale.
             root = new GameObject("Gallery").transform;
             for (int st = 0; st < PersonFactory.StyleCount; st++)
@@ -102,6 +115,14 @@ namespace Wonderland.Editor
             Debug.Log("Wonderland: gallery rendered to " + Path.GetFullPath(Output));
         }
 
+        private static void Stock(Transform parent, Mesh body, CarLayout layout, Material lit, Vector3 at, int livery)
+        {
+            var car = Place(parent, body, lit, at, Quaternion.Euler(0f, 205f, 0f));
+            for (int i = 0; i < layout.Axles.Length; i++)
+                Place(car, TrainFactory.AxleMesh(layout.WheelRadius[i], livery), lit, layout.Axles[i], Quaternion.Euler(i * 37f, 0f, 0f));
+            if (layout == TrainFactory.Loco) Place(car, TrainFactory.RodMesh, lit, new Vector3(0f, layout.Axles[0].y + layout.WheelRadius[0] * 0.45f, 0f), Quaternion.identity);
+        }
+
         /// <summary>Loco and two coaches in a straight line along +Z (gallery only; the runtime uses TrainSystem).</summary>
         private static Transform TrainVisualFactory(Transform parent, Material lit)
         {
@@ -115,7 +136,7 @@ namespace Wonderland.Editor
                     Place(car, TrainFactory.AxleMesh(layout.WheelRadius[i]), lit, layout.Axles[i], Quaternion.Euler(i * 37f, 0f, 0f));
                 if (rods) Place(car, TrainFactory.RodMesh, lit, new Vector3(0f, layout.Axles[0].y + layout.WheelRadius[0] * 0.45f, 0f), Quaternion.identity);
             }
-            Car(TrainFactory.LocoMesh, TrainFactory.Loco, z, true);
+            Car(TrainFactory.LocoMesh(), TrainFactory.Loco, z, true);
             z += TrainFactory.Loco.Rear - 0.006f + TrainFactory.Coach.Rear;
             Car(TrainFactory.CoachMesh(0), TrainFactory.Coach, z, false);
             z += TrainFactory.Coach.Rear * 2f - 0.006f;

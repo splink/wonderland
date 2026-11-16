@@ -102,17 +102,38 @@ namespace Wonderland.Editor
                 Frame(hand, p, true);
             }
             Frame(hand, world.transform.TransformPoint(loop[^1]), false);
-            Check(world.Track.HasTrack && world.Track.Layout.Closed, "Drawing a loop with the trigger lays a closed railway" + (world.Track.HasTrack ? $" ({world.Track.Layout.Length:0.00} m)" : ""));
+            var net = world.Track.Network;
+            Check(world.Track.HasTrack && net.Edges.Count == 1 && net.Edges[0].Closed, "Drawing a loop with the trigger lays a closed railway" + (world.Track.HasTrack ? $" ({net.TotalLength:0.00} m)" : ""));
+            // Branch: draw from the loop outwards; a switch appears. A tap on the switch throws (and pins) it.
+            var branch = new List<Vector3>();
+            var from = net.Edges[0].Layout.Points[net.Edges[0].Layout.Points.Count / 8];
+            var outward = new Vector3(from.x + 0.05f, 0f, from.z + 0.02f); outward = new Vector3(outward.x, 0f, outward.z).normalized;
+            for (int i = 0; i <= 40; i++) { var q = from + outward * (i * 0.012f); branch.Add(world.Terrain.PointAt(q.x, q.z)); }
+            foreach (var q in branch) Frame(hand, world.transform.TransformPoint(q), true);
+            Frame(hand, world.transform.TransformPoint(branch[^1]), false);
+            net = world.Track.Network;
+            Check(net.Joints.Count == 1, $"Drawing from the track outwards branches off with a switch ({net.Joints.Count} switch, {net.Edges.Count} pieces; \"{tools.LastMessage}\")");
+            if (net.Joints.Count == 1)
+            {
+                int setting = net.Joints[0].Setting;
+                var sw = world.transform.TransformPoint(net.Joints[0].Position);
+                Frame(hand, sw, true); Frame(hand, sw, false);
+                Check(net.Joints[0].Setting != setting && net.Joints[0].Pinned, "Tapping the switch throws it (and pins it)");
+            }
 
-            // Train: click the tile, trigger on the track, Start option.
+            // Trains: click the tile, trigger on the track places a running train; Stop all / Start all.
             ClickButton(hand, "Train");
-            var onTrack = world.transform.TransformPoint(world.Track.Layout.Points[world.Track.Layout.Points.Count / 4]);
+            var mainEdge = 0; float longest = 0f;
+            for (int e = 0; e < net.Edges.Count; e++) if (net.Edges[e].Layout.Length > longest) { longest = net.Edges[e].Layout.Length; mainEdge = e; }
+            var onTrack = world.transform.TransformPoint(net.Edges[mainEdge].Layout.Points[net.Edges[mainEdge].Layout.Points.Count / 2]);
             Frame(hand, onTrack, true); Frame(hand, onTrack, false);
-            Check(world.Train.Placed, "Trigger on the railway places the train");
-            ClickButton(hand, "Start");
-            Check(world.Train.Running, "Start option sets the train running");
-            for (int i = 0; i < 72 * 3; i++) world.Train.Step(Dt);
-            Check(world.Train.Odometer > 0.2f, $"Train moves ({world.Train.Odometer:0.00} m)");
+            Check(world.Trains.Trains.Count == 1 && world.Trains.Trains[0].Running, "Trigger on the railway puts a running train on it");
+            for (int i = 0; i < 72 * 3; i++) world.Trains.Step(Dt);
+            Check(world.Trains.Any && world.Trains.Trains[0].Odometer > 0.2f, $"Train moves ({(world.Trains.Any ? world.Trains.Trains[0].Odometer : 0f):0.00} m)");
+            ClickButton(hand, "Stop all");
+            Check(!world.Trains.AnyRunning, "Stop all stops the trains");
+            ClickButton(hand, "Start all");
+            Check(world.Trains.AnyRunning, "Start all sets them running again");
 
             // Houses: tile, aim inside the loop, trigger; stick rotates.
             ClickButton(hand, "Houses");

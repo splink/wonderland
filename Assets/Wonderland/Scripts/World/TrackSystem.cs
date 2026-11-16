@@ -4,67 +4,297 @@ using UnityEngine.Rendering;
 
 namespace Wonderland
 {
+    /// <summary>A stop signal placed by hand beside the track: trains wait at it while it shows red.</summary>
+    [System.Serializable]
+    public struct SignalInstance
+    {
+        public float x, z;   // where it stands (beside the track)
+        public bool red;
+    }
+
     /// <summary>
-    /// The single railway: generates ballast, sleepers and rails along a <see cref="TrackLayout"/>, grades and locks the
-    /// terrain corridor under it, and draws the stroke preview while the player is drawing.
-    /// Terrain rule: laying a track grades the ground to the track's smooth profile (embankments / cuttings) and locks the
-    /// corridor; terrain brushes skip locked ground, so later sculpting can never bury or float the track. Erasing the
-    /// track unlocks the ground (the graded bed remains as a gentle path).
+    /// The railway network: generates ballast, sleepers and rails for every piece of a <see cref="TrackNetwork"/>, the
+    /// switch stands (with arrows showing which way each switch is set), automatic signals at every switch, stop signals,
+    /// bridges and tunnels; grades and locks the terrain corridor under the track, and draws the stroke preview.
+    /// Terrain rule: laying track grades the ground to the track's smooth profile (embankments / cuttings) and locks the
+    /// corridor; terrain brushes skip locked ground, so later sculpting can never bury or float the track.
     /// </summary>
     public sealed class TrackSystem : MonoBehaviour
     {
         public const float RailTop = 0.0063f;    // rail top above the ballast bed
         public const float BedHalfWidth = 0.042f;
         public const float CorridorHalfWidth = 0.12f;
+        public const float BedSink = 0.0015f;    // the graded ground sits this far below the ballast top
+        public const float SignalSetback = TrackNetwork.FoulDistance + 0.03f;
 
-        public TrackLayout Layout { get; private set; }
-        private MeshFilter trackFilter;
-        private MeshFilter previewFilter;
-        private Mesh trackMesh, previewMesh;
-        private Material previewMaterial;
+        public TrackNetwork Network { get; private set; } = new();
+        public readonly List<SignalInstance> Signals = new();
+        /// <summary>Hand-placed signals snapped to the track: piece, arc length (-1 when not beside any track).</summary>
+        public readonly List<(int edge, float s)> SignalSpots = new();
+        private readonly List<(GameObject go, Mesh mesh)> pieces = new();
+        private Mesh fixturesMesh, lampsMesh, previewMesh;
+        private Material lit, previewMaterial;
+        private bool[] lampState = new bool[0];
 
-        public void Init(Material lit, Material ui)
+        public void Init(Material litMaterial, Material ui)
         {
-            var track = new GameObject("Railway");
-            track.transform.SetParent(transform, false);
-            trackFilter = track.AddComponent<MeshFilter>();
-            var r = track.AddComponent<MeshRenderer>();
-            r.sharedMaterial = lit; r.shadowCastingMode = ShadowCastingMode.On;
-            trackMesh = new Mesh { name = "Railway", indexFormat = IndexFormat.UInt32 };
-            trackFilter.sharedMesh = trackMesh;
-
-            var preview = new GameObject("Track preview");
-            preview.transform.SetParent(transform, false);
-            previewFilter = preview.AddComponent<MeshFilter>();
-            var pr = preview.AddComponent<MeshRenderer>();
+            lit = litMaterial;
+            fixturesMesh = Renderer("Switches and signals", lit, ShadowCastingMode.On);
+            lampsMesh = Renderer("Signal lamps", lit, ShadowCastingMode.Off);
+            lampsMesh.MarkDynamic();
             previewMaterial = new Material(ui) { renderQueue = 3005 };
-            pr.sharedMaterial = previewMaterial; pr.shadowCastingMode = ShadowCastingMode.Off;
-            previewMesh = new Mesh { name = "Track preview" };
+            previewMesh = Renderer("Track preview", previewMaterial, ShadowCastingMode.Off);
             previewMesh.MarkDynamic();
-            previewFilter.sharedMesh = previewMesh;
         }
 
-        public bool HasTrack => Layout != null;
+        private Mesh Renderer(string name, Material material, ShadowCastingMode shadows)
+        {
+            var go = new GameObject(name);
+            go.transform.SetParent(transform, false);
+            var mesh = new Mesh { name = name, indexFormat = IndexFormat.UInt32 };
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            var r = go.AddComponent<MeshRenderer>();
+            r.sharedMaterial = material; r.shadowCastingMode = shadows;
+            return mesh;
+        }
 
-        /// <summary>Per track point: inside a tunnel (the hill is kept above it).</summary>
-        public bool[] Tunnel { get; private set; }
+        public bool HasTrack => !Network.Empty;
+
         public const float TunnelHeight = 0.1f;   // ground this far above the bed clears the tube's roof and hides the 8 cm train
 
-        public void SetLayout(TrackLayout layout, System.Func<Vector2, float> waterLevel = null, TerrainField terrain = null, bool[] tunnel = null)
+        /// <summary>Takes a network (already profiled) and rebuilds everything: tunnels, pieces, switches, signals.</summary>
+        public void SetNetwork(TrackNetwork network, System.Func<Vector2, float> waterLevel = null, TerrainField terrain = null)
         {
-            Layout = layout;
-            Tunnel = tunnel;
-            trackMesh.Clear();
-            if (layout == null) return;
-            var b = new MeshBuilder();
-            BuildTrack(b, layout);
-            if (waterLevel != null && terrain != null) BuildBridges(b, layout, waterLevel, terrain);
-            if (tunnel != null) BuildTunnels(b, layout, tunnel);
-            b.ToMesh("Railway", trackMesh);
-            trackMesh.RecalculateBounds();
+            Network = network ?? new TrackNetwork();
+            Network.Reindex();
+            if (terrain != null) foreach (var e in Network.Edges) e.Tunnel = TunnelMask(terrain, e.Layout);
+            while (pieces.Count > Network.Edges.Count) { var p = pieces[^1]; Release(p.go); Release(p.mesh); pieces.RemoveAt(pieces.Count - 1); }
+            for (int i = 0; i < Network.Edges.Count; i++) RebuildPiece(i, waterLevel, terrain);
+            SnapSignals();
+            RebuildFixtures();
         }
 
-        public static void BuildTrack(MeshBuilder b, TrackLayout layout)
+        private static void Release(Object o) { if (Application.isPlaying) Destroy(o); else DestroyImmediate(o); }
+
+        /// <summary>Rebuilds one piece's mesh (after its profile changed).</summary>
+        public void RebuildPiece(int i, System.Func<Vector2, float> waterLevel, TerrainField terrain)
+        {
+            while (pieces.Count <= i)
+            {
+                var go = new GameObject("Track piece");
+                go.transform.SetParent(transform, false);
+                var mesh = new Mesh { name = "Track piece", indexFormat = IndexFormat.UInt32 };
+                go.AddComponent<MeshFilter>().sharedMesh = mesh;
+                var r = go.AddComponent<MeshRenderer>();
+                r.sharedMaterial = lit; r.shadowCastingMode = ShadowCastingMode.On;
+                pieces.Add((go, mesh));
+            }
+            var e = Network.Edges[i];
+            var b = new MeshBuilder();
+            BuildTrack(b, e.Layout, e.Joint[0] < 0, e.Joint[1] < 0);
+            if (waterLevel != null && terrain != null) BuildBridges(b, e.Layout, waterLevel, terrain);
+            if (e.Tunnel != null) BuildTunnels(b, e.Layout, e.Tunnel);
+            b.ToMesh("Track piece", pieces[i].mesh);
+            pieces[i].mesh.RecalculateBounds();
+        }
+
+        /// <summary>Whether a piece's point is inside a tunnel (no steam underground).</summary>
+        public bool InTunnel(int edge, float s)
+        {
+            if (edge < 0 || edge >= Network.Edges.Count) return false;
+            var e = Network.Edges[edge];
+            if (e.Tunnel == null) return false;
+            return e.Tunnel[TrackPlanner.IndexAt(e.Layout, e.Layout.Wrap(s))];
+        }
+
+        // ------------------------------------------------------------------ switches and signals
+
+        /// <summary>Where the automatic signal guarding a switch end stands: on the right of an approaching train.</summary>
+        public Vector3 JointSignalPosition(EdgeEnd end, out Vector3 facing)
+        {
+            var l = Network.Edges[end.Edge].Layout;
+            float s = end.End == 0 ? Mathf.Min(SignalSetback, l.Length * 0.45f) : Mathf.Max(l.Length - SignalSetback, l.Length * 0.55f);
+            var p = l.Evaluate(s, out var t); t.y = 0f; t.Normalize();
+            var travel = end.End == 0 ? -t : t;   // towards the switch
+            facing = -travel;
+            return p + Vector3.Cross(Vector3.up, travel) * 0.05f;
+        }
+
+        public void SnapSignals()
+        {
+            SignalSpots.Clear();
+            foreach (var sig in Signals)
+            {
+                bool on = Network.Nearest(new Vector3(sig.x, 0f, sig.z), out int edge, out float s, out _, 0.1f);
+                SignalSpots.Add(on ? (edge, s) : (-1, 0f));
+            }
+        }
+
+        /// <summary>Signals, switch stands and the route arrows; rebuilt when the network or a switch setting changes.</summary>
+        public void RebuildFixtures()
+        {
+            var b = new MeshBuilder();
+            var post = Pal.TrainBlack; var white = Pal.Hex("#F2EEE4");
+            var net = Network;
+            for (int ji = 0; ji < net.Joints.Count; ji++)
+            {
+                var j = net.Joints[ji];
+                if (j.Ends.Count != 3) continue;
+                // Route arrows between the rails: two chevrons into the branch the switch is set to, a red bar across the other.
+                var arrow = j.Pinned ? Pal.Glow(Pal.Hex("#FF9A3C")) : Pal.Glow(Pal.Hex("#FFF4C8"));
+                for (int k = 0; k < 2; k++)
+                {
+                    var end = j.Branch(k);
+                    var l = net.Edges[end.Edge].Layout;
+                    bool set = k == j.Setting;
+                    foreach (float d in set ? new[] { 0.05f, 0.08f } : new[] { 0.06f })
+                    {
+                        float s = end.End == 0 ? d : l.Length - d;
+                        var p = l.Evaluate(s, out var t); t.y = 0f; t.Normalize();
+                        var into = end.End == 0 ? t : -t;
+                        b.Push(p + Vector3.up * 0.0042f, Quaternion.LookRotation(into, Vector3.up));
+                        if (set)
+                            foreach (int side in new[] { -1, 1 })
+                            {
+                                b.Push(new Vector3(side * 0.0045f, 0f, 0f), Quaternion.Euler(0f, -side * 40f, 0f));
+                                b.AddBox(Vector3.zero, new Vector3(0.0022f, 0.0012f, 0.013f), arrow);
+                                b.Pop();
+                            }
+                        else b.AddBox(Vector3.zero, new Vector3(0.018f, 0.0012f, 0.0035f), Pal.Glow(Pal.Hex("#E8463C")));
+                        b.Pop();
+                    }
+                }
+                // A little lever frame beside the trunk, its lever thrown towards the set branch.
+                {
+                    var trunk = j.Trunk;
+                    var l = net.Edges[trunk.Edge].Layout;
+                    float s = trunk.End == 0 ? Mathf.Min(0.05f, l.Length * 0.3f) : Mathf.Max(l.Length - 0.05f, l.Length * 0.7f);
+                    var p = l.Evaluate(s, out var t); t.y = 0f; t.Normalize();
+                    var towards = trunk.End == 0 ? -t : t;   // towards the switch along the trunk
+                    var right = Vector3.Cross(Vector3.up, towards);
+                    var setDir = net.IntoEdge(j.Branch(j.Setting));
+                    float lean = Vector3.Dot(setDir, right) >= 0f ? 1f : -1f;
+                    b.Push(p + right * -0.052f, Quaternion.LookRotation(towards, Vector3.up));
+                    b.AddBox(new Vector3(0f, 0.004f, 0f), new Vector3(0.012f, 0.008f, 0.016f), Pal.Hex("#3E5A3A"), Pal.Hex("#4E7048"), Pal.Hex("#3E5A3A"));
+                    b.Push(new Vector3(0f, 0.008f, 0f), Quaternion.Euler(0f, 0f, -lean * 28f));
+                    b.AddBox(new Vector3(0f, 0.008f, 0f), new Vector3(0.0018f, 0.016f, 0.0018f), j.Pinned ? Pal.Hex("#FF9A3C") : white);
+                    b.AddBlob(new Vector3(0f, 0.0165f, 0f), Vector3.one * 0.0022f, 0, 0f, ji, (_, __) => Pal.TrainRed);
+                    b.Pop();
+                    b.Pop();
+                }
+                // Signal posts at each of the three ends.
+                foreach (var end in j.Ends) SignalPost(b, JointSignalPosition(end, out var facing), facing, post, false);
+            }
+            for (int i = 0; i < Signals.Count; i++)
+            {
+                var (edge, s) = i < SignalSpots.Count ? SignalSpots[i] : (-1, 0f);
+                var at = new Vector3(Signals[i].x, 0f, Signals[i].z);
+                var facing = Vector3.forward;
+                if (edge >= 0)
+                {
+                    var p = net.Edges[edge].Layout.Evaluate(s, out var t); t.y = 0f;
+                    at.y = p.y;
+                    facing = Vector3.Cross(Vector3.up, t.normalized);
+                    if (Vector3.Dot(facing, at - p) < 0f) facing = -facing;
+                }
+                SignalPost(b, at, facing, post, true);
+            }
+            b.ToMesh("Switches and signals", fixturesMesh);
+            fixturesMesh.RecalculateBounds();
+            lampState = new bool[0];
+        }
+
+        private static void SignalPost(MeshBuilder b, Vector3 at, Vector3 facing, Color post, bool stopSignal)
+        {
+            b.Push(at, Quaternion.LookRotation(facing, Vector3.up));
+            float h = stopSignal ? 0.05f : 0.038f;
+            b.AddCylinder(Vector3.zero, 0.0016f, 0.0013f, h, 6, post, post, false);
+            b.AddCylinder(Vector3.zero, 0.004f, 0.0035f, 0.002f, 8, Pal.StoneDark, Pal.Stone, true);
+            if (stopSignal)
+            {
+                // A round stop board with a white rim, the lamp in its middle.
+                b.Push(new Vector3(0f, h, 0.0012f), Quaternion.Euler(-90f, 0f, 0f));
+                b.AddCylinder(Vector3.zero, 0.0082f, 0.0082f, 0.0016f, 16, Pal.Hex("#F2EEE4"), Pal.Hex("#F2EEE4"), true, true);
+                b.AddCylinder(new Vector3(0f, 0.0016f, 0f), 0.0064f, 0.0064f, 0.0004f, 16, post, post, true);
+                b.Pop();
+            }
+            else b.AddBox(new Vector3(0f, h, 0.0008f), new Vector3(0.0068f, 0.013f, 0.0042f), post);
+            b.Pop();
+        }
+
+        /// <summary>
+        /// Lights the signal lamps: <paramref name="green"/>[k] for the k-th switch end (in joint order), then one per
+        /// hand-placed signal. Only rebuilt when something changed.
+        /// </summary>
+        public void SetLamps(bool[] green)
+        {
+            bool same = lampState.Length == green.Length;
+            for (int i = 0; same && i < green.Length; i++) same = lampState[i] == green[i];
+            if (same) return;
+            lampState = (bool[])green.Clone();
+            var b = new MeshBuilder();
+            var red = Pal.Glow(Pal.Hex("#FF3B30")); var go = Pal.Glow(Pal.Hex("#5BFF7A")); var off = Pal.Hex("#3A2E2E"); var offGreen = Pal.Hex("#2E3A30");
+            int k = 0;
+            foreach (var j in Network.Joints)
+            {
+                if (j.Ends.Count != 3) continue;
+                foreach (var end in j.Ends)
+                {
+                    bool g = k < green.Length && green[k]; k++;
+                    var at = JointSignalPosition(end, out var facing);
+                    b.Push(at, Quaternion.LookRotation(facing, Vector3.up));
+                    b.AddFace(new Vector3(0f, 0.038f + 0.0034f, 0.003f), Vector3.forward, Vector3.up, 0.0019f, 0.0019f, g ? offGreen : red);
+                    b.AddFace(new Vector3(0f, 0.038f - 0.0034f, 0.003f), Vector3.forward, Vector3.up, 0.0019f, 0.0019f, g ? go : off);
+                    b.Pop();
+                }
+            }
+            for (int i = 0; i < Signals.Count; i++)
+            {
+                bool g = k < green.Length && green[k]; k++;
+                var (edge, s) = i < SignalSpots.Count ? SignalSpots[i] : (-1, 0f);
+                var at = new Vector3(Signals[i].x, 0f, Signals[i].z);
+                var facing = Vector3.forward;
+                if (edge >= 0)
+                {
+                    var p = Network.Edges[edge].Layout.Evaluate(s, out var t); t.y = 0f; at.y = p.y;
+                    facing = Vector3.Cross(Vector3.up, t.normalized);
+                    if (Vector3.Dot(facing, at - p) < 0f) facing = -facing;
+                }
+                b.Push(at, Quaternion.LookRotation(facing, Vector3.up));
+                b.AddFace(new Vector3(0f, 0.05f, 0.0034f), Vector3.forward, Vector3.up, 0.0042f, 0.0042f, g ? go : red);
+                b.AddFace(new Vector3(0f, 0.05f, -0.0034f), Vector3.back, Vector3.up, 0.0042f, 0.0042f, g ? go : red);
+                b.Pop();
+            }
+            b.ToMesh("Signal lamps", lampsMesh);
+            lampsMesh.RecalculateBounds();
+        }
+
+        /// <summary>The switch nearest a local point within <paramref name="within"/>, or -1.</summary>
+        public int PickJoint(Vector3 p, float within)
+        {
+            int best = -1; float bestD = within * within;
+            for (int i = 0; i < Network.Joints.Count; i++)
+            {
+                var q = Network.Joints[i].Position;
+                float d = (q.x - p.x) * (q.x - p.x) + (q.z - p.z) * (q.z - p.z);
+                if (d < bestD) { bestD = d; best = i; }
+            }
+            return best;
+        }
+
+        /// <summary>The hand-placed signal nearest a local point within <paramref name="within"/>, or -1.</summary>
+        public int PickSignal(Vector3 p, float within)
+        {
+            int best = -1; float bestD = within * within;
+            for (int i = 0; i < Signals.Count; i++)
+            {
+                float d = (Signals[i].x - p.x) * (Signals[i].x - p.x) + (Signals[i].z - p.z) * (Signals[i].z - p.z);
+                if (d < bestD) { bestD = d; best = i; }
+            }
+            return best;
+        }
+
+        public static void BuildTrack(MeshBuilder b, TrackLayout layout, bool bufferStart = true, bool bufferEnd = true)
         {
             var pts = layout.Points; int n = pts.Count;
             var right = new List<Vector3>(n); var up = new List<Vector3>(n);
@@ -116,9 +346,10 @@ namespace Wonderland
             }
             if (!layout.Closed)
             {
-                // Buffer stops at both ends.
+                // Buffer stops at dead ends.
                 foreach (bool atStart in new[] { true, false })
                 {
+                    if (atStart ? !bufferStart : !bufferEnd) continue;
                     var p = atStart ? pts[0] : pts[n - 1];
                     var t = atStart ? pts[0] - pts[1] : pts[n - 1] - pts[n - 2]; t.y = 0f;
                     b.Push(p, Quaternion.LookRotation(t.normalized, Vector3.up));
@@ -407,7 +638,7 @@ namespace Wonderland
                 // bank shows inside the opening.
                 float flat = tunnel != null && tunnel[bestIndex] ? 0.056f : BedHalfWidth * 0.8f;
                 float w = dist < flat ? 1f : Mathf.SmoothStep(1f, 0f, (dist - flat) / (CorridorHalfWidth - flat));
-                float target = layout.Points[bestIndex].y - 0.0015f;
+                float target = layout.Points[bestIndex].y - BedSink;
                 terrain.Height[g] = Mathf.Lerp(terrain.Height[g], terrain.HeightForSurface(g, target), w);
                 terrain.Lock[g] = Mathf.Max(terrain.Lock[g], Mathf.Clamp01(w * 1.15f));
                 terrain.Soil[g] = Mathf.Max(terrain.Soil[g], Mathf.SmoothStep(1f, 0f, (dist - 0.03f) / 0.04f));
@@ -422,13 +653,8 @@ namespace Wonderland
             System.Array.Clear(terrain.Soil, 0, terrain.Soil.Length);
         }
 
-        /// <summary>Horizontal distance from <paramref name="p"/> to the track centre line (infinite without a track).</summary>
-        public float DistanceTo(Vector3 p)
-        {
-            if (Layout == null) return float.MaxValue;
-            Layout.Nearest(p, out float d);
-            return d;
-        }
+        /// <summary>Horizontal distance from <paramref name="p"/> to the nearest track centre line (large without track nearby).</summary>
+        public float DistanceTo(Vector3 p) => Network.DistanceTo(p);
 
         // ------------------------------------------------------------------ drawing preview
 
@@ -436,7 +662,7 @@ namespace Wonderland
         /// Ribbon along the stroke being drawn. <paramref name="closing"/> highlights the start point (release to close the
         /// loop); <paramref name="error"/> paints it red.
         /// </summary>
-        public void ShowPreview(IReadOnlyList<Vector3> points, bool closing, bool error)
+        public void ShowPreview(IReadOnlyList<Vector3> points, bool closing, bool error, Vector3? snapStart = null, Vector3? snapEnd = null)
         {
             previewMesh.Clear();
             if (points == null || points.Count < 2) return;
@@ -466,6 +692,23 @@ namespace Wonderland
                 b.AddVertex(start + d * (r - 0.004f), Vector3.up, ring);
                 b.AddVertex(start + d * (r + 0.004f), Vector3.up, ring);
                 if (i > 0) { int v = first + (i - 1) * 2; b.AddTriangle(v, v + 2, v + 3); b.AddTriangle(v, v + 3, v + 1); }
+            }
+            // Snap rings where the stroke will join existing track (a new switch, or a dead end extended).
+            foreach (var snap in new[] { snapStart, snapEnd })
+            {
+                if (!snap.HasValue) continue;
+                var c = snap.Value + Vector3.up * 0.007f;
+                float rr = 0.028f * (1f + 0.1f * Mathf.Sin(Time.time * 10f));
+                var col = new Color(0.45f, 0.9f, 1f, 0.95f);
+                int f = b.VertexCount;
+                for (int i = 0; i <= seg; i++)
+                {
+                    float a = i / (float)seg * Mathf.PI * 2f;
+                    var d = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
+                    b.AddVertex(c + d * (rr - 0.004f), Vector3.up, col);
+                    b.AddVertex(c + d * (rr + 0.004f), Vector3.up, col);
+                    if (i > 0) { int v = f + (i - 1) * 2; b.AddTriangle(v, v + 2, v + 3); b.AddTriangle(v, v + 3, v + 1); }
+                }
             }
             b.ToMesh("Track preview", previewMesh);
             previewMesh.RecalculateBounds();

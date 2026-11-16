@@ -114,10 +114,9 @@ namespace Wonderland.Editor
             Check(world.Forest.Trees.Count < trees, $"Forest eraser removes trees ({trees} -> {world.Forest.Trees.Count})");
 
             // 3. Railway: invalid strokes are rejected with feedback; a wobbly hand-drawn loop is accepted and closed.
-            var figureEight = new List<Vector3>();
-            for (int i = 0; i <= 160; i++) { float a = i / 160f * Mathf.PI * 2f; figureEight.Add(new Vector3(Mathf.Sin(a) * 0.5f, 0f, Mathf.Sin(a) * Mathf.Cos(a) * 0.5f)); }
-            var bad = world.BuildTrack(figureEight);
-            Check(!bad.Ok && bad.Error.Contains("figure 8"), $"Figure-8 track rejected (\"{bad.Error}\")");
+            var tooShort = new List<Vector3> { t.PointAt(0f, 0f), t.PointAt(0.05f, 0f), t.PointAt(0.1f, 0f) };
+            var bad = world.BuildTrack(tooShort);
+            Check(!bad.Ok && bad.Error.Contains("longer"), $"A too-short stroke is refused (\"{bad.Error}\")");
             Check(!world.Track.HasTrack, "Rejected strokes leave the world unchanged");
 
             drawnLoop = HandDrawnLoop(t, new Vector2(0.05f, -0.02f), new Vector2(0.62f, 0.44f));
@@ -125,7 +124,7 @@ namespace Wonderland.Editor
             var plan = world.BuildTrack(drawnLoop);
             Check(plan.Ok, "Hand-drawn loop accepted" + (plan.Ok ? "" : $" (\"{plan.Error}\")"));
             if (!plan.Ok) return world;
-            var layout = world.Track.Layout;
+            var layout = Main(world);
             Check(layout.Closed, $"Loop closed automatically (end drawn {Vector3.Distance(drawnLoop[0], drawnLoop[^1]) * 100f:0} cm from start)");
             var coarse = new List<Vector2>(); for (int i = 0; i < layout.Points.Count; i += 3) coarse.Add(new Vector2(layout.Points[i].x, layout.Points[i].z));
             float minR = TrackPlanner.MinRadiusOf(coarse, true);
@@ -143,6 +142,7 @@ namespace Wonderland.Editor
             TrackTolerance("Loop with an accidental kink loop closes", (t2, l) => Loop(t2, 0.5f, 0.38f, 0.97f, true));
             TrackTolerance("Loop ending 25 cm short of the start closes", (t2, l) => Loop(t2, 0.5f, 0.38f, 0.92f, false));
             TrackTolerance("Loop drawn half over bare floor closes and grows land under it", (t2, l) => Loop(t2, 1.05f, 0.6f, 0.97f, false), true);
+            NetworkJourney();
             {
                 // Tunnel: a big hill across the line keeps its top; portals at both mouths; no steam underground.
                 var w = new GameObject("Tunnel").AddComponent<WonderlandWorld>();
@@ -152,21 +152,21 @@ namespace Wonderland.Editor
                 Hold(() => w.TerrainStroke(TerrainBrush.Raise, hill, 0.3f, 1f, Dt, 0f), 6f);
                 float hillTop = w.Terrain.SurfaceAt(hill.x, hill.z);
                 var tunnelPlan = w.BuildTrack(Loop(w.Terrain, 0.5f, 0.38f, 0.97f, false));
-                var mask = w.Track.Tunnel;
+                var mask = MainTunnel(w);
                 int tunnelPoints = 0; if (mask != null) foreach (bool m in mask) if (m) tunnelPoints++;
                 bool hillKept = false;
                 if (tunnelPlan.Ok && mask != null)
                 {
-                    float sMid = tunnelPlan.Layout.Nearest(hill, out _);
-                    var bed = tunnelPlan.Layout.Evaluate(sMid, out _);
+                    float sMid = Main(w).Nearest(hill, out _);
+                    var bed = Main(w).Evaluate(sMid, out _);
                     hillKept = w.Terrain.SurfaceAt(bed.x, bed.z) > bed.y + TrackSystem.TunnelHeight;
                 }
                 Check(tunnelPlan.Ok && tunnelPoints > 8 && hillKept, $"A railway under a big hill becomes a tunnel (hill {hillTop * 100f:0} cm, {tunnelPoints} cm of tunnel, hill kept above it)");
                 if (tunnelPlan.Ok && mask != null)
                 {
-                    w.PlaceTrain(tunnelPlan.Layout.Points[0]); w.SetTrainRunning(true);
+                    PlaceTrainAt(w, Main(w).Points[0]);
                     bool steamless = false;
-                    for (int i = 0; i < 72 * 40 && !steamless; i++) { w.Train.Step(Dt); if (w.Train.InTunnel(w.Train.S)) steamless = true; }
+                    for (int i = 0; i < 72 * 40 && !steamless && w.Trains.Any; i++) { w.Trains.Step(Dt); if (w.Trains.InTunnel(FirstTrain(w))) steamless = true; }
                     Check(steamless, "The train runs into the tunnel (steam off underground)");
                 }
                 UnityEngine.Object.DestroyImmediate(w.gameObject);
@@ -182,8 +182,8 @@ namespace Wonderland.Editor
                 bool bridged = false, waterKept = false;
                 if (crossing.Ok)
                 {
-                    float sCross = crossing.Layout.Nearest(spot, out _);
-                    var bed = crossing.Layout.Evaluate(sCross, out _);
+                    float sCross = Main(w).Nearest(spot, out _);
+                    var bed = Main(w).Evaluate(sCross, out _);
                     bridged = bed.y >= lvl + TrackPlanner.BridgeClearance * 0.9f;
                     waterKept = w.Terrain.WaterAt(bed.x, bed.z) > 0.5f && w.Terrain.SurfaceAt(bed.x, bed.z) < lvl;
                 }
@@ -197,23 +197,23 @@ namespace Wonderland.Editor
             float trackBefore = probe.y;
             Hold(() => world.TerrainStroke(TerrainBrush.Raise, probe, 0.35f, 1f, Dt, 0f), 2f);
             world.UpdateTrackFromTerrain();
-            float trackAfter = world.Track.Layout.Points[probeIndex].y;
+            float trackAfter = Main(world).Points[probeIndex].y;
             Check(trackAfter > trackBefore + 0.01f, $"Raising the ground under the railway lifts the track ({trackBefore * 100f:0.0} -> {trackAfter * 100f:0.0} cm)");
             bool bedFollows = true; int tunnelled = 0;
-            for (int i = 0; i < world.Track.Layout.Points.Count; i++)
+            for (int i = 0; i < Main(world).Points.Count; i++)
             {
-                var p = world.Track.Layout.Points[i];
+                var p = Main(world).Points[i];
                 bool nearTunnel = false;
-                if (world.Track.Tunnel != null)
-                    for (int k = -6; k <= 6 && !nearTunnel; k++) nearTunnel = world.Track.Tunnel[((i + k) % world.Track.Tunnel.Length + world.Track.Tunnel.Length) % world.Track.Tunnel.Length];
+                if (MainTunnel(world) != null)
+                    for (int k = -6; k <= 6 && !nearTunnel; k++) nearTunnel = MainTunnel(world)[((i + k) % MainTunnel(world).Length + MainTunnel(world).Length) % MainTunnel(world).Length];
                 if (nearTunnel) { tunnelled++; continue; }   // the hill is kept over a tunnel and rises at its mouths
                 if (world.WaterLevelFor(new Vector2(p.x, p.z)) >= 0f) continue;                        // a bridge spans water
                 float dev = t.SurfaceAt(p.x, p.z) - (p.y - 0.0015f);
                 if (Mathf.Abs(dev) > 0.004f) { bedFollows = false; Report.AppendLine($"INFO  bed off by {dev * 1000f:0.0} mm at point {i} ({p.x:0.00},{p.z:0.00}) water {world.WaterLevelFor(new Vector2(p.x, p.z)):0.000} pad {t.Pad[t.Index(Mathf.RoundToInt((p.x - t.X0) / t.Cell), Mathf.RoundToInt((p.z - t.Z0) / t.Cell))]:0.00} lock {t.LockAt(p.x, p.z):0.00} edge {t.EdgeAt(p.x, p.z):0.00} land {t.LandAt(p.x, p.z)} bedY {p.y * 100f:0.00} cm"); break; }
             }
             Check(bedFollows, $"The bed is regraded under the lifted track (tunnel {tunnelled} cm)");
-            Check(MaxGrade(world.Track.Layout) <= TrackPlanner.MaxGrade * 1.2f, $"Lifted track keeps its grade limit (max {MaxGrade(world.Track.Layout) * 100f:0.0} %)");
-            layout = world.Track.Layout;
+            Check(MaxGrade(Main(world)) <= TrackPlanner.MaxGrade * 1.2f, $"Lifted track keeps its grade limit (max {MaxGrade(Main(world)) * 100f:0.0} %)");
+            layout = Main(world);
 
             // 5. Houses: three variants, one needs flattening first; invalid spots are refused.
             var spots = new[] { new Vector3(0.05f, 0f, -0.05f), new Vector3(-0.22f, 0f, 0.08f), new Vector3(0.3f, 0f, -0.12f) };
@@ -265,28 +265,30 @@ namespace Wonderland.Editor
             Check(world.PlaceHouse(moved, false) == null, "House repositioned and rotated");
 
             // 6. Train: place on the loop, run, stays on the rails, keeps orientation.
-            string trainError = world.PlaceTrain(layout.Points[layout.Points.Count / 2] + new Vector3(0.01f, 0f, 0f));
+            string trainError = PlaceTrainAt(world, layout.Points[layout.Points.Count / 2] + new Vector3(0.01f, 0f, 0f));
+            var train = FirstTrain(world);
+            if (train == null) return world;
             Check(trainError == null, "Train placed on the railway" + (trainError == null ? "" : $" (\"{trainError}\")"));
-            world.SetTrainRunning(true);
+            world.SetTrainsRunning(true);
             float worstOffset = 0f, worstAlign = 1f;
             for (int i = 0; i < 72 * 12; i++)
             {
-                world.Train.Step(Dt);
-                var pos = world.Train.LocoPosition;
+                world.Trains.Step(Dt);
+                var pos = world.Trains.LocoPosition(FirstTrain(world));
                 layout.Nearest(pos, out float d);
                 worstOffset = Mathf.Max(worstOffset, d);
                 float s = layout.Nearest(pos, out _);
                 layout.Evaluate(s, out var tangent);
-                var fwd = world.Train.LocoRotation * Vector3.forward;
+                var fwd = world.Trains.LocoRotation(FirstTrain(world)) * Vector3.forward;
                 worstAlign = Mathf.Min(worstAlign, Mathf.Abs(Vector3.Dot(new Vector3(fwd.x, 0f, fwd.z).normalized, new Vector3(tangent.x, 0f, tangent.z).normalized)));
             }
-            Check(world.Train.Odometer > 1.0f, $"Train runs continuously ({world.Train.Odometer:0.00} m in 12 s)");
+            Check(FirstTrain(world).Odometer > 1.0f, $"Train runs continuously ({FirstTrain(world).Odometer:0.00} m in 12 s)");
             Check(worstOffset < 0.006f, $"Locomotive stays on the rails (worst offset {worstOffset * 1000f:0.0} mm)");
             Check(worstAlign > 0.97f, $"Locomotive follows the curves (worst alignment {worstAlign:0.000})");
-            world.SetTrainRunning(false);
-            for (int i = 0; i < 72 * 3; i++) world.Train.Step(Dt);
-            Check(world.Train.Speed < 0.001f, "Train stops smoothly");
-            world.SetTrainRunning(true);
+            world.SetTrainsRunning(false);
+            for (int i = 0; i < 72 * 3; i++) world.Trains.Step(Dt);
+            Check(FirstTrain(world).Speed < 0.001f, "Train stops smoothly");
+            world.SetTrainsRunning(true);
 
             // 6b. Railway station: snaps beside the rails; the train halts centred on the platform, waits, pulls away.
             var outside = layout.Points[layout.Points.Count * 2 / 3];
@@ -294,24 +296,25 @@ namespace Wonderland.Editor
             var station = world.StationAt(outside + outward * 0.1f, 1);
             Check(station.HasValue, "Station snaps to the railway");
             string stationError = station.HasValue ? world.PlaceHouse(station.Value) : "no snap";
-            Check(stationError == null && world.Train.Stops.Count == 1, "Station placed beside the rails with a platform" + (stationError == null ? "" : $" (\"{stationError}\")"));
+            Check(stationError == null && world.Trains.Stations.Count == 1, "Station placed beside the rails with a platform" + (stationError == null ? "" : $" (\"{stationError}\")"));
             bool halted = false; float haltOffset = 0f;
             for (int i = 0; i < 72 * 40 && !halted; i++)
             {
-                world.Train.Step(Dt);
-                if (world.Train.Dwell > 0f)
+                world.Trains.Step(Dt);
+                if (FirstTrain(world).Dwell > 0f)
                 {
                     halted = true;
-                    float sLoco = world.Track.Layout.Nearest(world.Train.LocoPosition, out _);
-                    float trainCentre = sLoco + (TrainFactory.Loco.Front + (-TrainSystem.TrainLength + TrainFactory.Loco.Front)) * 0.5f;
-                    haltOffset = Mathf.Abs(Mathf.DeltaAngle(trainCentre / world.Track.Layout.Length * 360f, world.Train.Stops[0] / world.Track.Layout.Length * 360f)) / 360f * world.Track.Layout.Length;
+                    var centre = world.Trains.CentrePosition(FirstTrain(world));
+                    var stop = world.Trains.Stations[0];
+                    var platform = world.Track.Network.Edges[stop.Edge].Layout.Evaluate(stop.S, out _);
+                    haltOffset = new Vector2(centre.x - platform.x, centre.z - platform.z).magnitude;
                 }
             }
-            Check(halted && world.Train.Speed == 0f, "Train halts at the station");
+            Check(halted && FirstTrain(world).Speed == 0f, "Train halts at the station");
             Check(haltOffset < 0.03f, $"Train stops centred on the platform (off by {haltOffset * 100f:0.0} cm)");
-            float odoAtStation = world.Train.Odometer;
-            for (int i = 0; i < 72 * 8; i++) world.Train.Step(Dt);
-            Check(world.Train.Odometer > odoAtStation + 0.2f, "Train pulls away after waiting");
+            float odoAtStation = FirstTrain(world).Odometer;
+            for (int i = 0; i < 72 * 8; i++) world.Trains.Step(Dt);
+            Check(FirstTrain(world).Odometer > odoAtStation + 0.2f, "Train pulls away after waiting");
 
             // 6c. Sheep and cows: placed on open grass only, wander and graze around home, stay off water and rails.
             var meadow = new Vector3(0.12f, 0f, -0.7f);
@@ -356,13 +359,13 @@ namespace Wonderland.Editor
                 var mid = sp[sp.Count / 2];
                 Check(t.SurfaceAt(mid.x, mid.z) < mid.y - 0.004f, "Stream carves a channel below its water");
                 Check(!world.Forest.Trees.Exists(tr => world.Streams.IsWet(new Vector2(tr.x, tr.z))), "No trees standing in the stream");
-                float sTrack = world.Track.Layout.Nearest(mid, out _);
+                float sTrack = Main(world).Nearest(mid, out _);
                 bool crossesTrack = false;
-                foreach (var p in sp) { world.Track.Layout.Nearest(p, out float dd); if (dd < 0.01f) { crossesTrack = true; break; } }
+                foreach (var p in sp) { Main(world).Nearest(p, out float dd); if (dd < 0.01f) { crossesTrack = true; break; } }
                 if (crossesTrack)
                 {
                     float worstClear = float.MaxValue;
-                    foreach (var p in world.Track.Layout.Points)
+                    foreach (var p in Main(world).Points)
                     {
                         float lv = world.WaterLevelFor(new Vector2(p.x, p.z));
                         if (lv >= 0f) worstClear = Mathf.Min(worstClear, p.y - lv);
@@ -372,7 +375,7 @@ namespace Wonderland.Editor
                 else Check(false, "Stream crosses the railway (test layout)");
                 _ = sTrack;
             }
-            layout = world.Track.Layout;
+            layout = Main(world);
 
             // 6e. Villagers: on dry land only; they stroll to the neighbours' doors, wait at the station, ride the train
             //     and wave at it - and never stand on the rails, in water or inside a house.
@@ -380,8 +383,8 @@ namespace Wonderland.Editor
                 var homesFor = new List<Vector3>();
                 var stationHouse = world.Buildings.Houses.Find(h => h.variant == HouseFactory.Station);
                 var stationAt = new Vector2(stationHouse.x, stationHouse.z);
-                var away = (stationAt - new Vector2(world.Track.Layout.Evaluate(world.Track.Layout.Nearest(new Vector3(stationAt.x, 0f, stationAt.y), out _), out _).x,
-                    world.Track.Layout.Evaluate(world.Track.Layout.Nearest(new Vector3(stationAt.x, 0f, stationAt.y), out _), out _).z)).normalized;
+                var away = (stationAt - new Vector2(Main(world).Evaluate(Main(world).Nearest(new Vector3(stationAt.x, 0f, stationAt.y), out _), out _).x,
+                    Main(world).Evaluate(Main(world).Nearest(new Vector3(stationAt.x, 0f, stationAt.y), out _), out _).z)).normalized;
                 foreach (var h in world.Buildings.Houses)
                 {
                     var origin = h.variant == HouseFactory.Station ? stationAt + away * 0.1f : PeopleSystem.DoorStep(h);
@@ -396,13 +399,13 @@ namespace Wonderland.Editor
                 for (int i = 0; i < homesFor.Count; i++) if (world.PlacePerson(homesFor[i], i % PersonFactory.StyleCount, 300 + i) == null) placedPeople++;
                 Check(placedPeople >= 6, $"Villagers move into the village ({placedPeople})");
                 Check(world.PlacePerson(layout.Points[20], 0, 1) != null && world.PlacePerson(pondSpot, 0, 1) != null, "Villagers are refused on the rails and in the pond");
-                Check(world.Train.Running, "The train runs for the villagers");
+                Check(world.Trains.AnyRunning, "The train runs for the villagers");
                 bool walked = false, chatted = false, waited = false, rode = false, waved = false, safe = true;
                 var start = new Vector2[world.People.People.Count];
                 for (int i = 0; i < start.Length; i++) start[i] = world.People.PositionOf(i);
                 for (int step = 0; step < 72 * 240; step++)
                 {
-                    world.Train.Step(Dt);
+                    world.Trains.Step(Dt);
                     world.People.Step(Dt);
                     if (step % 12 != 0) continue;
                     for (int i = 0; i < start.Length; i++)
@@ -447,9 +450,9 @@ namespace Wonderland.Editor
             copy.Load(Materials(), path);
             Check(copy.Forest.Trees.Count == world.Forest.Trees.Count && copy.Buildings.Houses.Count == world.Buildings.Houses.Count,
                 $"Save/load keeps trees and houses ({copy.Forest.Trees.Count} trees, {copy.Buildings.Houses.Count} houses, {json.Length / 1024} KB)");
-            Check(copy.Track.HasTrack && Mathf.Abs(copy.Track.Layout.Length - layout.Length) < 0.001f, "Save/load keeps the railway");
-            Check(copy.Train.Placed && copy.Train.Running, "Save/load keeps the running train");
-            Check(copy.Train.Stops.Count == world.Train.Stops.Count && copy.Train.Stops.Count > 0, "Save/load keeps the station and its stop");
+            Check(copy.Track.HasTrack && Mathf.Abs(Main(copy).Length - layout.Length) < 0.001f, "Save/load keeps the railway");
+            Check(copy.Trains.Any && copy.Trains.AnyRunning, "Save/load keeps the running train");
+            Check(copy.Trains.Stations.Count == world.Trains.Stations.Count && copy.Trains.Stations.Count > 0, "Save/load keeps the station and its stop");
             Check(copy.Animals.Animals.Count == world.Animals.Animals.Count && copy.Animals.Animals.Count > 0, $"Save/load keeps the animals ({copy.Animals.Animals.Count})");
             Check(copy.Streams.Streams.Count == world.Streams.Streams.Count && copy.Streams.Streams.Count > 0, "Save/load keeps the stream");
             Check(copy.People.People.Count == world.People.People.Count && copy.People.People.Count > 0, $"Save/load keeps the villagers ({copy.People.People.Count})");
@@ -574,8 +577,8 @@ namespace Wonderland.Editor
             w.Create(2f, Materials(), 7, false);
             float land = w.Terrain.LandArea();
             var plan = w.BuildTrack(stroke(w.Terrain, 0));
-            bool ok = plan.Ok && plan.Layout.Closed && (!expectGrowth || w.Terrain.LandArea() > land + 0.2f);
-            Check(ok, what + (plan.Ok ? $" ({plan.Layout.Length:0.00} m{(expectGrowth ? $", land {land:0.0} -> {w.Terrain.LandArea():0.0} m2" : "")})" : $" (\"{plan.Error}\")"));
+            bool ok = plan.Ok && Main(w).Closed && (!expectGrowth || w.Terrain.LandArea() > land + 0.2f);
+            Check(ok, what + (plan.Ok ? $" ({Main(w).Length:0.00} m{(expectGrowth ? $", land {land:0.0} -> {w.Terrain.LandArea():0.0} m2" : "")})" : $" (\"{plan.Error}\")"));
             UnityEngine.Object.DestroyImmediate(w.gameObject);
         }
 
@@ -642,6 +645,267 @@ namespace Wonderland.Editor
             return worst;
         }
 
+        // ------------------------------------------------------------------ railway network
+
+        private static WonderlandWorld Scratch(string name, float x)
+        {
+            var w = new GameObject(name).AddComponent<WonderlandWorld>();
+            w.transform.position = new Vector3(x, 0f, 0f);
+            w.Create(2f, Materials(), 7, false);
+            return w;
+        }
+
+        private static List<Vector3> Line(TerrainField t, params Vector2[] via)
+        {
+            var pts = new List<Vector3>();
+            for (int k = 0; k < via.Length - 1; k++)
+            {
+                int n = Mathf.Max(2, Mathf.CeilToInt((via[k + 1] - via[k]).magnitude / 0.012f));
+                for (int i = 0; i < n; i++) { var q = Vector2.Lerp(via[k], via[k + 1], i / (float)n); pts.Add(t.PointAt(q.x, q.y)); }
+            }
+            pts.Add(t.PointAt(via[^1].x, via[^1].y));
+            return pts;
+        }
+
+        private static int DeadEnds(TrackNetwork n)
+        {
+            int c = 0;
+            foreach (var e in n.Edges) if (!e.Closed) for (int k = 0; k < 2; k++) if (e.Joint[k] < 0) c++;
+            return c;
+        }
+
+        /// <summary>Runs the trains; returns the closest approach between cars of different trains and the worst offset from the rails.</summary>
+        private static (float gap, float offRails) RunTrains(WonderlandWorld w, float seconds, Action<int> each = null)
+        {
+            float gap = float.MaxValue, off = 0f;
+            for (int step = 0; step < Mathf.RoundToInt(seconds * 72f); step++)
+            {
+                w.Trains.Step(Dt);
+                each?.Invoke(step);
+                if (step % 6 != 0) continue;
+                var samples = new List<List<Vector3>>();
+                foreach (var tr in w.Trains.Trains) samples.Add(w.Trains.CarSamples(tr));
+                for (int a = 0; a < samples.Count; a++)
+                {
+                    foreach (var p in samples[a]) off = Mathf.Max(off, w.Track.Network.DistanceTo(p));
+                    for (int b = a + 1; b < samples.Count; b++)
+                        foreach (var p in samples[a]) foreach (var q in samples[b]) gap = Mathf.Min(gap, new Vector2(p.x - q.x, p.z - q.z).magnitude);
+                }
+            }
+            return (gap, off);
+        }
+
+        private static bool OnEdge(Train t, int edge) { foreach (var sp in t.Path) if (sp.Edge == edge) return true; return false; }
+
+        /// <summary>
+        /// The railway network, built up the way a child would: a loop, a branch to a dead end, extending it, joining it
+        /// back, a second and third train, a figure 8 and a line across the loop (diamond crossings), stop signals, the
+        /// switch modes, erasing a piece, undo and save/load.
+        /// </summary>
+        private static void NetworkJourney()
+        {
+            {
+                // A figure 8 becomes one loop with a diamond crossing; the train runs through it on the rails.
+                var w = Scratch("Figure 8", 80f);
+                var eight = new List<Vector3>();
+                for (int i = 0; i <= 300; i++) { float a = i / 300f * Mathf.PI * 2f * 0.97f; eight.Add(w.Terrain.PointAt(Mathf.Sin(a) * 0.62f, Mathf.Sin(a) * Mathf.Cos(a) * 0.62f)); }
+                var plan = w.BuildTrack(eight);
+                var n = w.Track.Network;
+                Check(plan.Ok && n.Edges.Count == 1 && n.Edges[0].Closed && n.Crossings.Count == 1, "A figure 8 becomes a loop with a diamond crossing" + (plan.Ok ? $" ({n.Crossings.Count} crossing)" : $" (\"{plan.Error}\")"));
+                if (plan.Ok && n.Crossings.Count == 1)
+                {
+                    var c = n.Crossings[0];
+                    float ha = n.Edges[c.EdgeA].Layout.Evaluate(c.SA, out _).y, hb = n.Edges[c.EdgeB].Layout.Evaluate(c.SB, out _).y;
+                    Check(Mathf.Abs(ha - hb) < 0.001f, $"Both tracks meet at the same height at the crossing ({Mathf.Abs(ha - hb) * 1000f:0.0} mm)");
+                    PlaceTrainAt(w, n.Edges[0].Layout.Points[n.Edges[0].Layout.Points.Count / 4]);
+                    var (_, off) = RunTrains(w, 40f);
+                    Check(w.Trains.Any && FirstTrain(w).Odometer > 4f && off < 0.006f, $"The train runs the figure 8 through its crossing ({(w.Trains.Any ? FirstTrain(w).Odometer : 0f):0.0} m, worst offset {off * 1000f:0.0} mm)");
+                }
+                UnityEngine.Object.DestroyImmediate(w.gameObject);
+            }
+            {
+                var w = Scratch("Network", 90f);
+                var t = w.Terrain;
+                var loop = w.BuildTrack(Loop(t, 0.5f, 0.38f, 0.97f, false));
+                Check(loop.Ok, "Network: a first loop");
+                if (!loop.Ok) { UnityEngine.Object.DestroyImmediate(w.gameObject); return; }
+                // Stop signal: a red signal holds the train; green lets it go.
+                {
+                    var side = t.PointAt(-0.58f, 0f);
+                    string sigError = w.PlaceSignal(side);
+                    Check(sigError == null && w.Track.Signals.Count == 1, "A stop signal goes up beside the track" + (sigError == null ? "" : $" (\"{sigError}\")"));
+                    PlaceTrainAt(w, t.PointAt(0f, 0.4f));
+                    var tr = FirstTrain(w);
+                    RunTrains(w, 30f);
+                    float odo = tr.Odometer;
+                    RunTrains(w, 8f);
+                    Check(tr.Odometer - odo < 0.01f && tr.Blocked == BlockReason.Signal, $"The train waits at the red signal (moved {(tr.Odometer - odo) * 100f:0.0} cm in 8 s)");
+                    w.ToggleSignal(0);
+                    RunTrains(w, 6f);
+                    Check(tr.Odometer - odo > 0.3f, "Green: the train goes on");
+                    w.EraseAt(side + Vector3.up, Vector3.down, side);
+                    Check(w.Track.Signals.Count == 0, "The eraser takes the signal away");
+                }
+                // Branch: draw from the loop outwards into the meadow; a switch appears and the new line ends at buffers.
+                var from = new Vector2(0.52f, 0.02f);
+                var branchStroke = Line(t, from, from + new Vector2(0.12f, 0.2f), from + new Vector2(0.32f, 0.48f));
+                var branch = w.BuildTrack(branchStroke);
+                var n = w.Track.Network;
+                Check(branch.Ok && n.Joints.Count == 1 && DeadEnds(n) == 1 && n.Edges.Count == 2, "Drawing from the loop outwards branches off with a switch to a dead end" + (branch.Ok ? $" ({n.Joints.Count} switch, {n.Edges.Count} pieces)" : $" (\"{branch.Error}\")"));
+                if (!branch.Ok || n.Joints.Count != 1) { UnityEngine.Object.DestroyImmediate(w.gameObject); return; }
+                int branchEdge = n.Edges[0].Closed || n.Edges[0].Joint[0] >= 0 && n.Edges[0].Joint[1] >= 0 ? 1 : 0;
+                var j = n.Joints[0];
+                float leave = Vector3.Angle(n.IntoEdge(j.Branch(0)), n.IntoEdge(j.Branch(1)));
+                Check(leave < 25f, $"The branch leaves the loop smoothly, like a real switch ({leave:0} degrees apart at the switch)");
+                var tr0 = FirstTrain(w);
+                Check(tr0 != null, "The train is still on the track after the switch went in");
+                // Manual: the switch set away from the branch keeps the train on the loop.
+                w.Trains.Mode = SwitchMode.Manual;
+                int toLoop = j.Branch(0).Edge == branchEdge ? 1 : 0;
+                j.Setting = toLoop;
+                bool strayed = false;
+                RunTrains(w, 40f, _ => { if (tr0 != null && OnEdge(tr0, branchEdge)) strayed = true; });
+                Check(!strayed, "Manual switches: a switch set for the loop keeps the train on it");
+                // Explore: the train takes the branch, reverses at the buffers and comes back.
+                w.Trains.Mode = SwitchMode.Explore;
+                bool visited = false, reversed = false, back = false;
+                int dir0 = tr0 != null ? tr0.Dir : 1;
+                RunTrains(w, 120f, _ =>
+                {
+                    if (tr0 == null) return;
+                    if (OnEdge(tr0, branchEdge)) visited = true;
+                    if (tr0.Dir != dir0) reversed = true;
+                    if (visited && reversed && !OnEdge(tr0, branchEdge)) back = true;
+                });
+                Check(visited && reversed && back, $"Explore: the train takes the branch, reverses at the buffers and comes back (branch {visited}, reversed {reversed}, back {back})");
+                // Extend the dead end.
+                n = w.Track.Network;
+                Vector3 deadEnd = default;
+                foreach (var e in n.Edges) if (!e.Closed) for (int k = 0; k < 2; k++) if (e.Joint[k] < 0) deadEnd = k == 0 ? e.Layout.Points[0] : e.Layout.Points[^1];
+                float lengthBefore = n.TotalLength;
+                var dead2 = new Vector2(deadEnd.x, deadEnd.z);
+                var extend = w.BuildTrack(Line(t, dead2, dead2 + new Vector2(0.05f, 0.3f)));
+                n = w.Track.Network;
+                Check(extend.Ok && n.Edges.Count == 2 && DeadEnds(n) == 1 && n.TotalLength > lengthBefore + 0.2f, "Drawing on from the buffers extends the line" + (extend.Ok ? $" ({lengthBefore:0.00} -> {n.TotalLength:0.00} m)" : $" (\"{extend.Error}\")"));
+                // Join it back onto the loop: a second switch, no dead ends left.
+                foreach (var e in n.Edges) if (!e.Closed) for (int k = 0; k < 2; k++) if (e.Joint[k] < 0) deadEnd = k == 0 ? e.Layout.Points[0] : e.Layout.Points[^1];
+                dead2 = new Vector2(deadEnd.x, deadEnd.z);
+                var join = w.BuildTrack(Line(t, dead2, dead2 + new Vector2(-0.15f, 0.3f), new Vector2(0.15f, 0.95f), new Vector2(-0.35f, 0.75f), new Vector2(-0.3f, 0.36f)));
+                n = w.Track.Network;
+                Check(join.Ok && n.Joints.Count == 2 && DeadEnds(n) == 0, "Drawing from the end back onto the loop joins it with a second switch" + (join.Ok ? $" ({n.Joints.Count} switches, {n.Edges.Count} pieces)" : $" (\"{join.Error}\")"));
+                int undoDepth = w.UndoDepth;
+                // More trains sharing the track: they never touch, and all keep going.
+                string second = w.PlaceTrain(t.PointAt(-0.5f, -0.05f), TrainKind.Goods, Vector3.back, out var goods);
+                string third = w.PlaceTrain(t.PointAt(0.05f, -0.4f), TrainKind.Railcar, Vector3.right, out var railcar);
+                Check(second == null && third == null && w.Trains.Trains.Count == 3, $"A goods train and a railcar join the steam train ({w.Trains.Trains.Count} trains)" + (second ?? third ?? ""));
+                Check(w.Trains.Trains.Count < 2 || w.Trains.Trains[0].Livery != w.Trains.Trains[1].Livery, "Every train gets its own colours");
+                var odo0 = new List<float>(); foreach (var tr in w.Trains.Trains) odo0.Add(tr.Odometer);
+                var (gap, offRails) = RunTrains(w, 180f);
+                bool allMoved = true;
+                for (int i = 0; i < w.Trains.Trains.Count; i++) if (w.Trains.Trains[i].Odometer - odo0[i] < 3f) allMoved = false;
+                Check(gap > 0.04f, $"Trains sharing the network never touch (closest {gap * 100f:0.0} cm between cars in 3 minutes)");
+                Check(allMoved, "All trains keep running (no jams)" + $" ({string.Join(", ", w.Trains.Trains.ConvertAll(x => x.Odometer.ToString("0.0")))} m)");
+                Check(offRails < 0.006f, $"Every train stays on the rails through the switches (worst offset {offRails * 1000f:0.0} mm)");
+                // Speed: a slower train is slower.
+                if (w.Trains.Trains.Count == 3)
+                {
+                    w.Trains.Trains[2].SpeedFactor = 0.5f;
+                    RunTrains(w, 10f);
+                    Check(w.Trains.Trains[2].Speed <= TrainSystem.CruiseSpeed * 0.5f + 0.001f, $"Speed setting: half speed is half speed ({w.Trains.Trains[2].Speed * 100f:0.0} cm/s)");
+                }
+                // A tapped switch is pinned: in Explore mode trains leave it alone.
+                var sw = w.Track.Network.Joints[0];
+                string msg = null;
+                for (int k = 0; k < 600 && msg == null; k++) { w.Trains.Step(Dt); if (!w.Trains.JointLocked(0)) msg = w.FlipSwitch(0); }
+                int pinned = sw.Setting;
+                RunTrains(w, 40f);
+                Check(msg != null && sw.Pinned && sw.Setting == pinned, $"A tapped switch stays where it was set (\"{msg}\")");
+                // Grip and drag: a piece bends like a rope between its switches; the trains stay on it.
+                {
+                    n = w.Track.Network;
+                    int longest = 0;
+                    for (int e = 1; e < n.Edges.Count; e++) if (n.Edges[e].Layout.Length > n.Edges[longest].Layout.Length) longest = e;
+                    var l = n.Edges[longest].Layout;
+                    int idx = l.Points.Count / 2;
+                    var p0 = l.Points[idx];
+                    var outward = new Vector3(p0.x, 0f, p0.z).normalized;
+                    var target = p0 + outward * 0.12f;
+                    int trainsBefore = w.Trains.Trains.Count, piecesBefore = n.Edges.Count;
+                    string bend = w.Reshape(longest, idx, target);
+                    n = w.Track.Network;
+                    float reached = n.DistanceTo(target);
+                    Check(bend == null && reached < 0.03f && n.Edges.Count == piecesBefore && n.Joints.Count == 2, $"Grip and drag bends a piece of track (moved 12 cm, track within {reached * 100f:0.0} cm of the hand)" + (bend == null ? "" : $" (\"{bend}\")"));
+                    Check(w.Trains.Trains.Count == trainsBefore, $"The trains stay on the bent track ({w.Trains.Trains.Count}/{trainsBefore})");
+                    var (g2, off2) = RunTrains(w, 30f);
+                    Check(g2 > 0.04f && off2 < 0.006f, $"Trains run on over the bent track (closest {g2 * 100f:0.0} cm)");
+                    var squeeze = w.ReshapePreview(longest, idx, Vector3.zero, out _);
+                    Check(squeeze != null, $"A bend that would squeeze into other track is refused (\"{squeeze}\")");
+                }
+                // Save / load keeps the whole network, its trains, switch settings and the mode.
+                string json = w.Serialize();
+                var copy = new GameObject("Network copy").AddComponent<WonderlandWorld>();
+                copy.transform.position = new Vector3(100f, 0f, 0f);
+                copy.Deserialize(json, Materials());
+                var cn = copy.Track.Network;
+                Check(cn.Edges.Count == w.Track.Network.Edges.Count && cn.Joints.Count == 2 && copy.Trains.Trains.Count == w.Trains.Trains.Count && cn.Joints[0].Pinned,
+                    $"Save/load keeps the network ({cn.Edges.Count} pieces, {cn.Joints.Count} switches, {copy.Trains.Trains.Count} trains)");
+                UnityEngine.Object.DestroyImmediate(copy.gameObject);
+                // Erase the connecting piece: the switches disappear and the loop is whole again; undo brings it back.
+                n = w.Track.Network;
+                int connector = -1;
+                for (int e = 0; e < n.Edges.Count; e++) if (n.Edges[e].Joint[0] >= 0 && n.Edges[e].Joint[1] >= 0 && n.Edges[e].Joint[0] != n.Edges[e].Joint[1] && n.Edges[e].Layout.Length > 1f) connector = e;
+                if (connector < 0) for (int e = 0; e < n.Edges.Count; e++) if (n.Edges[e].Layout.Length > 1f && connector < 0) connector = e;
+                var mid = n.Edges[Mathf.Max(0, connector)].Layout.Points[n.Edges[Mathf.Max(0, connector)].Layout.Points.Count / 2];
+                string erased = w.EraseAt(mid + Vector3.up, Vector3.down, mid);
+                if (erased == "Train removed") erased = w.EraseAt(mid + Vector3.up, Vector3.down, mid);
+                n = w.Track.Network;
+                Check(erased == "Track removed" && n.Joints.Count < 2, $"The eraser takes away one piece of track (\"{erased}\": {n.Joints.Count} switches, {n.Edges.Count} pieces left)");
+                RunTrains(w, 20f);
+                w.Undo();
+                if (erased == "Track removed") Check(w.Track.Network.Joints.Count == 2, "Undo puts the piece back");
+                UnityEngine.Object.DestroyImmediate(w.gameObject);
+            }
+            {
+                // A line across the loop crosses it twice; a train on each never meet at the crossings.
+                var w = Scratch("Crossings", 110f);
+                var t = w.Terrain;
+                w.BuildTrack(Loop(t, 0.5f, 0.38f, 0.97f, false));
+                var across = w.BuildTrack(Line(t, new Vector2(-0.95f, -0.12f), new Vector2(0.95f, 0.12f)));
+                var n = w.Track.Network;
+                Check(across.Ok && n.Crossings.Count == 2 && n.Joints.Count == 0, "A line drawn across the loop crosses it with two diamond crossings" + (across.Ok ? $" ({n.Crossings.Count})" : $" (\"{across.Error}\")"));
+                PlaceTrainAt(w, t.PointAt(0f, 0.4f));
+                w.PlaceTrain(t.PointAt(-0.75f, -0.095f), TrainKind.Railcar, Vector3.right, out _);
+                var (gap, off) = RunTrains(w, 150f);
+                Check(w.Trains.Trains.Count == 2 && gap > 0.04f, $"Trains take turns at the crossings (closest {gap * 100f:0.0} cm)");
+                Check(w.Trains.Trains.Count == 2 && w.Trains.Trains[1].Odometer > 2f, $"The railcar shuttles along its line, reversing at the buffers ({(w.Trains.Trains.Count == 2 ? w.Trains.Trains[1].Odometer : 0f):0.0} m)");
+                UnityEngine.Object.DestroyImmediate(w.gameObject);
+            }
+            {
+                // Head-on on a single line: they stop nose to nose and one backs away.
+                var w = Scratch("Single line", 120f);
+                var t = w.Terrain;
+                var line = w.BuildTrack(Line(t, new Vector2(-0.9f, -0.2f), new Vector2(-0.3f, 0.1f), new Vector2(0.3f, -0.1f), new Vector2(0.9f, 0.2f)));
+                Check(line.Ok && DeadEnds(w.Track.Network) == 2, "An open line with buffers at both ends" + (line.Ok ? "" : $" (\"{line.Error}\")"));
+                w.PlaceTrain(t.PointAt(-0.6f, -0.05f), TrainKind.Passenger, Vector3.right, out var a);
+                w.PlaceTrain(t.PointAt(0.6f, 0.05f), TrainKind.Goods, Vector3.left, out var b);
+                if (a != null && b != null)
+                {
+                    int da = a.Dir, db = b.Dir;
+                    bool turned = false;
+                    var (gap, _) = RunTrains(w, 60f, _ => { if (a.Dir != da || b.Dir != db) turned = true; });
+                    Check(gap > 0.04f && turned, $"Head-on on single track: they stop short and one backs away (closest {gap * 100f:0.0} cm)");
+                    Check(a.Odometer > 0.5f && b.Odometer > 0.5f, $"Both keep running ({a.Odometer:0.0} m, {b.Odometer:0.0} m)");
+                }
+                else Check(false, "Two trains placed on the single line");
+                UnityEngine.Object.DestroyImmediate(w.gameObject);
+            }
+        }
+
+        private static TrackLayout Main(WonderlandWorld w) => w.Track.Network.Edges.Count > 0 ? w.Track.Network.Edges[0].Layout : null;
+        private static bool[] MainTunnel(WonderlandWorld w) => w.Track.Network.Edges.Count > 0 ? w.Track.Network.Edges[0].Tunnel : null;
+        private static Train FirstTrain(WonderlandWorld w) => w.Trains.Trains.Count > 0 ? w.Trains.Trains[0] : null;
+        private static string PlaceTrainAt(WonderlandWorld w, Vector3 p) => w.PlaceTrain(p, TrainKind.Passenger, Vector3.forward, out _);
+
         private static float MaxGrade(TrackLayout l)
         {
             float worst = 0f;
@@ -671,7 +935,7 @@ namespace Wonderland.Editor
             var world = Run(out _);
             world.Forest.RebuildDirty();
             world.Cover.RebuildDirty();
-            for (int i = 0; i < 72 * 60; i++) { world.Train.Step(Dt); if (world.Train.Dwell > 1f) break; }
+            for (int i = 0; i < 72 * 60 && world.Trains.Any; i++) { world.Trains.Step(Dt); if (FirstTrain(world).Dwell > 1f) break; }
             Directory.CreateDirectory(WonderlandRenders.Output);
             WonderlandRenders.CreateFloor(6f);
             var cam = WonderlandRenders.CreateCamera(new Vector3(0f, 1.25f, -1.75f), new Vector3(0f, 0.05f, -0.05f), 42f);
@@ -681,7 +945,7 @@ namespace Wonderland.Editor
             cam.transform.position = new Vector3(-1.05f, 0.75f, -1.2f); cam.transform.LookAt(new Vector3(0.05f, 0.04f, 0f)); cam.fieldOfView = 40f;
             WonderlandRenders.Capture(cam, "editor-world-corner.png", 1920, 1200);
             // Close-up behind the locomotive at standing / kneeling viewpoints.
-            var loco = world.Train.LocoPosition; var fwd = world.Train.LocoRotation * Vector3.forward;
+            var loco = world.Trains.Any ? world.Trains.LocoPosition(FirstTrain(world)) : Vector3.zero; var fwd = world.Trains.Any ? world.Trains.LocoRotation(FirstTrain(world)) * Vector3.forward : Vector3.forward;
             var side = Vector3.Cross(Vector3.up, fwd);
             cam.transform.position = loco + fwd * 0.35f + side * 0.3f + Vector3.up * 0.2f;
             cam.transform.LookAt(loco + Vector3.up * 0.03f - fwd * 0.08f); cam.fieldOfView = 38f;
@@ -694,13 +958,13 @@ namespace Wonderland.Editor
             WonderlandRenders.Capture(cam, "editor-world-animals.png", 1920, 1200);
 
             // Villagers about the village, and the platform when the train is in.
-            for (int i = 0; i < 72 * 30; i++) { world.Train.Step(Dt); world.People.Step(Dt); }
+            for (int i = 0; i < 72 * 30; i++) { world.Trains.Step(Dt); world.People.Step(Dt); }
             for (int i = 0; i < world.People.People.Count; i++)
             {
                 if (world.People.StateOf(i) == PeopleSystem.Activity.Riding) continue;
                 var v = world.People.PositionOf(i);
                 var at = new Vector3(v.x, world.People.HeightOf(i), v.y);
-                var rail = world.Track.Layout.Evaluate(world.Track.Layout.Nearest(at, out float fromRail), out _);
+                var rail = Main(world).Evaluate(Main(world).Nearest(at, out float fromRail), out _);
                 if (fromRail < 0.12f && i < world.People.People.Count - 1) continue;
                 var back = at - rail; back.y = 0f; back = back.normalized;   // look from the side away from the railway
                 cam.transform.position = at + back * 0.2f + Vector3.Cross(Vector3.up, back) * 0.06f + Vector3.up * 0.13f; cam.transform.LookAt(at + Vector3.up * 0.015f); cam.fieldOfView = 36f;
@@ -712,7 +976,7 @@ namespace Wonderland.Editor
             if (world.Streams.Streams.Count > 0)
             {
                 Vector3 crossing = world.Streams.Streams[0].points[0]; float bestD = float.MaxValue;
-                foreach (var p in world.Streams.Streams[0].points) { world.Track.Layout.Nearest(p, out float dd); if (dd < bestD) { bestD = dd; crossing = p; } }
+                foreach (var p in world.Streams.Streams[0].points) { Main(world).Nearest(p, out float dd); if (dd < bestD) { bestD = dd; crossing = p; } }
                 cam.transform.position = crossing + new Vector3(0.12f, 0.3f, -0.3f); cam.transform.LookAt(crossing + Vector3.up * 0.01f); cam.fieldOfView = 36f;
                 WonderlandRenders.Capture(cam, "editor-world-stream-bridge.png", 1920, 1200);
             }
@@ -745,6 +1009,50 @@ namespace Wonderland.Editor
                 var c = w.transform.TransformPoint(hill);
                 cam.transform.position = c + new Vector3(0.05f, 0.25f, -0.55f); cam.transform.LookAt(c + Vector3.up * 0.03f); cam.fieldOfView = 40f;
                 WonderlandRenders.Capture(cam, "editor-world-tunnel.png", 1920, 1200);
+                UnityEngine.Object.DestroyImmediate(w.gameObject);
+            }
+            {
+                // Railway network demo: a loop, a branch joined back as a second loop, a line across with diamond crossings,
+                // a station, three trains and a stop signal.
+                var w = Scratch("Network demo", 130f);
+                var t = w.Terrain;
+                for (int i = 0; i < 12; i++) w.PaintForest(new Vector3(-0.1f + Mathf.Sin(i * 1.7f) * 0.12f, 0f, 0.05f + Mathf.Cos(i * 1.3f) * 0.1f), 0.1f, 0.7f, Dt * 4f);
+                w.BuildTrack(Loop(t, 0.5f, 0.38f, 0.97f, false));
+                var from = new Vector2(0.52f, 0.02f);
+                w.BuildTrack(Line(t, from, from + new Vector2(0.12f, 0.2f), from + new Vector2(0.32f, 0.48f)));
+                Vector3 dead = default;
+                foreach (var e in w.Track.Network.Edges) if (!e.Closed) for (int k = 0; k < 2; k++) if (e.Joint[k] < 0) dead = k == 0 ? e.Layout.Points[0] : e.Layout.Points[^1];
+                var d2 = new Vector2(dead.x, dead.z);
+                w.BuildTrack(Line(t, d2, d2 + new Vector2(-0.15f, 0.3f), new Vector2(0.15f, 0.95f), new Vector2(-0.35f, 0.75f), new Vector2(-0.3f, 0.36f)));
+                var across = w.BuildTrack(Line(t, new Vector2(-1.0f, -0.36f), new Vector2(1.0f, -0.2f)));
+                if (!across.Ok) Debug.Log("Network demo: crossing line refused: " + across.Error);
+                var st = w.StationAt(t.PointAt(-0.2f, -0.52f), 2);
+                if (st.HasValue) w.PlaceHouse(st.Value);
+                for (int i = 0; i < 3; i++)
+                {
+                    var spot = FindHouseSpot(w, i);
+                    w.PlaceHouse(spot);
+                }
+                w.PlaceSignal(t.PointAt(-0.58f, 0.05f));
+                w.ToggleSignal(0);
+                PlaceTrainAt(w, t.PointAt(0f, 0.4f));
+                w.PlaceTrain(t.PointAt(-0.5f, -0.05f), TrainKind.Goods, Vector3.back, out _);
+                w.PlaceTrain(t.PointAt(-0.8f, -0.344f), TrainKind.Railcar, Vector3.right, out _);
+                for (int i = 0; i < 72 * 25; i++) w.Trains.Step(Dt);
+                w.Cover.RebuildDirty(); w.Forest.RebuildDirty();
+                var c = w.transform.position + new Vector3(0.05f, 0f, 0.15f);
+                cam.transform.position = c + new Vector3(0.1f, 1.25f, -1.45f); cam.transform.LookAt(c + Vector3.up * 0.02f); cam.fieldOfView = 42f;
+                WonderlandRenders.Capture(cam, "editor-network.png", 1920, 1200);
+                cam.transform.position = c + new Vector3(0f, 2.3f, -0.01f); cam.transform.LookAt(c); cam.fieldOfView = 45f;
+                WonderlandRenders.Capture(cam, "editor-network-top.png", 1600, 1600);
+                if (w.Track.Network.Joints.Count > 0)
+                {
+                    var j = w.transform.TransformPoint(w.Track.Network.Joints[0].Position);
+                    var into = w.transform.TransformDirection(w.Track.Network.IntoEdge(w.Track.Network.Joints[0].Trunk));
+                    cam.transform.position = j + into * 0.28f + Vector3.Cross(Vector3.up, into) * 0.12f + Vector3.up * 0.16f;
+                    cam.transform.LookAt(j - into * 0.08f + Vector3.up * 0.01f); cam.fieldOfView = 40f;
+                    WonderlandRenders.Capture(cam, "editor-network-switch.png", 1920, 1200);
+                }
                 UnityEngine.Object.DestroyImmediate(w.gameObject);
             }
 

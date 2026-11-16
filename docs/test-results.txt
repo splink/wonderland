@@ -15,7 +15,7 @@ PASS  Drain removes water (109 -> 64 cells)
 PASS  Forest brush paints clusters (156 trees, 5 species)
 PASS  Painted forest mixes species
 PASS  Forest eraser removes trees (156 -> 151)
-PASS  Figure-8 track rejected ("The track crosses itself like a figure 8 - no bridges yet")
+PASS  A too-short stroke is refused ("Draw a longer track")
 PASS  Rejected strokes leave the world unchanged
 PASS  Hand-drawn loop accepted
 PASS  Loop closed automatically (end drawn 17 cm from start)
@@ -27,11 +27,46 @@ PASS  Loop drawn past its start closes (2.79 m)
 PASS  Loop with an accidental kink loop closes (2.79 m)
 PASS  Loop ending 25 cm short of the start closes (2.79 m)
 PASS  Loop drawn half over bare floor closes and grows land under it (5.30 m, land 3.4 -> 3.8 m2)
+PASS  A figure 8 becomes a loop with a diamond crossing (1 crossing)
+PASS  Both tracks meet at the same height at the crossing (0.0 mm)
+PASS  The train runs the figure 8 through its crossing (5.1 m, worst offset 0.0 mm)
+PASS  Network: a first loop
+PASS  A stop signal goes up beside the track
+PASS  The train waits at the red signal (moved 0.0 cm in 8 s)
+PASS  Green: the train goes on
+PASS  The eraser takes the signal away
+PASS  Drawing from the loop outwards branches off with a switch to a dead end (1 switch, 2 pieces)
+PASS  The branch leaves the loop smoothly, like a real switch (1 degrees apart at the switch)
+PASS  The train is still on the track after the switch went in
+PASS  Manual switches: a switch set for the loop keeps the train on it
+PASS  Explore: the train takes the branch, reverses at the buffers and comes back (branch True, reversed True, back True)
+PASS  Drawing on from the buffers extends the line (3.40 -> 3.72 m)
+PASS  Drawing from the end back onto the loop joins it with a second switch (2 switches, 3 pieces)
+PASS  A goods train and a railcar join the steam train (3 trains)
+PASS  Every train gets its own colours
+PASS  Trains sharing the network never touch (closest 5.7 cm between cars in 3 minutes)
+PASS  All trains keep running (no jams) (41.4, 22.0, 20.2 m)
+PASS  Every train stays on the rails through the switches (worst offset 0.0 mm)
+PASS  Speed setting: half speed is half speed (6.5 cm/s)
+PASS  A tapped switch stays where it was set ("Switch set - trains will keep this way")
+PASS  Grip and drag bends a piece of track (moved 12 cm, track within 1.1 cm of the hand)
+PASS  The trains stay on the bent track (3/3)
+PASS  Trains run on over the bent track (closest 5.2 cm)
+PASS  A bend that would squeeze into other track is refused ("That bend is too tight for the train")
+PASS  Save/load keeps the network (3 pieces, 2 switches, 3 trains)
+PASS  The eraser takes away one piece of track ("Track removed": 0 switches, 1 pieces left)
+PASS  Undo puts the piece back
+PASS  A line drawn across the loop crosses it with two diamond crossings (2)
+PASS  Trains take turns at the crossings (closest 7.0 cm)
+PASS  The railcar shuttles along its line, reversing at the buffers (14.6 m)
+PASS  An open line with buffers at both ends
+PASS  Head-on on single track: they stop short and one backs away (closest 4.7 cm)
+PASS  Both keep running (2.9 m, 2.8 m)
 PASS  A railway under a big hill becomes a tunnel (hill 29 cm, 30 cm of tunnel, hill kept above it)
 PASS  The train runs into the tunnel (steam off underground)
 PASS  Railway across a pond rises onto a bridge and the water stays
-PASS  Raising the ground under the railway lifts the track (7.7 -> 10.1 cm)
-PASS  The bed is regraded under the lifted track (tunnel 34 cm)
+PASS  Raising the ground under the railway lifts the track (7.8 -> 10.4 cm)
+PASS  The bed is regraded under the lifted track (tunnel 33 cm)
 PASS  Lifted track keeps its grade limit (max 9.1 %)
 PASS  Place Cottage
 PASS  Place Townhouse
@@ -44,8 +79,8 @@ PASS  Pointer ray picks the house below it
 PASS  House repositioned and rotated
 PASS  Train placed on the railway
 PASS  Train runs continuously (1.44 m in 12 s)
-PASS  Locomotive stays on the rails (worst offset 4.2 mm)
-PASS  Locomotive follows the curves (worst alignment 0.999)
+PASS  Locomotive stays on the rails (worst offset 4.1 mm)
+PASS  Locomotive follows the curves (worst alignment 1.000)
 PASS  Train stops smoothly
 PASS  Station snaps to the railway
 PASS  Station placed beside the rails with a platform
@@ -61,7 +96,7 @@ PASS  Stream drawn
 PASS  Stream level only falls downstream (1.4 -> 1.4 cm)
 PASS  Stream carves a channel below its water
 PASS  No trees standing in the stream
-PASS  The railway bridges the stream (clearance 58 mm)
+PASS  The railway bridges the stream (clearance 62 mm)
 PASS  Villagers move into the village (6)
 PASS  Villagers are refused on the rails and in the pond
 PASS  The train runs for the villagers
@@ -96,5 +131,5 @@ PASS  Land still grows with bad room data
 PASS  Trimmed land grows back (1.19 -> 1.04 -> 1.16 m2)
 INFO  terrain: 6 chunk meshes, 17 k triangles, land 3.49 m2 of a 4.8 x 4.8 m grid
 INFO  static budget of this world: 155 mesh renderers (~draw calls per eye pass before batching, excl. shadows/UI), 442 k triangles, ground cover 8073 tufts
-INFO  trees 131, forest chunks 30, houses 3, track 3.40 m, undo depth 9, journey simulated in 28.1 s wall time
+INFO  trees 131, forest chunks 30, houses 3, track 3.40 m, undo depth 9, journey simulated in 20.9 s wall time
 RESULT: PASS
