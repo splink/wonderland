@@ -16,7 +16,7 @@ namespace Wonderland.Editor
     /// docs/test-results.txt); <see cref="Renders"/> runs the journey and renders the assembled world (editor renders,
     /// not headset captures). This does not exercise controller input, passthrough or on-device performance.
     /// </summary>
-    public static class WonderlandJourney
+    public static partial class WonderlandJourney
     {
         private const float Dt = 1f / 72f;
         private static readonly StringBuilder Report = new();
@@ -34,6 +34,30 @@ namespace Wonderland.Editor
             if (Application.isBatchMode) EditorApplication.Exit(failures == 0 ? 0 : 1);
         }
 
+        /// <summary>Just the village's life and work (a quicker loop while working on them): Logs/village-results.txt.</summary>
+        public static void TestVillage()
+        {
+            Report.Clear(); failures = 0;
+            try { VillageLifeJourney(); VillageWorkJourney(); DayJourney(); }
+            catch (Exception e) { Fail("Exception: " + e); }
+            Report.AppendLine(failures == 0 ? "RESULT: PASS" : $"RESULT: FAIL ({failures})");
+            File.WriteAllText("Logs/village-results.txt", Report.ToString());
+            Debug.Log("Wonderland village test\n" + Report);
+            if (Application.isBatchMode) EditorApplication.Exit(failures == 0 ? 0 : 1);
+        }
+
+        /// <summary>Just the livelier town (traffic, emergencies, pets, CCTV, sound...): Logs/town-results.txt.</summary>
+        public static void TestTown()
+        {
+            Report.Clear(); failures = 0;
+            try { TownJourney(); WeatherJourney(); }
+            catch (Exception e) { Fail("Exception: " + e); }
+            Report.AppendLine(failures == 0 ? "RESULT: PASS" : $"RESULT: FAIL ({failures})");
+            File.WriteAllText("Logs/town-results.txt", Report.ToString());
+            Debug.Log("Wonderland town test\n" + Report);
+            if (Application.isBatchMode) EditorApplication.Exit(failures == 0 ? 0 : 1);
+        }
+
         private static void Check(bool ok, string what)
         {
             Report.AppendLine((ok ? "PASS  " : "FAIL  ") + what);
@@ -45,7 +69,7 @@ namespace Wonderland.Editor
         public static WorldMaterials Materials() => new()
         {
             Lit = WonderlandMaterials.Lit, Terrain = WonderlandMaterials.Terrain, UI = WonderlandMaterials.UI, Smoke = WonderlandMaterials.Smoke,
-            Water = WonderlandMaterials.Water,
+            Water = WonderlandMaterials.Water, Screen = WonderlandMaterials.Screen,
         };
 
         /// <summary>Builds the journey's world. Returns the world; <paramref name="drawnLoop"/> is the stroke used for the track.</summary>
@@ -146,6 +170,12 @@ namespace Wonderland.Editor
             NetworkJourney();
             LivingJourney();
             BridgeJourney();
+            VillageLifeJourney();
+            VillageWorkJourney();
+            DayJourney();
+            TownJourney();
+            RailJourney();
+            WeatherJourney();
             {
                 // Tunnel: a big hill across the line keeps its top; portals at both mouths; no steam underground.
                 var w = new GameObject("Tunnel").AddComponent<WonderlandWorld>();
@@ -817,10 +847,11 @@ namespace Wonderland.Editor
             Check(fairError == null, "A fair: carousel, Ferris wheel and playground" + (fairError == null ? "" : $" (\"{fairError}\")"));
             int wheel = w.Buildings.Houses.FindIndex(h => h.variant == Catalog.FerrisWheel);
             var rotor = w.Buildings.RotorOf(wheel);
-            w.Buildings.Animate(0f); var r0 = rotor != null ? rotor.localRotation : Quaternion.identity;
-            w.Buildings.Animate(2f); var r1 = rotor != null ? rotor.localRotation : Quaternion.identity;
+            w.Buildings.Animate(0f, 0f); var r0 = rotor != null ? rotor.localRotation : Quaternion.identity;
+            w.Buildings.Animate(2f, 2f); var r1 = rotor != null ? rotor.localRotation : Quaternion.identity;
             Check(rotor != null && Quaternion.Angle(r0, r1) > 10f, $"The Ferris wheel turns ({Quaternion.Angle(r0, r1):0} degrees in 2 s)");
             seen.Clear();
+            w.Clock.Hour = 15f;   // the fair is busiest in the afternoon
             for (int step = 0; step < 72 * 150; step++) { w.People.Step(Dt); if (step % 12 == 0) for (int i = 0; i < w.People.People.Count; i++) seen.Add(w.People.StateOf(i)); }
             Check(seen.Contains(PeopleSystem.Activity.OnRide), "Visitors take rides at the fair");
             Check(seen.Contains(PeopleSystem.Activity.Playing) || seen.Contains(PeopleSystem.Activity.Watching), "Visitors play and watch at the fair");
@@ -844,10 +875,14 @@ namespace Wonderland.Editor
             Check(lampError == null, "A street lamp may stand at the roadside" + (lampError == null ? "" : $" (\"{lampError}\")"));
             // A hiking trail and a hiker.
             string trail = w.BuildPath(Stroke(t, new Vector2(-0.2f, 0.55f), new Vector2(-0.5f, 0.6f), new Vector2(-0.75f, 0.35f), new Vector2(-0.6f, 0.15f)), PathKind.Trail);
-            w.PlacePerson(t.PointAt(-0.25f, 0.5f), 5, 777);
+            // Homes by the trail: their people plan hikes on their afternoons out (fast days: three afternoons).
+            string trailHomes = Put(w, Catalog.Cottage, -0.36f, 0.47f, 160f) ?? Put(w, Catalog.Thatched, -0.62f, 0.45f, 120f);
+            w.Clock.Hour = 13.5f; w.Clock.Mode = ClockMode.Fast;
             bool hiked = false;
-            for (int step = 0; step < 72 * 200 && !hiked; step++) { w.People.Step(Dt); if (step % 24 == 0) for (int i = 0; i < w.People.People.Count; i++) hiked |= w.People.Hiking(i); }
-            Check(trail == null && hiked, "A hiker sets off along the trail");
+            for (int step = 0; step < 72 * 400 && !hiked; step++) { w.Clock.Tick(Dt); w.People.Step(Dt); if (step % 24 == 0) for (int i = 0; i < w.People.People.Count; i++) hiked |= w.People.Hiking(i); }
+            w.Clock.Mode = ClockMode.Normal;
+            string hikers = trailHomes != null ? $" (\"{trailHomes}\")" : "";
+            Check(trail == null && hiked, "A hiker sets off along the trail" + hikers);
 
             // A fenced pasture keeps its sheep in; sheep outside stay out.
             var fence = new List<Vector3>();
@@ -1026,7 +1061,8 @@ namespace Wonderland.Editor
                 {
                     var side = t.PointAt(-0.58f, 0f);
                     string sigError = w.PlaceSignal(side);
-                    Check(sigError == null && w.Track.Signals.Count == 1, "A stop signal goes up beside the track" + (sigError == null ? "" : $" (\"{sigError}\")"));
+                    Check(sigError == null && w.Track.Signals.Count == 1 && !w.Track.Signals[0].red, "A signal goes up beside the track, on automatic" + (sigError == null ? "" : $" (\"{sigError}\")"));
+                    w.ToggleSignal(0);   // held at red
                     PlaceTrainAt(w, t.PointAt(0f, 0.4f));
                     var tr = FirstTrain(w);
                     RunTrains(w, 30f);
@@ -1062,15 +1098,15 @@ namespace Wonderland.Editor
                 // Explore: the train takes the branch, reverses at the buffers and comes back.
                 w.Trains.Mode = SwitchMode.Explore;
                 bool visited = false, reversed = false, back = false;
-                int dir0 = tr0 != null ? tr0.Dir : 1;
+                int turns0 = tr0 != null ? tr0.Reversals : 0;
                 RunTrains(w, 120f, _ =>
                 {
                     if (tr0 == null) return;
                     if (OnEdge(tr0, branchEdge)) visited = true;
-                    if (tr0.Dir != dir0) reversed = true;
+                    if (tr0.Reversals != turns0) reversed = true;   // (it turns round: the engine runs round to lead again)
                     if (visited && reversed && !OnEdge(tr0, branchEdge)) back = true;
                 });
-                Check(visited && reversed && back, $"Explore: the train takes the branch, reverses at the buffers and comes back (branch {visited}, reversed {reversed}, back {back})");
+                Check(!visited && !reversed, $"One way: the train keeps to the line it can run round and off the dead-end branch (branch {visited}, reversed {reversed})");
                 // Extend the dead end.
                 n = w.Track.Network;
                 Vector3 deadEnd = default;
@@ -1395,7 +1431,7 @@ namespace Wonderland.Editor
                 w.PlaceAnimal(wood + new Vector3(0.14f, 0f, -0.1f), AnimalKind.Deer, 230);
                 for (int i = 0; i < 4; i++) w.PlacePerson(t.PointAt(0.5f + i * 0.03f, 0.25f), i, 240 + i);
                 for (int i = 0; i < 72 * 60; i++) { w.People.Step(Dt); w.Animals.Step(Dt); }
-                w.Buildings.Animate(3f);
+                w.Buildings.Animate(3f, 3f);
                 w.Cover.RebuildDirty(); w.Forest.RebuildDirty(); w.Paths.Rebuild();
                 var c = w.transform.position;
                 cam.transform.position = c + new Vector3(0.15f, 1.15f, -1.45f); cam.transform.LookAt(c + new Vector3(0f, 0.03f, -0.02f)); cam.fieldOfView = 42f;
@@ -1408,8 +1444,47 @@ namespace Wonderland.Editor
                 WonderlandRenders.Capture(cam, "editor-village-mountain.png", 1920, 1200);
                 cam.transform.position = c + new Vector3(-0.2f, 0.22f, -0.85f); cam.transform.LookAt(c + new Vector3(-0.4f, 0.01f, -0.56f)); cam.fieldOfView = 36f;
                 WonderlandRenders.Capture(cam, "editor-village-pasture.png", 1920, 1200);
+                // A day in the village: shoppers in the morning, lit windows in the evening, the quiet night.
+                Light key = null;
+                foreach (var l in UnityEngine.Object.FindObjectsByType<Light>(FindObjectsSortMode.None)) if (l.type == LightType.Directional) key = l;
+                foreach (var (hour, file) in new[] { (9.6f, "editor-day-morning.png"), (16f, "editor-day-afternoon.png"), (21.1f, "editor-day-evening.png"), (2f, "editor-day-night.png") })
+                {
+                    for (int guard = 0; guard < 72 * 900 && Mathf.Abs(w.Clock.Hour - hour) > 0.03f; guard++) { w.Clock.Tick(Dt); w.People.Step(Dt); w.Animals.Step(Dt); }
+                    WonderlandLighting.SetTimeOfDay(key, w.Clock.Hour, w.Clock.Daylight, 0f);
+                    w.Buildings.Animate(3f, w.Buildings.RidesOpen * 3f);
+                    cam.transform.position = c + new Vector3(0.25f, 0.42f, -0.95f); cam.transform.LookAt(c + new Vector3(0.05f, 0.02f, -0.12f)); cam.fieldOfView = 44f;
+                    WonderlandRenders.Capture(cam, file, 1920, 1200);
+                    Debug.Log($"{file}: {w.People.Census()}");
+                }
+                // The working day: the farmer in the field and produce carried to the shops; then a fête on the square.
+                foreach (int shop in new[] { Catalog.Bakery, Catalog.Grocer, Catalog.Cafe }) w.People.SetStock(w.Buildings.Houses.FindIndex(h => h.variant == shop), 1f);
+                int carrying = 0;
+                for (int guard = 0; guard < 72 * 900 && (w.Clock.Hour < 9.5f || w.Clock.Hour > 12f || carrying == 0); guard++)
+                {
+                    w.Clock.Tick(Dt); w.People.Step(Dt); w.Animals.Step(Dt);
+                    carrying = 0; for (int i = 0; i < w.People.People.Count; i++) if (w.People.CarryingOf(i) > 0) carrying++;
+                }
+                for (int i = 0; i < 72 * 3; i++) { w.Clock.Tick(Dt); w.People.Step(Dt); }
+                WonderlandLighting.SetTimeOfDay(key, w.Clock.Hour, w.Clock.Daylight, 0f);
+                w.Buildings.Animate(3f, 3f);
+                cam.transform.position = c + new Vector3(0.62f, 0.3f, -1.05f); cam.transform.LookAt(c + new Vector3(0.35f, 0.02f, -0.45f)); cam.fieldOfView = 44f;
+                WonderlandRenders.Capture(cam, "editor-day-work.png", 1920, 1200);
+                Debug.Log($"editor-day-work.png: {w.People.Census()}, {carrying} carrying produce");
+                for (int guard = 0; guard < 72 * 900 && Mathf.Abs(w.Clock.Hour - 14.5f) > 0.05f; guard++) { w.Clock.Tick(Dt); w.People.Step(Dt); w.Animals.Step(Dt); }
+                Debug.Log("Fête: " + w.HoldFete());
+                for (int i = 0; i < 72 * 45; i++) { w.Clock.Tick(Dt); w.People.Step(Dt); w.Animals.Step(Dt); }
+                WonderlandLighting.SetTimeOfDay(key, w.Clock.Hour, w.Clock.Daylight, 0f);
+                w.Buildings.Animate(3f, 3f);
+                cam.transform.position = c + new Vector3(0.24f, 0.2f, -0.64f); cam.transform.LookAt(c + new Vector3(-0.07f, 0.015f, -0.26f)); cam.fieldOfView = 40f;
+                WonderlandRenders.Capture(cam, "editor-day-fete.png", 1920, 1200);
+                Debug.Log($"editor-day-fete.png: {w.People.Census()}");
+                WonderlandLighting.SetTimeOfDay(key, 13f, 1f, 0f);
+                WonderlandLighting.Configure(key);
                 UnityEngine.Object.DestroyImmediate(w.gameObject);
             }
+            TownRenders(cam);
+            WeatherRenders(cam);
+            BoatRenders(cam);
             {
                 // Railway network demo: a loop, a branch joined back as a second loop, a line across with diamond crossings,
                 // a station, three trains and a stop signal.
@@ -1432,8 +1507,7 @@ namespace Wonderland.Editor
                     var spot = FindHouseSpot(w, i);
                     w.PlaceHouse(spot);
                 }
-                w.PlaceSignal(t.PointAt(-0.58f, 0.05f));
-                w.ToggleSignal(0);
+                w.PlaceSignal(t.PointAt(-0.58f, 0.05f));   // automatic
                 PlaceTrainAt(w, t.PointAt(0f, 0.4f));
                 w.PlaceTrain(t.PointAt(-0.5f, -0.05f), TrainKind.Goods, Vector3.back, out _);
                 w.PlaceTrain(t.PointAt(-0.8f, -0.344f), TrainKind.Railcar, Vector3.right, out _);

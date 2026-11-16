@@ -78,6 +78,7 @@ Shader "Wonderland/Water"
                 half foamFlow = flow > 0.01 ? smoothstep(0.78h, 0.92h, n2) * 0.6h : 0.0h;
                 half foam = saturate(foamBand + foamFlow);
                 colour = lerp(colour, half3(0.95h, 0.97h, 1.0h), foam * 0.85h);
+                colour *= lerp(1.0h, half3(0.3h, 0.36h, 0.55h), _WL_Night);   // moonlit at night
                 half alpha = lerp(0.6h, 0.9h, depth);
                 alpha = max(alpha, foam * 0.9h);
                 alpha *= saturate(depth * 40.0h + shore);   // feather the very edge

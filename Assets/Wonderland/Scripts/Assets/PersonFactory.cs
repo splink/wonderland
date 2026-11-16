@@ -29,6 +29,21 @@ namespace Wonderland
         public static Mesh Body(int s) => Bodies[s % StyleCount] ??= BuildBody(Style(s % StyleCount));
         public static Mesh Arm(int s) => Arms[s % StyleCount] ??= BuildArm(Style(s % StyleCount));
         public static Mesh Leg(int s) => Legs[s % StyleCount] ??= BuildLeg(Style(s % StyleCount));
+        private static Mesh crate;
+
+        /// <summary>A little crate of produce, carried in front (the figure's local frame, centred).</summary>
+        public static Mesh Crate => crate ??= BuildCrate();
+
+        private static Mesh BuildCrate()
+        {
+            var b = new MeshBuilder();
+            var wood = Pal.Hex("#B07A45");
+            b.AddBox(new Vector3(0f, -0.0022f, 0f), new Vector3(0.0074f, 0.0044f, 0.0052f), wood, Pal.Shade(wood, 1.1f), Pal.Shade(wood, 0.7f), false);
+            b.AddBox(new Vector3(0f, -0.0008f, 0f), new Vector3(0.0078f, 0.0009f, 0.0056f), Pal.Shade(wood, 0.8f));   // the rim
+            for (int i = 0; i < 4; i++)
+                b.AddBlob(new Vector3(-0.0024f + i * 0.0016f, 0.0003f, (i % 2 - 0.5f) * 0.0016f), Vector3.one * 0.0011f, 0, 0f, 20 + i, (_, __) => i % 2 == 0 ? Pal.Hex("#D9473A") : Pal.Hex("#E8B84A"));
+            return b.ToMesh("Crate");
+        }
 
         private static Mesh BuildBody(Outfit o)
         {

@@ -24,6 +24,13 @@ namespace Wonderland
         private Material material;
 
         public void Init(Material water) => material = water;
+        /// <summary>The land (where the ponds are: a stream's ribbon ends at a pond's surface).</summary>
+        public TerrainField Terrain;
+
+        private static bool InPond(TerrainField t, float x, float z) => t != null && t.WaterAt(x, z) > 0.5f && t.WaterLevelAt(x, z) > 0f;
+
+        /// <summary>The water level a stream would have here: a pond's own surface in a pond, else just below the ground.</summary>
+        private static float Target(TerrainField t, float x, float z) => InPond(t, x, z) ? t.WaterLevelAt(x, z) - 0.0005f : t.SurfaceAt(x, z) - 0.004f;
 
         /// <summary>Smooths a drawn stroke into a stream course and gives it a downhill water level. Null if too short.</summary>
         public static StreamPath Plan(IReadOnlyList<Vector3> drawn, TerrainField terrain)
@@ -38,12 +45,14 @@ namespace Wonderland
                 for (int i = 1; i < pts.Count - 1; i++) pts[i] = copy[i] + ((copy[i - 1] + copy[i + 1]) * 0.5f - copy[i]) * 0.5f;
             }
             pts = TrackPlanner.Resample(pts, Spacing, false);
+            // Water runs downhill: drawn from the lower end (a lower pond) to the higher, it flows the other way.
+            if (Target(terrain, pts[^1].x, pts[^1].y) > Target(terrain, pts[0].x, pts[0].y) + 0.003f) pts.Reverse();
             var path = new StreamPath();
             float level = float.MaxValue;
             foreach (var p in pts)
             {
-                float ground = terrain.SurfaceAt(p.x, p.y) - 0.004f;
-                level = Mathf.Max(TerrainField.MinHeight + Depth * 0.6f + 0.002f, Mathf.Min(level, ground));
+                // Through a pond the stream is the pond: its level is the pond's surface, not the pond's bed.
+                level = Mathf.Max(TerrainField.MinHeight + Depth * 0.6f + 0.002f, Mathf.Min(level, Target(terrain, p.x, p.y)));
                 path.points.Add(new Vector3(p.x, level, p.y));
             }
             return path;
@@ -57,6 +66,7 @@ namespace Wonderland
             {
                 var p = s.points[i];
                 float ground = terrain.SurfaceAt(p.x, p.z) - 0.004f;
+                if (InPond(terrain, p.x, p.z)) { level = Mathf.Min(level, Target(terrain, p.x, p.z)); s.points[i] = new Vector3(p.x, level, p.z); continue; }
                 // Sample the banks, not the channel bed, so a stream never digs itself ever deeper.
                 var t = (s.points[Mathf.Min(i + 1, s.points.Count - 1)] - s.points[Mathf.Max(i - 1, 0)]); t.y = 0f;
                 if (t.sqrMagnitude > 1e-8f)
@@ -75,6 +85,7 @@ namespace Wonderland
             float minX = float.MaxValue, minZ = float.MaxValue, maxX = float.MinValue, maxZ = float.MinValue;
             foreach (var p in s.points) { minX = Mathf.Min(minX, p.x); maxX = Mathf.Max(maxX, p.x); minZ = Mathf.Min(minZ, p.z); maxZ = Mathf.Max(maxZ, p.z); }
             float reach = HalfWidth + Bank;
+            bool wetStart = InPond(terrain, s.points[0].x, s.points[0].z), wetEnd = InPond(terrain, s.points[^1].x, s.points[^1].z);
             var region = terrain.RegionAround(new Vector2((minX + maxX) / 2f, (minZ + maxZ) / 2f), Mathf.Max(maxX - minX, maxZ - minZ) / 2f + reach + 0.02f);
             for (int z = region.yMin; z < region.yMax; z++)
             for (int x = region.xMin; x < region.xMax; x++)
@@ -84,7 +95,8 @@ namespace Wonderland
                 if (d >= reach) continue;
                 int i = z * terrain.Nx + x;
                 if (terrain.Land[i] < 0.5f || terrain.Pad[i] > 0.05f) continue;
-                float taper = Mathf.Clamp01(along / 0.05f) * Mathf.Clamp01((PathLength(s) - along) / 0.05f);
+                if (terrain.Water != null && terrain.Water[i] > 0.5f) continue;   // in a pond: the pond is the stream there (no dam across it)
+                float taper = (wetStart ? 1f : Mathf.Clamp01(along / 0.05f)) * (wetEnd ? 1f : Mathf.Clamp01((PathLength(s) - along) / 0.05f));   // full width into a pond
                 float hw = HalfWidth * Mathf.Lerp(0.45f, 1f, taper);
                 if (d < hw)
                 {
@@ -133,7 +145,36 @@ namespace Wonderland
             return best;
         }
 
-        public bool IsWet(Vector2 p, float margin = 0f) => DistanceTo(p, out _) < HalfWidth + margin;
+        /// <summary>On (or within <paramref name="margin"/> of) a stream's water. Streams far away are skipped by their bounding boxes.</summary>
+        public bool IsWet(Vector2 p, float margin = 0f)
+        {
+            float reach = HalfWidth + margin;
+            if (boxes.Count != Streams.Count || boxedPoints != PointCount()) Box();
+            for (int i = 0; i < Streams.Count; i++)
+            {
+                var b = boxes[i];
+                if (p.x < b.xMin - reach || p.x > b.xMax + reach || p.y < b.yMin - reach || p.y > b.yMax + reach) continue;
+                if (Nearest(Streams[i], p, out _, out _) < reach) return true;
+            }
+            return false;
+        }
+
+        private readonly List<Rect> boxes = new();
+        private int boxedPoints = -1;
+
+        private int PointCount() { int n = 0; foreach (var s in Streams) n += s.points.Count; return n; }
+
+        private void Box()
+        {
+            boxes.Clear();
+            foreach (var s in Streams)
+            {
+                float x0 = float.MaxValue, z0 = float.MaxValue, x1 = float.MinValue, z1 = float.MinValue;
+                foreach (var q in s.points) { x0 = Mathf.Min(x0, q.x); z0 = Mathf.Min(z0, q.z); x1 = Mathf.Max(x1, q.x); z1 = Mathf.Max(z1, q.z); }
+                boxes.Add(Rect.MinMaxRect(x0, z0, x1, z1));
+            }
+            boxedPoints = PointCount();
+        }
 
         public int Pick(Vector2 p, float within)
         {
@@ -159,13 +200,17 @@ namespace Wonderland
                 var b = new MeshBuilder();
                 int n = s.points.Count;
                 const int across = 4;
+                // Where it runs through a pond the pond's own water shows; the ribbon meets it at full width (no taper).
+                var wet = new bool[n];
+                for (int i = 0; i < n; i++) wet[i] = InPond(Terrain, s.points[i].x, s.points[i].z);
+                float startTaper = wet[0] ? 0f : 0.05f, endTaper = wet[n - 1] ? 0f : 0.05f;
                 for (int i = 0; i < n; i++)
                 {
                     var p = s.points[i];
                     var t = s.points[Mathf.Min(i + 1, n - 1)] - s.points[Mathf.Max(i - 1, 0)]; t.y = 0f; t.Normalize();
                     var side = Vector3.Cross(Vector3.up, t);
                     float along = i * Spacing, length = (n - 1) * Spacing;
-                    float taper = Mathf.Clamp01(along / 0.05f) * Mathf.Clamp01((length - along) / 0.05f);
+                    float taper = (startTaper > 0f ? Mathf.Clamp01(along / startTaper) : 1f) * (endTaper > 0f ? Mathf.Clamp01((length - along) / endTaper) : 1f);
                     float hw = (HalfWidth + 0.006f) * Mathf.Lerp(0.45f, 1f, taper);
                     float drop = (s.points[Mathf.Max(i - 1, 0)].y - s.points[Mathf.Min(i + 1, n - 1)].y) / (2f * Spacing);
                     float rapids = Mathf.Clamp01(drop * 12f);
@@ -177,7 +222,7 @@ namespace Wonderland
                         int v = b.AddVertex(p + side * off * hw + Vector3.up * 0.0004f, Vector3.up, new Color(depth, shore, 0.5f + rapids * 0.5f, 1f));
                         b.Uvs[v] = new Vector2(u * 0.6f, along);
                     }
-                    if (i > 0)
+                    if (i > 0 && !(wet[i] && wet[i - 1]))
                         for (int k = 0; k < across; k++)
                         {
                             int a = (i - 1) * (across + 1) + k, c = i * (across + 1) + k;

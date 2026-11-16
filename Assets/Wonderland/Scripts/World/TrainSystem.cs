@@ -5,7 +5,7 @@ using UnityEngine.Rendering;
 
 namespace Wonderland
 {
-    public enum TrainKind { Passenger = 0, Goods = 1, Railcar = 2 }
+    public enum TrainKind { Passenger = 0, Goods = 1, Railcar = 2, Express = 3, Tank = 4 }
 
     /// <summary>How switches behave when trains pass them facing (from the trunk).</summary>
     public enum SwitchMode { Explore = 0, Random = 1, Manual = 2 }
@@ -36,6 +36,8 @@ namespace Wonderland
         public float SpeedFactor = 1f;
         public float Speed { get; internal set; }
         public int Dir = 1;                                   // +1: locomotive end leads; -1: pushing (tail leads)
+        public int Reversals { get; internal set; }           // how often it has turned back (at buffers, a station, or backing away)
+        internal float HeldBack;                              // extra seconds held at a station to keep its distance
         public float Length { get; internal set; }
         public float Odometer { get; internal set; }
         public float Dwell { get; internal set; }
@@ -45,7 +47,16 @@ namespace Wonderland
         public int BlockedBy { get; internal set; } = -1;     // index of the train it is waiting for (-1 none)
         public BlockReason Blocked { get; internal set; }
         public float WaitTime { get; internal set; }
+        public int Cargo;                                     // goods trains: crates of produce aboard
+        public int Carriages = -1;                                 // carriages or wagons behind the engine (-1: the kind's usual number)
+        public int LoadedAt = -1;                             // the station they were loaded at (unloaded elsewhere)
+        public int HandledStop = -1;                          // the halt whose goods were already handled
         internal int DepartedStation = -1;
+        internal readonly List<int> Calls = new();            // StopsAhead, cached while it stands still
+        internal float CallsOdometer = -1f;
+        internal int CallsKey;
+        /// <summary>The station it is standing at (an index into the stations), or -1 while it is not halted at one.</summary>
+        public int AtStation => Dwell > 0f ? DepartedStation : -1;
         internal Car[] Cars;
         internal ParticleSystem Smoke;
         internal float Chuff;
@@ -114,24 +125,38 @@ namespace Wonderland
 
         // ------------------------------------------------------------------ consists
 
-        private static CarLayout[] Consist(TrainKind kind) => kind switch
+        /// <summary>How many carriages (wagons; railcar units) a train of this kind may have, and has unless changed.</summary>
+        public static (int min, int usual, int max) CarRange(TrainKind kind) => kind switch
         {
-            TrainKind.Goods => new[] { TrainFactory.Loco, TrainFactory.Wagon, TrainFactory.Wagon, TrainFactory.Wagon, TrainFactory.Wagon },
-            TrainKind.Railcar => new[] { TrainFactory.Railcar },
-            _ => new[] { TrainFactory.Loco, TrainFactory.Coach, TrainFactory.Coach },
+            TrainKind.Goods => (0, 4, 8), TrainKind.Railcar => (1, 1, 3), TrainKind.Express => (2, 4, 7), TrainKind.Tank => (0, 2, 3), _ => (0, 2, 6),
         };
+
+        public static int CarsOf(Train t) => t.Carriages >= 0 ? t.Carriages : CarRange(t.Kind).usual;
+
+        private static CarLayout[] Consist(TrainKind kind, int cars = -1)
+        {
+            var (min, usual, max) = CarRange(kind);
+            int n = Mathf.Clamp(cars < 0 ? usual : cars, min, max);
+            if (kind == TrainKind.Railcar) { var r = new CarLayout[n]; for (int i = 0; i < n; i++) r[i] = TrainFactory.Railcar; return r; }
+            var c = new CarLayout[n + 1];
+            c[0] = kind == TrainKind.Express ? TrainFactory.Diesel : kind == TrainKind.Tank ? TrainFactory.Tank : TrainFactory.Loco;
+            for (int i = 1; i <= n; i++) c[i] = kind == TrainKind.Goods ? TrainFactory.Wagon : TrainFactory.Coach;
+            return c;
+        }
 
         private static Mesh CarMesh(TrainKind kind, int index, int livery) => kind switch
         {
             TrainKind.Goods => index == 0 ? TrainFactory.LocoMesh(livery) : TrainFactory.WagonMesh((index - 1) % TrainFactory.WagonVariants),
             TrainKind.Railcar => TrainFactory.RailcarMesh(livery),
+            TrainKind.Express => index == 0 ? TrainFactory.DieselMesh(livery) : TrainFactory.CoachMesh(index - 1, livery),
+            TrainKind.Tank => index == 0 ? TrainFactory.TankMesh(livery) : TrainFactory.CoachMesh(index - 1, livery),
             _ => index == 0 ? TrainFactory.LocoMesh(livery) : TrainFactory.CoachMesh(index - 1, livery),
         };
 
-        public static float LengthOf(TrainKind kind)
+        public static float LengthOf(TrainKind kind, int cars = -1)
         {
             float l = 0f;
-            var c = Consist(kind);
+            var c = Consist(kind, cars);
             for (int i = 0; i < c.Length; i++) l += c[i].Front - c[i].Rear + (i > 0 ? Gap : 0f);
             return l;
         }
@@ -146,7 +171,8 @@ namespace Wonderland
         {
             error = null;
             if (Trains.Count >= MaxTrains) { error = $"That's plenty of trains ({MaxTrains})"; return null; }
-            var t = new Train { Kind = kind, Livery = livery, Length = LengthOf(kind) };
+            var t = new Train { Kind = kind, Livery = livery, Length = LengthOf(kind), SpeedFactor = kind == TrainKind.Express ? 1.3f : kind == TrainKind.Tank ? 0.8f : 1f };
+            if (Net.OneWay) orientation = 1;   // one way: every train faces the way the railway runs
             if (!Lay(t, edge, s, orientation, t.Length * 0.5f, null)) { error = "Not enough track here for this train"; return null; }
             var mine = Intervals(t.Path);
             RefreshHeld();
@@ -169,6 +195,41 @@ namespace Wonderland
             if (missing > 0.001f) missing -= ExtendFront(t.Path, missing, choose);
             return missing <= 0.002f;
         }
+
+        /// <summary>
+        /// Couples on or uncouples carriages (wagons, railcar units): the engine stays where it is and the train grows or
+        /// shrinks behind it. Returns null, or why not (the most or fewest it can have; no room on the track behind).
+        /// </summary>
+        public string SetCars(Train t, int cars)
+        {
+            var (min, _, max) = CarRange(t.Kind);
+            int now = CarsOf(t);
+            if (cars > max) return $"That's as long as this train gets ({max} {CarWord(t.Kind, max)})";
+            if (cars < min) return t.Kind == TrainKind.Railcar ? "A railcar runs on its own at the least" : "Just the engine now";
+            if (cars == now) return null;
+            var front = PointAt(t.Path, t.Length, out var forward);   // the engine's end (the path runs tail to engine)
+            var old = (t.Carriages, t.Length, new List<TrackSpan>(t.Path));
+            t.Carriages = cars; t.Length = LengthOf(t.Kind, cars);
+            bool laid = LayAt(t, front, forward, null);
+            var mine = laid ? Intervals(t.Path) : null;
+            bool clash = false;
+            if (laid) { RefreshHeld(); int me = Trains.IndexOf(t); for (int i = 0; i < Trains.Count && !clash; i++) if (i != me && Conflicts(mine, held[i], true)) clash = true; }
+            if (!laid || clash)
+            {
+                (t.Carriages, t.Length) = (old.Item1, old.Item2); t.Path.Clear(); t.Path.AddRange(old.Item3);
+                return clash ? "Another train is in the way" : "No room on the track behind for another";
+            }
+            t.Claim.Clear(); t.ClaimLength = 0f;
+            Release(t.Root.gameObject);
+            Build(t);
+            Pose(t);
+            return null;
+        }
+
+        public static string CarWord(TrainKind kind, int n) => kind switch
+        {
+            TrainKind.Goods => n == 1 ? "wagon" : "wagons", TrainKind.Railcar => n == 1 ? "car" : "cars", _ => n == 1 ? "carriage" : "carriages",
+        };
 
         public void Remove(Train t)
         {
@@ -201,6 +262,13 @@ namespace Wonderland
         }
 
         /// <summary>Points along every car's centre line (front, middle, back): for clearance checks.</summary>
+        /// <summary>The drawn bodies of a train's cars (tests).</summary>
+        public IEnumerable<Transform> CarBodies(Train t) { foreach (var c in t.Cars) yield return c.Body; }
+
+        /// <summary>A train's state in a line (tests and diagnostics).</summary>
+        public string Debug(Train t) =>
+            $"{t.Kind} dir {t.Dir} speed {t.Speed:0.000} dwell {t.Dwell:0.0} running {t.Running} blocked {t.Blocked}/{t.BlockedBy} wait {t.WaitTime:0.0} path {t.Path.Count} spans {LengthOf(t.Path):0.000}/{t.Length:0.000} m claim {t.ClaimLength:0.00}; spans {string.Join(" ", t.Path.ConvertAll(sp => $"[e{sp.Edge}{(Net.Edges[sp.Edge].Layout.Closed ? " loop" : "")} len {Net.Edges[sp.Edge].Layout.Length:0.000} {sp.S0:0.000}->{sp.S1:0.000}]"))}";
+
         public List<Vector3> CarSamples(Train t)
         {
             var list = new List<Vector3>();
@@ -240,6 +308,8 @@ namespace Wonderland
             public int kind, livery, dir = 1;
             public float x, z, fx, fz = 1f, speed = 1f;
             public bool running;
+            public int cargo;
+            public int cars = -1;   // carriages (-1: the usual; older saves)
         }
 
         public List<TrainData> ToData()
@@ -248,7 +318,7 @@ namespace Wonderland
             foreach (var t in Trains)
             {
                 var front = PointAt(t.Path, t.Length, out var tangent);
-                list.Add(new TrainData { kind = (int)t.Kind, livery = t.Livery, dir = t.Dir, x = front.x, z = front.z, fx = tangent.x, fz = tangent.z, speed = t.SpeedFactor, running = t.Running });
+                list.Add(new TrainData { kind = (int)t.Kind, livery = t.Livery, dir = t.Dir, x = front.x, z = front.z, fx = tangent.x, fz = tangent.z, speed = t.SpeedFactor, running = t.Running, cargo = t.Cargo, cars = t.Carriages });
             }
             return list;
         }
@@ -259,10 +329,12 @@ namespace Wonderland
             if (data == null || Net.Empty) return;
             foreach (var d in data)
             {
-                var t = new Train { Kind = (TrainKind)Mathf.Clamp(d.kind, 0, 2), Livery = d.livery, Length = LengthOf((TrainKind)Mathf.Clamp(d.kind, 0, 2)), Dir = d.dir >= 0 ? 1 : -1, SpeedFactor = d.speed > 0f ? d.speed : 1f, Running = d.running };
+                var t = new Train { Kind = (TrainKind)Mathf.Clamp(d.kind, 0, 4), Livery = d.livery, Length = LengthOf((TrainKind)Mathf.Clamp(d.kind, 0, 4)), Dir = d.dir >= 0 ? 1 : -1, SpeedFactor = d.speed > 0f ? d.speed : 1f, Running = d.running, Cargo = Mathf.Max(0, d.cargo), Carriages = d.cars };
+                t.Length = LengthOf(t.Kind, t.Carriages);
                 if (!LayAt(t, new Vector3(d.x, 0f, d.z), new Vector3(d.fx, 0f, d.fz), null)) continue;
                 Build(t);
                 Trains.Add(t);
+                AlignToFlow(t);
                 Pose(t);
             }
         }
@@ -306,6 +378,7 @@ namespace Wonderland
                 }
                 if (Net.Empty || !LayAt(t, front, forward, Choose)) { Remove(t); continue; }
                 t.BlockedBy = -1; t.WaitTime = 0f;
+                AlignToFlow(t);
                 Pose(t);
             }
         }
@@ -582,13 +655,104 @@ namespace Wonderland
         private void PrepareSwitch(int ji, Train t)
         {
             var j = Net.Joints[ji];
-            if (Mode != SwitchMode.Random || j.Pinned) return;
+            if (Mode == SwitchMode.Manual || j.Pinned) return;
             var last = t.Claim[^1];
             var heading = new EdgeEnd(last.Edge, last.Dir > 0 ? 1 : 0);
             if (heading != j.Trunk) return;                                                       // trailing: nothing to choose
             for (int i = 0; i < Trains.Count; i++) if (TouchesJoint(held[i], ji)) return;        // in use: leave it
-            int setting = random.Next(2);
+            int setting = Mode == SwitchMode.Random ? random.Next(2) : (Net.OneWay ? Spread(ji) : j.Setting);
             if (setting != j.Setting) { j.Setting = setting; SwitchesChanged = true; }
+        }
+
+        // ------------------------------------------------------------------ spreading out
+
+        private readonly Dictionary<long, float> branchUsed = new();
+        private float clock;
+
+        /// <summary>
+        /// Explore on a one-way railway: which way a train coming to a splitting switch goes. Not into a dead-end spur
+        /// when the other way carries on; then the way with fewer trains on the next stretch of line; on a tie the
+        /// way taken longer ago - so trains run every part of the railway and spread out rather than bunch up.
+        /// </summary>
+        private int Spread(int ji)
+        {
+            var j = Net.Joints[ji];
+            float best = float.MaxValue; int choice = j.Setting;
+            for (int k = 0; k < 2; k++)
+            {
+                var b = j.Branch(k);
+                float score = 0f;
+                if (!Net.Through(b.Edge)) score += 100f;                        // a spur: only when there's no way through
+                // Into another circuit it can't come back from: only while that one has fewer trains for its length.
+                int here = Net.CircuitOf(j.Trunk.Edge), there = Net.CircuitOf(b.Edge);
+                if (here != there && Density(there) + 1f / Mathf.Max(0.5f, CircuitLength(there)) > Density(here)) score += 50f;
+                score += TrainsAhead(b) * 2f;
+                branchUsed.TryGetValue(((long)ji << 1) | (uint)k, out float used);
+                score += Mathf.Clamp01(1f - (clock - used) / 60f) * 1.5f;       // taken lately: less keen
+                score += (float)random.NextDouble() * 0.01f;
+                if (score < best) { best = score; choice = k; }
+            }
+            branchUsed[((long)ji << 1) | (uint)choice] = clock;
+            return choice;
+        }
+
+        /// <summary>Trains on (or reserving) the track within about two metres beyond a switch's branch, nearer ones counting more.</summary>
+        private float TrainsAhead(EdgeEnd branch)
+        {
+            var near = new Dictionary<int, float>();   // edge -> how far along the way it starts
+            var queue = new Queue<(int edge, float at)>();
+            queue.Enqueue((branch.Edge, 0f)); near[branch.Edge] = 0f;
+            while (queue.Count > 0)
+            {
+                var (e, at) = queue.Dequeue();
+                float end = at + Net.Edges[e].Layout.Length;
+                if (end > 2f || Net.Edges[e].Closed) continue;
+                int ji = Net.JointAt(new EdgeEnd(e, 1));
+                if (ji < 0) continue;
+                foreach (var x in Net.Joints[ji].Ends)
+                    if (!TrackNetwork.Arrives(x) && !near.ContainsKey(x.Edge)) { near[x.Edge] = end; queue.Enqueue((x.Edge, end)); }
+            }
+            float count = 0f;
+            foreach (var t in Trains)
+            {
+                float closest = float.MaxValue;
+                foreach (var sp in t.Path) if (near.TryGetValue(sp.Edge, out float d)) closest = Mathf.Min(closest, d);
+                foreach (var sp in t.Claim) if (near.TryGetValue(sp.Edge, out float d)) closest = Mathf.Min(closest, d);
+                if (closest < float.MaxValue) count += 1f / (1f + closest);
+            }
+            return count;
+        }
+
+        /// <summary>Trains per metre of track in a circuit.</summary>
+        private float Density(int c)
+        {
+            int n = 0;
+            foreach (var t in Trains) if (t.Path.Count > 0 && Net.CircuitOf(t.Path[^1].Edge) == c) n++;
+            return n / Mathf.Max(0.5f, CircuitLength(c));
+        }
+
+        private float CircuitLength(int c)
+        {
+            float l = 0f;
+            for (int e = 0; e < Net.Edges.Count; e++) if (Net.CircuitOf(e) == c) l += Net.Edges[e].Layout.Length;
+            return l;
+        }
+
+        /// <summary>How far trains would be apart if spread evenly over the railway.</summary>
+        private float EvenSpacing() => Trains.Count > 0 ? Net.TotalLength / Trains.Count : float.MaxValue;
+
+        /// <summary>Straight-line distance to the nearest other train in front of this one's engine (roughly how close the next train is).</summary>
+        private float GapAhead(Train t)
+        {
+            var at = LocoPosition(t); var fwd = LocoRotation(t) * Vector3.forward;
+            float best = float.MaxValue;
+            foreach (var o in Trains)
+            {
+                if (o == t) continue;
+                var d = CentrePosition(o) - at;
+                if (Vector3.Dot(d, fwd) > 0f) best = Mathf.Min(best, d.magnitude);
+            }
+            return best;
         }
 
         /// <summary>Notes switches a reservation runs through facing, so Explore can alternate them once they are clear.</summary>
@@ -608,13 +772,14 @@ namespace Wonderland
         private void Update()
         {
             if (Trains.Count == 0 || track == null) { if (ribbonMesh != null && ribbonMesh.vertexCount > 0) ribbonMesh.Clear(); return; }
-            Step(Time.deltaTime);
+            long t0 = SimCost.Now; Step(Time.deltaTime); SimCost.Add(SimCost.Trains, t0);
         }
 
         /// <summary>Advances every train (also called by the scripted tests).</summary>
         public void Step(float dt)
         {
             if (Net.Empty) return;
+            clock += dt;
             RefreshHeld();
             AlternateSwitches();
             for (int i = 0; i < Trains.Count; i++)
@@ -640,6 +805,14 @@ namespace Wonderland
             {
                 t.Dwell -= dt; t.Speed = 0f;
                 if (t.Dwell > 0f) { Pose(t); return; }
+                // Explore: now and then a train turns back at a station, so in time it runs every way through every
+                // switch (a train circling a loop one way would never take a branch that faces the other way).
+                if (!Net.OneWay && Mode == SwitchMode.Explore && random.NextDouble() < 0.3 && Alone(t, 0.8f)) TurnBack(t);
+                // One that had to back away from another train: at the station its engine runs round to lead again.
+                else if (t.Dir < 0 && t.Kind != TrainKind.Railcar) TurnRound(t);
+                // Keeping their distance: a train ahead that is close? Wait a little longer, so trains spread round the railway.
+                if (Net.OneWay && t.HeldBack < 8f && Trains.Count > 1 && GapAhead(t) < EvenSpacing() * 0.45f) { t.Dwell = 1f; t.HeldBack += 1f; Pose(t); return; }
+                t.HeldBack = 0f;
             }
             // Never beyond the reservation.
             float room = Mathf.Max(0f, t.ClaimLength - 0.008f);
@@ -681,8 +854,59 @@ namespace Wonderland
             t.Odometer += moved;
         }
 
+        /// <summary>No other train within <paramref name="within"/> of this one's engine (so it can turn back safely).</summary>
+        private bool Alone(Train t, float within)
+        {
+            var at = LocoPosition(t);
+            foreach (var o in Trains) if (o != t && (LocoPosition(o) - at).magnitude < within + 0.1f * (CarsOf(o) + CarsOf(t))) return false;
+            return true;
+        }
+
+        /// <summary>Is the train running the way the railway runs (one way), engine first?</summary>
+        private bool WithFlow(Train t)
+        {
+            if (t.Path.Count == 0) return true;
+            int lead = t.Dir > 0 ? t.Path[^1].Dir : -t.Path[0].Dir;
+            return lead > 0 && t.Dir > 0;
+        }
+
+        /// <summary>One way: a train facing against the railway's direction runs round and sets off the right way.</summary>
+        public void AlignToFlow(Train t)
+        {
+            if (!Net.OneWay || t.Path.Count == 0) return;
+            int lead = t.Dir > 0 ? t.Path[^1].Dir : -t.Path[0].Dir;
+            if (lead < 0) { Reverse(t); t.Reversals--; }                      // the right way round, but moving backwards
+            if (t.Dir < 0) TurnRound(t);                                        // engine at the back: run round
+            lead = t.Path[^1].Dir;
+            if (lead < 0) { Reverse(t); TurnRound(t); t.Reversals--; }          // still against the flow: set off the other way
+        }
+
+        /// <summary>
+        /// The engine runs round its train: it moves to the other end, so a train that was pushing (running tender or
+        /// tail first) now has its engine leading, the same way along the same track. Railcars have a cab at each end
+        /// and just change ends.
+        /// </summary>
+        public void TurnRound(Train t)
+        {
+            t.Path.Reverse();
+            for (int i = 0; i < t.Path.Count; i++) { var sp = t.Path[i]; t.Path[i] = new TrackSpan { Edge = sp.Edge, Dir = -sp.Dir, S0 = sp.S1, S1 = sp.S0 }; }
+            t.Dir = -t.Dir;
+            t.Claim.Clear(); t.ClaimLength = 0f;
+            t.WaitTime = 0f; t.BlockedBy = -1;
+            t.CallsOdometer = -1f;
+            Pose(t);
+        }
+
+        /// <summary>Turns back at the end of the line or a station: the engine runs round so it leads again (railcars just change ends).</summary>
+        private void TurnBack(Train t)
+        {
+            if (t.Kind == TrainKind.Railcar) Reverse(t);
+            else { Reverse(t); TurnRound(t); }
+        }
+
         public void Reverse(Train t)
         {
+            t.Reversals++;
             t.Dir = -t.Dir;
             t.Claim.Clear(); t.ClaimLength = 0f;
             t.WaitTime = 0f; t.BlockedBy = -1;
@@ -700,11 +924,12 @@ namespace Wonderland
                 bool waiting = t.Running && t.Dwell <= 0f && t.Speed < 0.002f && t.ClaimLength < 0.02f;
                 t.WaitTime = waiting && t.Blocked != BlockReason.None ? t.WaitTime + dt : 0f;
                 if (!waiting) continue;
-                if (t.Blocked == BlockReason.Buffers && t.WaitTime > 0.5f) { Reverse(t); continue; }
+                if (t.Blocked == BlockReason.Buffers && t.WaitTime > 0.5f) { TurnBack(t); continue; }
                 if (t.Blocked != BlockReason.Train || t.BlockedBy < 0 || t.BlockedBy >= Trains.Count) continue;
                 var other = Trains[t.BlockedBy];
                 bool mutual = other.Blocked == BlockReason.Train && other.BlockedBy == i;
                 bool queueing = other.Blocked == BlockReason.Signal || other.Dwell > 0f;   // behind a train at a red signal or a station: wait
+                if (Net.OneWay && !mutual) continue;   // one way: whoever is ahead moves on in time; never back into oncoming trains
                 if ((mutual && i > t.BlockedBy && t.WaitTime > 1.5f) || (!queueing && t.WaitTime > 12f)) Reverse(t);
             }
         }
@@ -712,6 +937,7 @@ namespace Wonderland
         /// <summary>Explore: a switch a train went through facing flips once it is clear, so the next train goes the other way.</summary>
         private void AlternateSwitches()
         {
+            if (Net.OneWay) return;   // one way: switches are chosen as each train comes (see PrepareSwitch)
             for (int ji = 0; ji < Net.Joints.Count; ji++)
             {
                 var j = Net.Joints[ji];
@@ -724,10 +950,84 @@ namespace Wonderland
             }
         }
 
-        /// <summary>The next station ahead whose platform centre the train's centre will reach, and how far that is.</summary>
-        private int NextStation(Train t, out float ahead)
+        /// <summary>
+        /// The stations a train will call at next, in order (not the one it stands at), following the switches as they
+        /// are set now and turning back at buffers as it would: what a passenger on the platform reads off the
+        /// destination board. In Explore mode a switch flips once each train has passed, so this is what the next train
+        /// through will do; a later train may of course be routed differently.
+        /// </summary>
+        public void StopsAhead(Train t, List<int> into, int max = 4)
         {
-            ahead = float.MaxValue;
+            StopsAheadAll(t, into, max);
+            if (into.Count > max) into.RemoveRange(max, into.Count - max);
+        }
+
+        private void StopsAheadAll(Train t, List<int> into, int max)
+        {
+            into.Clear();
+            if (Stations.Count == 0 || Net.Empty || t.Path.Count == 0) return;
+            float total = 0f;
+            foreach (var e in Net.Edges) total += e.Layout.Length;
+            float range = Mathf.Min(total * 2.2f + 0.5f, 40f), dist = 0f;
+            // From its centre (where it halts) to its leading end, then on along the line.
+            var probe = AheadOfCentre(t);
+            if (probe.Count == 0) probe.Add(LeadingSpan(t));
+            int skip = t.AtStation, last = -1, turns = 0, legStart = 0;
+            bool first = true;
+            var at = new List<float>();   // how far along the line each call is
+            for (int guard = 0; guard < 400 && dist < range && into.Count <= max; guard++)
+            {
+                float got = 0f;
+                if (first) { first = false; foreach (var p0 in probe) got += p0.Length; got = Mathf.Max(got, 0.001f); }
+                else { var sp = probe[^1]; sp.S0 = sp.S1; probe.Clear(); probe.Add(sp); got = ExtendFront(probe, 0.25f, null); }
+                if (got < 0.0005f)
+                {
+                    // Buffers: a platform the train's centre can't reach before them is no stop. Then it reverses.
+                    while (into.Count > legStart && at[^1] > dist - t.Length * 0.5f + 0.01f) { into.RemoveAt(into.Count - 1); at.RemoveAt(at.Count - 1); }
+                    last = into.Count > 0 ? into[^1] : -1; skip = last >= 0 ? last : t.AtStation;
+                    legStart = into.Count;
+                    if (++turns > 2) break;
+                    var end = probe[^1];
+                    probe.Clear(); probe.Add(new TrackSpan { Edge = end.Edge, S0 = end.S1, S1 = end.S1, Dir = -end.Dir });
+                    continue;
+                }
+                float segStart = dist;
+                foreach (var seg in probe)
+                {
+                    var l = Net.Edges[seg.Edge].Layout;
+                    int found = -1; float best = float.MaxValue;
+                    for (int si = 0; si < Stations.Count; si++)
+                    {
+                        var st = Stations[si];
+                        if (st.Edge != seg.Edge || si == skip) continue;
+                        float s = st.S;
+                        if (l.Closed) { float lo = Mathf.Min(seg.S0, seg.S1); s = lo + Mathf.Repeat(s - lo, l.Length); }
+                        float along = (s - seg.S0) * seg.Dir;
+                        if (along < 0f || along > seg.Length || along >= best) continue;
+                        best = along; found = si;
+                    }
+                    if (found >= 0 && found != last) { into.Add(found); at.Add(segStart + best); last = found; skip = found; }
+                    segStart += seg.Length;
+                }
+                dist += got;
+            }
+        }
+
+        /// <summary>Whether a train is bound for a station within its next few (up to four) calls.</summary>
+        public bool CallsAt(Train t, int station, int within = 3)
+        {
+            // Asked every frame by everyone on the platform: worked out again only once the train or a switch moved.
+            int key = t.Dir * 7919 + Stations.Count * 31;
+            foreach (var j in Net.Joints) key = key * 3 + j.Setting;
+            if (t.CallsOdometer != t.Odometer || t.CallsKey != key) { StopsAhead(t, t.Calls, 4); t.CallsOdometer = t.Odometer; t.CallsKey = key; }
+            for (int k = 0; k < t.Calls.Count && k < within; k++) if (t.Calls[k] == station) return true;
+            return false;
+        }
+
+        /// <summary>The next station ahead whose platform centre the train's centre will reach, and how far that is.</summary>
+        /// <summary>The track from a train's centre to its leading end, in the direction it moves.</summary>
+        private List<TrackSpan> AheadOfCentre(Train t)
+        {
             var route = new List<TrackSpan>();
             // From the train's centre to its leading end, then its reservation.
             float half = t.Length * 0.5f, acc = 0f;
@@ -753,6 +1053,13 @@ namespace Wonderland
                     route.Add(c);
                 }
             }
+            return route;
+        }
+
+        private int NextStation(Train t, out float ahead)
+        {
+            ahead = float.MaxValue;
+            var route = AheadOfCentre(t);
             route.AddRange(t.Claim);
             int found = -1; float dist = 0f;
             bool departedAhead = false;
@@ -784,13 +1091,97 @@ namespace Wonderland
 
         // ------------------------------------------------------------------ signals and the route ribbon
 
+        private bool[] lamps = Array.Empty<bool>();
+
+        /// <summary>A train holds track within 40 cm of signal <paramref name="i"/> (its lamp shows red on automatic).</summary>
+        public bool SignalOccupied(int i)
+        {
+            if (i >= track.SignalSpots.Count) return false;
+            var (edge, s) = track.SignalSpots[i];
+            if (edge < 0) return false;
+            var l = Net.Edges[edge].Layout;
+            for (int t = 0; t < Trains.Count && t < held.Length; t++)
+                foreach (var iv in held[t])
+                {
+                    if (iv.Edge != edge) continue;
+                    float lo = s - 0.4f, hi = s + 0.4f;
+                    if (iv.Hi > lo && iv.Lo < hi) return true;
+                    if (l.Closed && (iv.Hi > lo + l.Length && iv.Lo < hi + l.Length || iv.Hi > lo - l.Length && iv.Lo < hi - l.Length)) return true;
+                }
+            return false;
+        }
+
+        /// <summary>Whether signal <paramref name="i"/> shows green now.</summary>
+        public bool SignalGreen(int i) => i < track.Signals.Count && !track.Signals[i].red && !SignalOccupied(i);
+
+        // ------------------------------------------------------------------ names and descriptions
+
+        private readonly List<string> stationNames = new();
+        private int namedStations = -1;
+
+        /// <summary>The station (an index into the stations) of the station building standing at <paramref name="at"/>, or -1.</summary>
+        public int StationAt(Vector2 at)
+        {
+            for (int i = 0; i < Stations.Count; i++) if ((Stations[i].House - at).sqrMagnitude < 1e-6f) return i;
+            return -1;
+        }
+
+        /// <summary>The village a station serves ("Brookside"): fixed by where it stands, and unique in the world.</summary>
+        public string StationName(int i)
+        {
+            if (i < 0 || i >= Stations.Count) return "the station";
+            int key = Stations.Count;
+            foreach (var st in Stations) key = key * 31 + Mathf.RoundToInt(st.House.x * 997f) + Mathf.RoundToInt(st.House.y * 991f);
+            if (key != namedStations)
+            {
+                namedStations = key; stationNames.Clear();
+                foreach (var st in Stations)
+                {
+                    string name = PlaceNames.Village(st.House);
+                    for (int k = 1; stationNames.Contains(name); k++) name = PlaceNames.Village(st.House + new Vector2(k * 0.37f, k * 0.71f));
+                    stationNames.Add(name);
+                }
+            }
+            return stationNames[i];
+        }
+
+        /// <summary>One line on a train for the palette: what it is, what it is doing, and why if it isn't moving.</summary>
+        public string Describe(Train t)
+        {
+            int cars = CarsOf(t);
+            string what = t.Kind switch
+            {
+                TrainKind.Goods => $"Goods train, {cars} {CarWord(t.Kind, cars)}" + (t.Cargo > 0 ? $" ({t.Cargo} crates)" : ""),
+                TrainKind.Railcar => cars == 1 ? "Railcar" : $"Railcar, {cars} cars",
+                TrainKind.Express => $"Express, {cars} {CarWord(t.Kind, cars)}",
+                TrainKind.Tank => cars == 0 ? "Tank engine" : $"Tank engine, {cars} {CarWord(t.Kind, cars)}",
+                _ => $"Steam train, {cars} {CarWord(t.Kind, cars)}",
+            };
+            string doing;
+            if (t.AtStation >= 0) doing = $"at {StationName(t.AtStation)} station";
+            else if (!t.Running) doing = t.Speed > 0.002f ? "stopping" : "stopped (trigger: go)";
+            else if (t.Speed < 0.004f && t.Blocked == BlockReason.Signal) doing = "waiting at a red signal (tap it for automatic)";
+            else if (t.Speed < 0.004f && t.Blocked == BlockReason.Train) doing = "waiting for the train ahead to clear the line";
+            else if (t.Blocked == BlockReason.Buffers) doing = "at the buffers, reversing";
+            else doing = $"running at {t.SpeedFactor * 100f:0} %";
+            if (t.AtStation < 0 && Stations.Count > 0 && t.Running)
+            {
+                StopsAhead(t, scratchStops, 1);
+                if (scratchStops.Count > 0) doing += $", next stop {StationName(scratchStops[0])}";
+            }
+            return $"{what} - {doing}";
+        }
+
+        private readonly List<int> scratchStops = new();
+
         private void UpdateLamps()
         {
             if (track == null) return;
             var net = Net;
             int count = 0;
             foreach (var j in net.Joints) if (j.Ends.Count == 3) count += 3;
-            var green = new bool[count + track.Signals.Count];
+            if (lamps.Length != count + track.Signals.Count) lamps = new bool[count + track.Signals.Count];
+            var green = lamps;
             int k = 0;
             for (int ji = 0; ji < net.Joints.Count; ji++)
             {
@@ -811,7 +1202,8 @@ namespace Wonderland
                     green[k++] = g;
                 }
             }
-            for (int i = 0; i < track.Signals.Count; i++) green[k++] = !track.Signals[i].red;
+            // Signals: held at red by the player, or automatic - red while a train is on the line within 40 cm.
+            for (int i = 0; i < track.Signals.Count; i++) green[k++] = !track.Signals[i].red && !SignalOccupied(i);
             track.SetLamps(green);
             if (SwitchesChanged) { SwitchesChanged = false; track.RebuildFixtures(); }
         }
@@ -847,7 +1239,7 @@ namespace Wonderland
             var root = new GameObject(t.Kind + " train");
             root.transform.SetParent(transform, false);
             t.Root = root.transform;
-            var consist = Consist(t.Kind);
+            var consist = Consist(t.Kind, t.Carriages);
             t.Cars = new Train.Car[consist.Length];
             float fromFront = 0f;
             for (int i = 0; i < consist.Length; i++)
@@ -866,8 +1258,9 @@ namespace Wonderland
                 {
                     car.Rods = Part(TrainFactory.RodMesh, body);
                     car.Rods.localPosition = new Vector3(0f, layout.Axles[0].y + layout.WheelRadius[0] * 0.45f, 0f);
-                    t.Smoke = CreateSmoke(body);
+                    t.Smoke = CreateSmoke(body, layout.Chimney);
                 }
+                else if (layout == TrainFactory.Tank) t.Smoke = CreateSmoke(body, layout.Chimney);
                 t.Cars[i] = car;
                 fromFront -= layout.Rear;
             }
@@ -921,11 +1314,11 @@ namespace Wonderland
             }
         }
 
-        private ParticleSystem CreateSmoke(Transform loco)
+        private ParticleSystem CreateSmoke(Transform loco, Vector3 chimney)
         {
             var go = new GameObject("Steam");
             go.transform.SetParent(loco, false);
-            go.transform.localPosition = TrainFactory.Loco.Chimney;
+            go.transform.localPosition = chimney;
             go.transform.localRotation = Quaternion.Euler(-90f, 0f, 0f);
             var ps = go.AddComponent<ParticleSystem>();
             ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);

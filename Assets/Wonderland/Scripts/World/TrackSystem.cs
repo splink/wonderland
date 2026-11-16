@@ -92,6 +92,7 @@ namespace Wonderland
             var e = Network.Edges[i];
             var b = new MeshBuilder();
             BuildTrack(b, e.Layout, e.Joint[0] < 0, e.Joint[1] < 0);
+            if (Network.OneWay) Arrows(b, e.Layout, 1, ArrowColour, RailTop - 0.0012f, 0.16f);
             if (e.Tunnel != null) BuildTunnels(b, e.Layout, e.Tunnel);
             b.ToMesh("Track piece", pieces[i].mesh);
             pieces[i].mesh.RecalculateBounds();
@@ -542,18 +543,21 @@ namespace Wonderland
         /// <summary>Horizontal distance from <paramref name="p"/> to the nearest track centre line (large without track nearby).</summary>
         public float DistanceTo(Vector3 p) => Network.DistanceTo(p);
 
+        /// <summary>Whether a point is within <paramref name="within"/> of a track (only the lookup cells that close are searched).</summary>
+        public bool Near(Vector3 p, float within) => Network.Nearest(p, out _, out _, out float d, within) && d < within;
+
         // ------------------------------------------------------------------ drawing preview
 
         /// <summary>
         /// Ribbon along the stroke being drawn. <paramref name="closing"/> highlights the start point (release to close the
         /// loop); <paramref name="error"/> paints it red.
         /// </summary>
-        public void ShowPreview(IReadOnlyList<Vector3> points, bool closing, bool error, Vector3? snapStart = null, Vector3? snapEnd = null)
+        public void ShowPreview(IReadOnlyList<Vector3> points, bool closing, bool error, Vector3? snapStart = null, Vector3? snapEnd = null, bool good = false)
         {
             previewMesh.Clear();
             if (points == null || points.Count < 2) return;
             var b = new MeshBuilder();
-            var colour = error ? new Color(1f, 0.35f, 0.3f, 0.85f) : new Color(1f, 0.92f, 0.55f, 0.85f);
+            var colour = error ? new Color(1f, 0.35f, 0.3f, 0.85f) : good ? new Color(0.55f, 0.95f, 0.55f, 0.8f) : new Color(1f, 0.92f, 0.55f, 0.85f);
             const float half = 0.012f;
             for (int i = 0; i < points.Count; i++)
             {
@@ -601,6 +605,53 @@ namespace Wonderland
         }
 
         public const float CloseRingRadius = 0.05f;
+
+        /// <summary>The arrows painted between the rails: which way trains run (cream, faintly glowing so they read at a glance).</summary>
+        public static readonly Color ArrowColour = new(1f, 0.93f, 0.7f, 0.55f);
+
+        /// <summary>
+        /// Chevrons along a line every <paramref name="spacing"/>, pointing the way trains run (<paramref name="direction"/>
+        /// +1: the way its points go, -1: the other way), lying <paramref name="lift"/> above it.
+        /// </summary>
+        public static void Arrows(MeshBuilder b, TrackLayout l, int direction, Color colour, float lift, float spacing)
+        {
+            if (direction == 0 || l.Length < 0.1f) return;
+            const float w = 0.01f, len = 0.013f, thick = 0.0028f;
+            float first = l.Closed ? spacing * 0.5f : 0.06f, last = l.Closed ? l.Length : l.Length - 0.06f;
+            for (float s = first; s < last; s += spacing)
+            {
+                var p = l.Evaluate(s, out var t); t.y = 0f;
+                if (t.sqrMagnitude < 1e-8f) continue;
+                var f = t.normalized * direction; var side = Vector3.Cross(Vector3.up, f);
+                var tip = p + f * len * 0.5f + Vector3.up * lift;
+                foreach (int k in new[] { -1, 1 })
+                {
+                    var tail = p - f * len * 0.5f + side * (w * k) + Vector3.up * lift;
+                    var across = Vector3.Cross(Vector3.up, (tip - tail).normalized) * (thick * 0.5f);
+                    // A flat stroke from the tail to the tip (facing up whichever way it winds).
+                    var q0 = tail - across; var q1 = tip - across; var q2 = tip + across; var q3 = tail + across;
+                    if (Vector3.Cross(q1 - q0, q2 - q0).y < 0f) (q1, q3) = (q3, q1);
+                    b.AddQuad(q0, q1, q2, q3, colour);
+                }
+            }
+        }
+
+        /// <summary>The planned line while drawing: a ribbon (red when it can't be built) with arrows the way trains will run on it.</summary>
+        public void ShowPlan(IReadOnlyList<Vector3> line, bool error, int direction, Vector3? snapStart, Vector3? snapEnd)
+        {
+            ShowPreview(line, false, error, snapStart, snapEnd, !error);
+            if (error || direction == 0 || line == null || line.Count < 2) return;
+            var b = new MeshBuilder();
+            var copy = new List<Vector3>(line);
+            var l = new TrackLayout(copy, false);
+            Arrows(b, l, direction, new Color(0.12f, 0.45f, 0.15f, 0.95f), 0.006f, 0.07f);
+            // Append the arrows to the ribbon mesh.
+            var ribbon = new MeshBuilder();
+            ribbon.AddMesh(previewMesh, Matrix4x4.identity);
+            ribbon.AddMesh(b.ToMesh("Arrows"), Matrix4x4.identity);
+            ribbon.ToMesh("Track preview", previewMesh);
+            previewMesh.RecalculateBounds();
+        }
 
         public void HidePreview() => previewMesh.Clear();
     }

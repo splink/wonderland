@@ -74,7 +74,7 @@ namespace Wonderland
                 case 3: height = StationHouse(b, ref rng, s); break;
                 default:
                     height = Place(b, ref rng, s, variant, style, out bool warp);
-                    if (!warp) return b.ToMesh($"Place_{Catalog.Get(variant).Name}_{style}");
+                    if (!warp) { Signage(b, variant); return b.ToMesh($"Place_{Catalog.Get(variant).Name}_{style}"); }
                     s.Lean *= 0.6f; s.Twist *= 0.6f;
                     break;
             }
@@ -90,6 +90,7 @@ namespace Wonderland
                 q.y -= sag * Mathf.SmoothStep(0.55f, 1f, t) * (1f - Mathf.Clamp01(Mathf.Abs(p.x) / 0.07f));
                 return q;
             });
+            Signage(b, variant);   // (after the irregularity: lettering stays straight)
             return b.ToMesh($"House_{Name(variant)}_{style}");
         }
 

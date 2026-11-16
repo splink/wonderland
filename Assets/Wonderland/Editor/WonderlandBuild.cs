@@ -67,7 +67,7 @@ namespace Wonderland.Editor
             var materials = new WorldMaterials
             {
                 Lit = WonderlandMaterials.Lit, Terrain = WonderlandMaterials.Terrain, UI = WonderlandMaterials.UI, Smoke = WonderlandMaterials.Smoke,
-                Water = WonderlandMaterials.Water,
+                Water = WonderlandMaterials.Water, Screen = WonderlandMaterials.Screen,
             };
             AssetDatabase.SaveAssets();
 

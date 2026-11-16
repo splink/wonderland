@@ -24,6 +24,15 @@ namespace Wonderland
         public ToolController Tools { get; private set; }
         public PaletteUI Palette { get; private set; }
         private float floorY;
+        private MRUKRoom scanned;
+        public WorldAnchor Anchor { get; private set; }
+
+        /// <summary>The real floor's height from the room scan (looked up again until the scan has loaded).</summary>
+        private float? ScannedFloor()
+        {
+            if (scanned == null && MRUK.Instance != null) scanned = MRUK.Instance.GetCurrentRoom();
+            return scanned != null && scanned.FloorAnchor != null ? scanned.FloorAnchor.transform.position.y : null;
+        }
         private string roomNote;
         private RoomFootprint room;
 
@@ -36,7 +45,7 @@ namespace Wonderland
             catch (System.Exception e) { Debug.LogWarning("Wonderland: foveation unavailable: " + e.Message); }
             var perf = gameObject.AddComponent<PerfLog>();
             perf.Context = () => World == null || World.Terrain == null ? "" :
-                $"{World.Forest.Trees.Count} trees, {World.Buildings.Houses.Count} houses, land {World.Terrain.LandArea():0.0} m2, tool {Tools?.Tool}";
+                $"{World.Forest.Trees.Count} trees, {World.Buildings.Houses.Count} houses, land {World.Terrain.LandArea():0.0} m2, tool {Tools?.Tool}, {World.People.Census()}, {World.Traffic.Vehicles.Count} vehicles ({World.Traffic.Moving} moving), {World.Cctv.Count} cameras ({World.Cctv.Filmed} pictures), sound {SoundSystem.Setting} ({World.Sounds.Playing.Count} playing; {World.Sounds.Diagnostics})";
             if (Rig == null) Rig = FindAnyObjectByType<OVRCameraRig>();
             // Let head tracking settle so "in front of you" means something.
             for (int i = 0; i < 30; i++) yield return null;
@@ -69,29 +78,76 @@ namespace Wonderland
 
             Tools = new GameObject("Tools").AddComponent<ToolController>();
             Tools.Init(World, Palette, Rig != null ? Rig.rightControllerAnchor : null);
-            Tools.ResetRequested = () => { World.Create(StartSize, Materials); Tools.SelectTool(Tool.Terrain); Tools.Say("A fresh landscape"); };
-            Palette.AddGlobal("Undo", () => Tools.Say(World.Undo() ? "Undone" : "Nothing to undo"));
-            Palette.AddGlobal("Save", Save);
-            Palette.AddGlobal("Load", () =>
+            Tools.ResetRequested = () => { World.Create(StartSize, Materials); WonderlandWorld.CurrentSlot = 0; Tools.SelectTool(Tool.Terrain); Tools.Say("A fresh landscape - Save it as a world to keep it"); };
+            Palette.AddGlobal("Undo", () => Tools.Say(World.Undo() ? "Undone (B does this too)" : "Nothing to undo"));
+            Palette.AddGlobal("Redo", () => Tools.Say(World.Redo() ? "Redone" : "Nothing to redo"));
+            // Several worlds: Save and Load list World 1-6; the one being played is kept up to date by the autosave.
+            Tools.SaveWorld = n =>
             {
-                if (!WonderlandWorld.HasSave()) { Tools.Say("No saved world yet"); return; }
-                World.Load(Materials); Tools.SelectTool(Tool.Terrain); Tools.Say("World loaded");
-            });
+                try { World.SaveSlot(n); World.Save(); Tools.Say($"Saved as World {n} - it keeps itself up to date from now on"); }
+                catch (System.Exception e) { Tools.Say("Could not save: " + e.Message); }
+            };
+            Tools.LoadWorld = n =>
+            {
+                try { World.LoadSlot(n, Materials); World.Save(); Tools.SelectTool(Tool.Terrain); Tools.Say($"World {n} loaded"); }
+                catch (System.Exception e) { Tools.Say($"Could not load World {n}: " + e.Message); }
+            };
+            Palette.AddGlobal("Save", () => Tools.ShowWorlds(true));
+            Palette.AddGlobal("Load", () => Tools.ShowWorlds(false));
             Palette.AddGlobal("Move", () => { Tools.PlacingWorld = true; Tools.Say("Point where the world should grow"); });
             Palette.AddGlobal("New", Tools.RequestReset);
+            PaletteButton sound = null;
+            string SoundLabel() => SoundSystem.Setting switch { SoundSetting.On => "Sound", SoundSetting.Quiet => "Quiet", _ => "Muted" };
+            sound = Palette.AddGlobal(SoundLabel(), () =>
+            {
+                SoundSystem.Setting = (SoundSetting)(((int)SoundSystem.Setting + 1) % 3);
+                sound.Label.text = SoundLabel();
+                Tools.Say(SoundSystem.Setting switch { SoundSetting.On => "Sound on", SoundSetting.Quiet => "Sound quiet", _ => "Sound off" });
+            });
+            Palette.AddGlobal("Help", Tools.ToggleHelp);
+            PaletteButton tips = null;
+            tips = Palette.AddGlobal(ToolController.TipsOn ? "Tips" : "No tips", () => { Tools.ToggleTips(); tips.Label.text = ToolController.TipsOn ? "Tips" : "No tips"; });
+            Palette.AddGlobal("Stats", Tools.ToggleStats);
+            Tools.Perf = GetComponent<PerfLog>();
+            // The little figures (2-3 cm) are not drawn further than 3 m from the eyes: barely a pixel there, and in a big
+            // world over a thousand draws saved (the CCTV camera still sees them).
+            foreach (var cam in FindObjectsByType<Camera>(FindObjectsSortMode.None))
+            {
+                if (cam.targetTexture != null || !cam.enabled) continue;
+                var cull = cam.layerCullDistances;
+                cull[WonderlandWorld.MiniatureLayer] = WonderlandWorld.MiniatureCullDistance;
+                cam.layerCullDistances = cull;
+                cam.layerCullSpherical = true;
+            }
+            // Pinned to the room: back on the same spot next launch, and steady while it runs.
+            Anchor = gameObject.AddComponent<WorldAnchor>();
+            Anchor.World = World.transform;
+            Anchor.Floor = ScannedFloor;
+            Anchor.Holding = () => Tools.PlacingWorld;
+            Tools.WorldPlaced = Anchor.Pin;
+            yield return Anchor.Restore();
+            if (Anchor.Status.StartsWith("back")) roomNote = null;
+            else if (Anchor.Status.StartsWith("the saved spot")) roomNote = "Your world's saved spot wasn't found in this room - use Move to put it back";
             string note = World.RoomStatus.Contains("ignored") ? World.RoomStatus : roomNote;
             Tools.Say(restored ? "Welcome back - your world was restored" + (note != null ? " · " + note : "") : note ?? "Sculpt some hills to begin", 8f);
         }
 
-        private void Save()
+        private Light keyLight;
+
+        /// <summary>The light follows the village clock: morning sun, golden evening, moonlit night.</summary>
+        private void Update()
         {
-            try { World.Save(); Tools.Say("World saved"); }
-            catch (System.Exception e) { Tools.Say("Could not save: " + e.Message); }
+            if (World == null || World.Terrain == null) return;
+            if (keyLight == null) foreach (var l in FindObjectsByType<Light>(FindObjectsSortMode.None)) if (l.type == LightType.Directional) keyLight = l;
+            WonderlandLighting.SetTimeOfDay(keyLight, World.Clock.Hour, World.Clock.Daylight, World.transform.eulerAngles.y, World.Sky.Rain);
         }
 
+        /// <summary>Leaving the app: the world is saved for next time, and into its named world if it has one.</summary>
         private void OnApplicationPause(bool paused)
         {
-            if (paused && World != null && World.Terrain != null) { try { World.Save(); } catch (System.Exception) { /* best effort */ } }
+            if (!paused || World == null || World.Terrain == null) return;
+            try { World.Save(); if (WonderlandWorld.CurrentSlot > 0) World.Save(WonderlandWorld.SlotPath(WonderlandWorld.CurrentSlot)); }
+            catch (System.Exception) { /* best effort */ }
         }
 
         private void OnApplicationQuit() => OnApplicationPause(true);
@@ -131,6 +187,7 @@ namespace Wonderland
                 var mrukRoom = mruk.GetCurrentRoom();
                 if (mrukRoom != null && mrukRoom.FloorAnchor != null)
                 {
+                    scanned = mrukRoom;
                     floorY = mrukRoom.FloorAnchor.transform.position.y;
                     room = FromRoomScan(mrukRoom, floorY);
                     roomNote = null;

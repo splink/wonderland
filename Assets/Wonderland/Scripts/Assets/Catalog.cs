@@ -4,7 +4,10 @@ using UnityEngine;
 
 namespace Wonderland
 {
-    public enum PlaceCategory { Homes, Town, Farm, Fun, Travel, Nature, Small }
+    public enum PlaceCategory { Homes, Town, Services, Farm, Fun, Travel, Nature, Small }
+
+    /// <summary>What a place does with the village's produce: farms grow it, shops and the café sell it, stations ship it.</summary>
+    public enum Goods { None, Grows, Sells, Ships }
 
     /// <summary>What people do at an activity spot.</summary>
     public enum SpotKind { Door, Sit, Gather, Play, Ride, Watch, Browse }
@@ -41,6 +44,24 @@ namespace Wonderland
         public bool Walkable;                // people may walk inside its footprint (playground, campsite, tower)
         public int Gondolas;                 // cabins that hang upright from the rotor (Ferris wheel)
         public float GondolaRadius;
+        public Need Serves = Need.None;      // what people come here for (homes: Rest)
+        public float[] Rhythm;               // its own appeal through the day (see Needs.Appeal), instead of its need's: the disco at night
+        public bool OwnClock;                // a turning part that isn't a ride (the disco's mirror ball)
+        public bool Kids;                    // children love it (playground, football)
+        public bool Base;                    // home of an emergency vehicle (ambulance, police car, fire engine)
+        public float Opens, Closes = 24f;    // opening hours (visitors come only then); outdoor places never close
+        public string Job;                   // the one person who works here ("baker"), or null
+        public float ShiftFrom, ShiftTo;     // their working hours (by default from just before opening to closing)
+        public bool WorksIndoors;            // the teacher in the school, the clerk in the town hall: lights on, nobody at the door
+        public Goods Goods;
+        public bool Boat;                    // not a building: a boat, set on a pond (see BoatSystem)
+        public bool Dwelling => Residents > 0;
+        public bool Ride => Category == PlaceCategory.Fun && RotorSpeed != 0f && !OwnClock;
+        public bool OpenAt(float hour) => Within(hour, Opens, Closes);
+        public bool OnShift(float hour) => Job != null && Within(hour, ShiftFrom, ShiftTo);
+        /// <summary>Hours that run past midnight are written past 24 (the disco: 20 to 26).</summary>
+        private static bool Within(float hour, float from, float to) => (hour >= from && hour < to) || (to > 24f && hour < to - 24f);
+        public bool Farm => Goods == Goods.Grows;
     }
 
     /// <summary>
@@ -55,7 +76,7 @@ namespace Wonderland
         public static int Count => All.Length;
         public static Blueprint Get(int id) => All[Mathf.Clamp(id, 0, All.Length - 1)];
 
-        public static readonly string[] CategoryNames = { "Homes", "Town", "Farm", "Fun", "Travel", "Nature", "Small" };
+        public static readonly string[] CategoryNames = { "Homes", "Town", "Services", "Farm", "Fun", "Travel", "Nature", "Small" };
 
         public static List<int> InCategory(PlaceCategory c)
         {
@@ -69,7 +90,15 @@ namespace Wonderland
             Bakery = 8, Cafe = 9, Grocer = 10, School = 11, FireStation = 12, Fountain = 13, Barn = 14, Windmill = 15, Silo = 16,
             Greenhouse = 17, WheatField = 18, Garden = 19, Carousel = 20, FerrisWheel = 21, Playground = 22, Bandstand = 23,
             CastleRuin = 24, Lookout = 25, Campsite = 26, WaterTower = 27, SignalBox = 28, Fuel = 29, Boulders = 30, Crag = 31,
-            LogPile = 32, Lamp = 33, Bench = 34, FlowerBed = 35, Well = 36, Statue = 37, Signpost = 38, Picnic = 39, HayBales = 40;
+            LogPile = 32, Lamp = 33, Bench = 34, FlowerBed = 35, Well = 36, Statue = 37, Signpost = 38, Picnic = 39, HayBales = 40,
+            Park = 41, Museum = 42, Restaurant = 43, Disco = 44, Hospital = 45, Police = 46, Factory = 47, Football = 48, Studio = 49,
+            Camera = 50, Balloon = 51, Jetty = 52, RowingBoat = 53, SailingBoat = 54, Steamer = 55, Halt = 56;
+
+        /// <summary>A station of any size (the big one, or a country halt): trains stop beside it.</summary>
+        public static bool IsStation(int variant) => variant == Station || variant == Halt;
+
+        /// <summary>The kind of boat a catalog item places (or -1 for anything else).</summary>
+        public static int BoatOf(int variant) => variant >= RowingBoat && variant <= Steamer ? variant - RowingBoat : -1;
 
         private static ActivitySpot Door(float x, float halfZ) => new(x, -(halfZ * 0.86f + 0.014f), SpotKind.Door);
 
@@ -93,9 +122,9 @@ namespace Wonderland
                     Spots = new[] { new ActivitySpot(-0.028f, -0.072f, SpotKind.Sit, 90f), new ActivitySpot(-0.006f, -0.072f, SpotKind.Sit, -90f), new ActivitySpot(0.022f, -0.075f, SpotKind.Sit, 90f), new ActivitySpot(0.044f, -0.075f, SpotKind.Sit, -90f), Door(-0.004f, 0.045f) } },
                 new() { Name = "Grocer", Short = "Grocer", Category = PlaceCategory.Town, Half = new Vector2(0.05f, 0.045f), Height = 0.15f, Residents = 1, Styles = 4, Hint = "fruit and veg to browse",
                     Spots = new[] { new ActivitySpot(-0.026f, -0.068f, SpotKind.Browse), new ActivitySpot(0.026f, -0.068f, SpotKind.Browse), Door(0f, 0.045f) } },
-                new() { Name = "School", Short = "School", Category = PlaceCategory.Town, Half = new Vector2(0.08f, 0.05f), Height = 0.2f, Styles = 2, Hint = "a yard to play in",
+                new() { Name = "School", Short = "School", Category = PlaceCategory.Services, Half = new Vector2(0.08f, 0.05f), Height = 0.2f, Styles = 2, Hint = "a yard to play in",
                     Spots = new[] { new ActivitySpot(-0.05f, -0.075f, SpotKind.Play), new ActivitySpot(-0.02f, -0.08f, SpotKind.Play), new ActivitySpot(0.02f, -0.078f, SpotKind.Play), Door(0.05f, 0.05f) } },
-                new() { Name = "Fire station", Short = "Fire", Category = PlaceCategory.Town, Half = new Vector2(0.062f, 0.05f), Height = 0.2f, Styles = 1, Hint = "people stop to look at the engine",
+                new() { Name = "Fire station", Short = "Fire", Category = PlaceCategory.Services, Half = new Vector2(0.062f, 0.05f), Height = 0.2f, Styles = 1, Hint = "people stop to look at the engine",
                     Spots = new[] { new ActivitySpot(-0.012f, -0.075f, SpotKind.Watch), new ActivitySpot(0.03f, -0.072f, SpotKind.Watch) } },
                 new() { Name = "Fountain", Short = "Fountain", Category = PlaceCategory.Town, Half = new Vector2(0.042f, 0.042f), Height = 0.08f, Styles = 1, Hint = "the village square",
                     Spots = Ring(0.058f, 5, SpotKind.Gather) },
@@ -134,8 +163,89 @@ namespace Wonderland
                 new() { Name = "Signpost", Short = "Sign", Category = PlaceCategory.Small, Half = new Vector2(0.008f, 0.008f), Height = 0.05f, Pad = false, Small = true, Styles = 1 },
                 new() { Name = "Picnic table", Short = "Picnic", Category = PlaceCategory.Small, Half = new Vector2(0.02f, 0.02f), Height = 0.02f, Pad = false, Small = true, Styles = 1, Spots = new[] { new ActivitySpot(0f, -0.022f, SpotKind.Sit, 0f), new ActivitySpot(0f, 0.022f, SpotKind.Sit, 180f) } },
                 new() { Name = "Hay bales", Short = "Hay", Category = PlaceCategory.Small, Half = new Vector2(0.028f, 0.02f), Height = 0.02f, Pad = false, Small = true, Styles = 1, Spots = new[] { new ActivitySpot(0f, -0.028f, SpotKind.Sit, 180f) } },
+                // The livelier town (see HouseFactory.Town.cs).
+                new() { Name = "Park", Short = "Park", Category = PlaceCategory.Town, Half = new Vector2(0.11f, 0.085f), Height = 0.07f, Styles = 1, Walkable = true, Hint = "a stroll, a bench, the duck pond",
+                    Spots = new[] { new ActivitySpot(-0.055f, -0.048f, SpotKind.Sit, 180f), new ActivitySpot(-0.041f, -0.048f, SpotKind.Sit, 180f), new ActivitySpot(0.05f, 0.045f, SpotKind.Sit, 0f),
+                        new ActivitySpot(0.064f, 0.045f, SpotKind.Sit, 0f), new ActivitySpot(0.02f, -0.012f, SpotKind.Watch, 60f), new ActivitySpot(-0.012f, 0.026f, SpotKind.Watch, 160f), new ActivitySpot(-0.07f, 0.03f, SpotKind.Gather, 90f) } },
+                new() { Name = "Museum", Short = "Museum", Category = PlaceCategory.Town, Half = new Vector2(0.075f, 0.06f), Height = 0.12f, Styles = 2, Hint = "a dinosaur in the courtyard",
+                    Spots = new[] { Door(-0.02f, 0.06f), new ActivitySpot(0.04f, -0.08f, SpotKind.Watch, 0f), new ActivitySpot(0.012f, -0.078f, SpotKind.Watch, 35f), new ActivitySpot(0.066f, -0.078f, SpotKind.Watch, -35f) } },
+                new() { Name = "Restaurant", Short = "Dining", Category = PlaceCategory.Town, Half = new Vector2(0.065f, 0.045f), Height = 0.13f, Residents = 1, Styles = 2, Hint = "dinner on the terrace",
+                    Spots = new[] { Door(0f, 0.045f), new ActivitySpot(-0.046f, -0.072f, SpotKind.Sit, 90f), new ActivitySpot(-0.022f, -0.072f, SpotKind.Sit, -90f), new ActivitySpot(0.022f, -0.072f, SpotKind.Sit, 90f),
+                        new ActivitySpot(0.046f, -0.072f, SpotKind.Sit, -90f), new ActivitySpot(-0.012f, -0.092f, SpotKind.Sit, 90f), new ActivitySpot(0.012f, -0.092f, SpotKind.Sit, -90f) } },
+                new() { Name = "Disco", Short = "Disco", Category = PlaceCategory.Fun, Half = new Vector2(0.06f, 0.05f), Height = 0.12f, Styles = 1, Hint = "dancing after dark",
+                    RotorPivot = new Vector3(0f, 0.098f, 0f), RotorSpeed = 50f, OwnClock = true,
+                    Spots = new[] { Door(0f, 0.05f), new ActivitySpot(-0.035f, -0.068f, SpotKind.Gather), new ActivitySpot(-0.012f, -0.075f, SpotKind.Gather), new ActivitySpot(0.014f, -0.072f, SpotKind.Gather), new ActivitySpot(0.038f, -0.066f, SpotKind.Gather) } },
+                new() { Name = "Hospital", Short = "Hospital", Category = PlaceCategory.Services, Half = new Vector2(0.085f, 0.06f), Height = 0.15f, Styles = 1, Base = true, Hint = "its ambulance answers calls",
+                    Spots = new[] { Door(-0.02f, 0.06f), new ActivitySpot(0.04f, -0.075f, SpotKind.Sit, 180f) } },
+                new() { Name = "Police station", Short = "Police", Category = PlaceCategory.Services, Half = new Vector2(0.06f, 0.05f), Height = 0.12f, Styles = 1, Base = true, Hint = "its patrol car keeps watch",
+                    Spots = new[] { Door(0f, 0.05f) } },
+                new() { Name = "Factory", Short = "Factory", Category = PlaceCategory.Services, Half = new Vector2(0.09f, 0.06f), Height = 0.18f, Styles = 1, Hint = "makes biscuits for the shops",
+                    Spots = new[] { Door(0.04f, 0.06f), new ActivitySpot(-0.03f, -0.075f, SpotKind.Watch) } },
+                new() { Name = "Football pitch", Short = "Football", Category = PlaceCategory.Fun, Half = new Vector2(0.11f, 0.075f), Height = 0.03f, Styles = 1, Walkable = true, Kids = true, Hint = "a match whenever there are players",
+                    Spots = new[] { new ActivitySpot(-0.07f, 0f, SpotKind.Play, 90f), new ActivitySpot(-0.035f, -0.025f, SpotKind.Play, 90f), new ActivitySpot(-0.03f, 0.03f, SpotKind.Play, 90f),
+                        new ActivitySpot(0.07f, 0f, SpotKind.Play, -90f), new ActivitySpot(0.035f, 0.025f, SpotKind.Play, -90f), new ActivitySpot(0.03f, -0.03f, SpotKind.Play, -90f),
+                        new ActivitySpot(-0.04f, -0.088f, SpotKind.Watch), new ActivitySpot(0f, -0.09f, SpotKind.Watch), new ActivitySpot(0.04f, -0.088f, SpotKind.Watch) } },
+                new() { Name = "Monitoring studio", Short = "Studio", Category = PlaceCategory.Services, Half = new Vector2(0.065f, 0.05f), Height = 0.11f, Styles = 1, Hint = "screens showing the camera feeds",
+                    Spots = new[] { Door(0.045f, 0.05f), new ActivitySpot(-0.03f, -0.075f, SpotKind.Watch), new ActivitySpot(0.005f, -0.078f, SpotKind.Watch) } },
+                new() { Name = "CCTV camera", Short = "Camera", Category = PlaceCategory.Small, Half = new Vector2(0.009f, 0.009f), Height = 0.09f, Pad = false, Small = true, Styles = 1, Hint = "watch it from the Watch tool" },
+                new() { Name = "Hot-air balloon", Short = "Balloon", Category = PlaceCategory.Fun, Half = new Vector2(0.05f, 0.05f), Height = 0.12f, Styles = 1, Hint = "flights over the countryside",
+                    RotorSpeed = 0.001f, Spots = new[] { new ActivitySpot(0f, 0f, SpotKind.Ride, 0f, 0.01f), new ActivitySpot(0.004f, 0.004f, SpotKind.Ride, 90f, 0.01f), new ActivitySpot(-0.04f, -0.058f, SpotKind.Watch, 30f), new ActivitySpot(0.04f, -0.06f, SpotKind.Watch, -30f) } },
+                // On the ponds: a landing stage for boat trips (its front end out over the water), and the boats themselves.
+                new() { Name = "Landing stage", Short = "Jetty", Category = PlaceCategory.Travel, Half = new Vector2(0.018f, 0.066f), Height = 0.05f, Pad = false, Walkable = true, Styles = 1,
+                    Hint = "boat trips - put it at a pond's edge, its end over the water",
+                    Spots = new[] { new ActivitySpot(-0.007f, 0.03f, SpotKind.Ride, 180f, 0.008f), new ActivitySpot(0.007f, 0.03f, SpotKind.Ride, 180f, 0.008f),
+                        new ActivitySpot(-0.007f, 0.045f, SpotKind.Ride, 180f, 0.008f), new ActivitySpot(0.007f, 0.045f, SpotKind.Ride, 180f, 0.008f) } },
+                new() { Name = "Rowing boat", Short = "Rowing", Category = PlaceCategory.Travel, Half = new Vector2(0.008f, 0.025f), Height = 0.02f, Pad = false, Boat = true, Hint = "rows about the pond - put it on the water" },
+                new() { Name = "Sailing boat", Short = "Sailing", Category = PlaceCategory.Travel, Half = new Vector2(0.01f, 0.035f), Height = 0.08f, Pad = false, Boat = true, Hint = "sails with the wind - put it on the water" },
+                new() { Name = "Paddle steamer", Short = "Steamer", Category = PlaceCategory.Travel, Half = new Vector2(0.02f, 0.06f), Height = 0.045f, Pad = false, Boat = true, Hint = "takes six on a trip round the lake - put it on the water" },
+                new() { Name = "Country halt", Short = "Halt", Category = PlaceCategory.Travel, Half = new Vector2(0.042f, 0.03f), Height = 0.07f, Styles = 1, Hint = "a little stop beside the line - trains call here too" },
             };
             for (int i = 0; i < list.Count; i++) list[i].Id = i;
+            // What each place is for: the needs it satisfies decide who comes and when (see Needs).
+            foreach (var b in list)
+                b.Serves = b.Id switch
+                {
+                    Bakery or Grocer or Fuel or Barn or Greenhouse or Garden => Need.Errands,
+                    Cafe or Picnic or Restaurant => Need.Food,
+                    Church or TownHall or Fountain or Well or Bandstand or Campsite => Need.Social,
+                    Carousel or FerrisWheel or Playground or School or Disco or Football or Jetty => Need.Fun,
+                    CastleRuin or Lookout or Crag or Windmill or FireStation or Statue or SignalBox or Park or Museum or Factory or Balloon or Studio => Need.Sights,
+                    Bench or LogPile or HayBales => Need.Rest,
+                    _ => b.Category == PlaceCategory.Homes ? Need.Rest : Need.None,
+                };
+            // Opening hours, jobs and goods: the working day of the village (see PeopleSystem.Work.cs).
+            void Hours(int id, float opens, float closes) { list[id].Opens = opens; list[id].Closes = closes; }
+            void Work(int id, string job, float from, float to, bool indoors = false, Goods goods = Goods.None)
+            { var b = list[id]; b.Job = job; b.ShiftFrom = from; b.ShiftTo = to; b.WorksIndoors = indoors; b.Goods = goods; }
+            Hours(Bakery, 6.5f, 18f); Work(Bakery, "baker", 6f, 18f, false, Goods.Sells);
+            Hours(Grocer, 7f, 18.5f); Work(Grocer, "grocer", 6.5f, 18.5f, false, Goods.Sells);
+            Hours(Cafe, 8f, 21.5f); Work(Cafe, "café owner", 7.5f, 21.5f, false, Goods.Sells);
+            Hours(Fuel, 7f, 19f); Work(Fuel, "attendant", 7f, 19f);
+            Hours(School, 8f, 17f); Work(School, "teacher", 7.5f, 15.5f, true);
+            Work(TownHall, "clerk", 8.5f, 17f, true);
+            Work(FireStation, "firefighter", 7f, 19f);
+            Work(Station, "station master", 6f, 21f, false, Goods.Ships);
+            Work(SignalBox, "signalman", 6f, 21.5f, true);
+            Work(WheatField, "farmer", 6f, 17f, false, Goods.Grows);
+            Work(Garden, "gardener", 6.5f, 16.5f, false, Goods.Grows);
+            Work(Greenhouse, "grower", 7f, 17f, false, Goods.Grows);
+            Work(Barn, "farmer", 5.5f, 17f, false, Goods.Grows);
+            Work(Windmill, "miller", 7f, 17f, false, Goods.Grows);
+            Hours(Carousel, 10f, 20f); Hours(FerrisWheel, 10f, 20f); Hours(Playground, 8f, 20.5f);
+            Hours(Barn, 7f, 18f); Hours(Greenhouse, 8f, 17f); Hours(Garden, 8f, 18f);
+            Hours(Museum, 9f, 17.5f); Work(Museum, "curator", 8.5f, 17.5f, true);
+            Hours(Restaurant, 11.5f, 23f); Work(Restaurant, "waiter", 11f, 23f, false, Goods.Sells);
+            Hours(Disco, 20f, 25.5f); Work(Disco, "DJ", 19.5f, 25.5f, true);
+            Work(Hospital, "doctor", 7f, 20f, true);
+            Work(Police, "police officer", 7f, 21f, true);
+            Work(Factory, "factory hand", 7f, 17f, true, Goods.Grows);
+            Hours(Jetty, 9f, 19.5f);
+            Hours(Football, 9f, 20f); Hours(Balloon, 9f, 19f); Hours(Park, 6f, 22f); Hours(Factory, 8f, 16f);
+            Work(Studio, "watchman", 8f, 22f, true);
+            // Their own rhythms: supper in the evening, dancing after dark.
+            list[Restaurant].Rhythm = new[] { 0f, 0f, 0f, 0.05f, 0.85f, 0.35f, 1f, 0.8f, 0f };
+            list[Disco].Rhythm = new[] { 0.9f, 0f, 0f, 0f, 0f, 0f, 0.3f, 1f, 1f };
+            list[Playground].Kids = true;
             return list.ToArray();
         }
 

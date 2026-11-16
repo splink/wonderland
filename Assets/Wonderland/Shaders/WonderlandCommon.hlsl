@@ -8,6 +8,7 @@
 half4 _WL_SkyColor;
 half4 _WL_GroundColor;
 half4 _WL_ShadowTint;
+half _WL_Night;   // 0 by day, 1 at night: lamps and lit windows glow brighter
 
 float WL_Hash(float2 p)
 {

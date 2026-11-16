@@ -1,0 +1,177 @@
+using UnityEngine;
+
+namespace Wonderland
+{
+    public enum VehicleKind { Car = 0, Motorbike = 1, Bicycle = 2, Ambulance = 3, Police = 4, FireEngine = 5 }
+
+    /// <summary>
+    /// Storybook road vehicles at the villagers' scale (a car is 5 cm long): rounded cars in four colours, a motorbike and
+    /// a bicycle with their riders, an ambulance, a police car and a fire engine with a ladder. Front faces +Z, the road
+    /// at y = 0. Emergency vehicles' blue lights are separate little meshes that blink.
+    /// </summary>
+    public static class VehicleFactory
+    {
+        private static readonly Mesh[] meshes = new Mesh[24];   // four colours of each kind
+        private static Mesh beacon;
+
+        public static float Length(VehicleKind k) => k switch
+        {
+            VehicleKind.Motorbike => 0.026f, VehicleKind.Bicycle => 0.022f, VehicleKind.FireEngine => 0.075f, VehicleKind.Ambulance => 0.058f, _ => 0.05f,
+        };
+
+        public static Mesh Get(VehicleKind k, int colour = 0)
+        {
+            int key = (int)k * 4 + (k == VehicleKind.Car ? colour % 4 : 0);
+            return meshes[key] ??= Build(k, colour % 4);
+        }
+
+        /// <summary>Where the blue lights sit (local), for vehicles that have them.</summary>
+        public static Vector3[] Beacons(VehicleKind k) => k switch
+        {
+            VehicleKind.Ambulance => new[] { new Vector3(-0.007f, 0.031f, 0.016f), new Vector3(0.007f, 0.031f, 0.016f) },
+            VehicleKind.Police => new[] { new Vector3(-0.005f, 0.0232f, -0.002f), new Vector3(0.005f, 0.0232f, -0.002f) },
+            VehicleKind.FireEngine => new[] { new Vector3(-0.008f, 0.03f, 0.026f), new Vector3(0.008f, 0.03f, 0.026f) },
+            _ => System.Array.Empty<Vector3>(),
+        };
+
+        public static Mesh Beacon()
+        {
+            if (beacon != null) return beacon;
+            var b = new MeshBuilder();
+            b.AddBlob(Vector3.zero, new Vector3(0.0026f, 0.0018f, 0.0026f), 1, 0f, 3, (_, __) => Pal.Glow(Pal.Hex("#3D7BFF")));
+            return beacon = b.ToMesh("Beacon");
+        }
+
+        private static readonly Color[] CarColours = { Pal.Hex("#C8453A"), Pal.Hex("#4A7FB8"), Pal.Hex("#E2B04A"), Pal.Hex("#5E9A63") };
+
+        private static Mesh Build(VehicleKind k, int colour)
+        {
+            var b = new MeshBuilder();
+            switch (k)
+            {
+                case VehicleKind.Car: Car(b, CarColours[colour], Pal.Hex("#F7F1E6")); break;
+                case VehicleKind.Police: Car(b, Pal.Hex("#F4F2EC"), Pal.Hex("#2E4A7A"), true); break;
+                case VehicleKind.Ambulance: Van(b, Pal.Hex("#F4F2EC"), Pal.Hex("#E0352B"), 0.058f, false); break;
+                case VehicleKind.FireEngine: Van(b, Pal.Hex("#D7382E"), Pal.Hex("#F7F1E6"), 0.075f, true); break;
+                case VehicleKind.Motorbike: Bike(b, true); break;
+                default: Bike(b, false); break;
+            }
+            return b.ToMesh(k + "_" + colour);
+        }
+
+        private static void Wheels(MeshBuilder b, float halfW, float[] zs, float r)
+        {
+            foreach (float z in zs)
+            foreach (int s in new[] { -1, 1 })
+            {
+                b.Push(new Vector3(s * halfW, r, z), Quaternion.Euler(0f, 0f, 90f));
+                b.AddCylinder(new Vector3(0f, -0.0022f, 0f), r, r, 0.0044f, 10, Pal.TrainBlack, Pal.TrainBlack, true, true);
+                b.AddDisc(new Vector3(0f, s > 0 ? -0.0023f : 0.0023f, 0f), r * 0.5f, 8, Pal.Hex("#C9CDD2"), s < 0);
+                b.Pop();
+            }
+        }
+
+        private static void Lights(MeshBuilder b, float halfW, float y, float front, float back)
+        {
+            foreach (int s in new[] { -1, 1 })
+            {
+                b.AddBlob(new Vector3(s * halfW * 0.7f, y, front), Vector3.one * 0.0015f, 0, 0f, 1, (_, __) => Pal.Glow(Pal.Hex("#FFF2C8")));
+                b.AddBox(new Vector3(s * halfW * 0.72f, y, back), new Vector3(0.003f, 0.0018f, 0.0008f), Pal.Glow(Pal.Hex("#FF3B30")));
+            }
+        }
+
+        private static void Car(MeshBuilder b, Color body, Color trim, bool police = false)
+        {
+            const float L = 0.05f, W = 0.021f;
+            var glass = Pal.Hex("#5A7090");
+            Wheels(b, W / 2 - 0.0012f, new[] { -0.015f, 0.016f }, 0.0045f);
+            b.AddBox(new Vector3(0f, 0.0085f, 0f), new Vector3(W, 0.008f, L), body, Pal.Shade(body, 1.1f), Pal.Shade(body, 0.7f));
+            b.AddBlob(new Vector3(0f, 0.0128f, 0.017f), new Vector3(W * 0.48f, 0.0026f, 0.009f), 1, 0f, 2, (_, __) => body);   // a rounded bonnet
+            // The cabin: glass all round under a roof.
+            b.AddBox(new Vector3(0f, 0.0165f, -0.003f), new Vector3(W - 0.003f, 0.0075f, 0.024f), glass, glass, glass);
+            b.AddBox(new Vector3(0f, 0.0205f, -0.004f), new Vector3(W - 0.002f, 0.0013f, 0.02f), body);
+            foreach (int s in new[] { -1, 1 }) b.AddBox(new Vector3(s * (W / 2 - 0.0016f), 0.0165f, -0.003f), new Vector3(0.0009f, 0.0075f, 0.0012f), body);
+            b.AddBox(new Vector3(0f, 0.0065f, L / 2 + 0.0003f), new Vector3(W - 0.002f, 0.0022f, 0.0012f), Pal.Hex("#C9CDD2"));   // bumpers
+            b.AddBox(new Vector3(0f, 0.0065f, -L / 2 - 0.0003f), new Vector3(W - 0.002f, 0.0022f, 0.0012f), Pal.Hex("#C9CDD2"));
+            b.AddBox(new Vector3(0f, 0.0105f, 0f), new Vector3(W + 0.0004f, 0.0012f, L * 0.8f), trim);   // a stripe
+            Lights(b, W / 2, 0.009f, L / 2 + 0.0004f, -L / 2 - 0.0004f);
+            if (police)
+            {
+                b.AddBox(new Vector3(0f, 0.0218f, -0.002f), new Vector3(0.016f, 0.0016f, 0.004f), Pal.TrainBlack);
+                b.AddBox(new Vector3(0f, 0.0115f, 0f), new Vector3(W + 0.0006f, 0.003f, L * 0.55f), trim);
+            }
+        }
+
+        private static void Van(MeshBuilder b, Color body, Color trim, float L, bool fire)
+        {
+            const float W = 0.024f;
+            var glass = Pal.Hex("#5A7090");
+            Wheels(b, W / 2 - 0.0012f, fire ? new[] { -0.026f, -0.013f, 0.024f } : new[] { -0.019f, 0.019f }, 0.005f);
+            float H = fire ? 0.022f : 0.026f;
+            b.AddBox(new Vector3(0f, 0.005f + H / 2, -0.005f), new Vector3(W, H, L - 0.01f), body, Pal.Shade(body, 1.08f), Pal.Shade(body, 0.7f));
+            // Cab at the front with a windscreen.
+            b.AddBox(new Vector3(0f, 0.012f, L / 2 - 0.007f), new Vector3(W, 0.014f, 0.014f), body);
+            b.AddBox(new Vector3(0f, 0.016f, L / 2 - 0.0003f), new Vector3(W - 0.004f, 0.006f, 0.0008f), glass);
+            foreach (int s in new[] { -1, 1 }) b.AddBox(new Vector3(s * (W / 2 + 0.0002f), 0.016f, L / 2 - 0.007f), new Vector3(0.0006f, 0.005f, 0.008f), glass);
+            b.AddBox(new Vector3(0f, 0.012f, -0.005f), new Vector3(W + 0.0006f, 0.003f, L - 0.012f), trim);   // the band along the side
+            Lights(b, W / 2, 0.009f, L / 2 + 0.0004f, -L / 2 + 0.0046f);
+            if (fire)
+            {
+                // A ladder on top and rolled hoses.
+                foreach (int s in new[] { -1, 1 }) b.AddBox(new Vector3(s * 0.005f, H + 0.0072f, -0.006f), new Vector3(0.0012f, 0.0012f, L - 0.016f), Pal.Hex("#C9CDD2"));
+                for (int i = 0; i < 12; i++) b.AddBox(new Vector3(0f, H + 0.0072f, -0.034f + i * 0.0052f), new Vector3(0.01f, 0.0008f, 0.0008f), Pal.Hex("#C9CDD2"));
+                foreach (int s in new[] { -1, 1 })
+                {
+                    b.Push(new Vector3(s * (W / 2 + 0.0012f), 0.013f, -0.02f), Quaternion.Euler(0f, 0f, 90f));
+                    b.AddCylinder(new Vector3(0f, -0.0012f, 0f), 0.004f, 0.004f, 0.0024f, 10, Pal.Hex("#E2B04A"), Pal.Hex("#E2B04A"), true, true);
+                    b.Pop();
+                }
+            }
+            else
+            {
+                // A red cross on the side and back.
+                foreach (int s in new[] { -1, 1 })
+                {
+                    b.AddBox(new Vector3(s * (W / 2 + 0.0005f), 0.02f, -0.008f), new Vector3(0.0006f, 0.0026f, 0.008f), trim);
+                    b.AddBox(new Vector3(s * (W / 2 + 0.0005f), 0.02f, -0.008f), new Vector3(0.0006f, 0.008f, 0.0026f), trim);
+                }
+            }
+        }
+
+        private static void Bike(MeshBuilder b, bool motor)
+        {
+            var frame = motor ? Pal.Hex("#2A2A30") : Pal.Hex("#4A7FB8");
+            foreach (float z in new[] { -0.0085f, 0.0085f })
+            {
+                b.Push(new Vector3(0f, motor ? 0.0048f : 0.0055f, z), Quaternion.Euler(0f, 0f, 90f));
+                b.AddCylinder(new Vector3(0f, -0.0008f, 0f), motor ? 0.0048f : 0.0055f, motor ? 0.0048f : 0.0055f, 0.0016f, 12, Pal.TrainBlack, Pal.TrainBlack, true, true);
+                b.Pop();
+            }
+            if (motor)
+            {
+                b.AddBox(new Vector3(0f, 0.0085f, 0f), new Vector3(0.006f, 0.005f, 0.014f), Pal.Hex("#C3312A"));
+                b.AddBox(new Vector3(0f, 0.0115f, -0.004f), new Vector3(0.005f, 0.0015f, 0.008f), Pal.TrainBlack);
+                b.AddBlob(new Vector3(0f, 0.011f, 0.0095f), Vector3.one * 0.0016f, 0, 0f, 1, (_, __) => Pal.Glow(Pal.Hex("#FFF2C8")));
+            }
+            else
+            {
+                b.Push(new Vector3(0f, 0.0075f, 0f), Quaternion.Euler(90f, 0f, 0f));
+                b.AddCylinder(new Vector3(0f, -0.008f, 0f), 0.0005f, 0.0005f, 0.016f, 4, frame, frame, false);
+                b.Pop();
+                b.AddCylinder(new Vector3(0f, 0.0055f, -0.003f), 0.0005f, 0.0005f, 0.006f, 4, frame, frame, false);
+            }
+            b.AddBox(new Vector3(0f, motor ? 0.0128f : 0.0125f, 0.0082f), new Vector3(0.008f, 0.0006f, 0.0006f), Pal.Hex("#C9CDD2"));   // handlebars
+            // The rider, leaning forward, legs down to the pedals or pegs.
+            var at = new Vector3(0f, motor ? 0.004f : 0.0045f, -0.003f);
+            int style = motor ? 3 : 4;
+            var m = Matrix4x4.TRS(at, Quaternion.Euler(motor ? 18f : 14f, 0f, 0f), Vector3.one);
+            b.Append(new MeshData(PersonFactory.Body(style)), m, Color.white);
+            foreach (int side in new[] { -1, 1 })
+            {
+                b.Append(new MeshData(PersonFactory.Leg(style)), m * Matrix4x4.TRS(PersonFactory.Hip + Vector3.right * side * PersonFactory.LegX, Quaternion.Euler(-55f, 0f, 0f), Vector3.one), Color.white);
+                b.Append(new MeshData(PersonFactory.Arm(style)), m * Matrix4x4.TRS(new Vector3(side * PersonFactory.ShoulderX, PersonFactory.ShoulderY, 0f), Quaternion.Euler(-70f, 0f, side * 6f), Vector3.one), Color.white);
+            }
+            if (motor) b.AddBlob(at + new Vector3(0f, 0.0285f, 0.002f), new Vector3(0.0048f, 0.0045f, 0.005f), 1, 0f, 4, (_, __) => Pal.Hex("#E2B04A"));   // a helmet
+        }
+    }
+}

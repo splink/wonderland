@@ -6,7 +6,7 @@ using UnityEngine.Rendering;
 
 namespace Wonderland
 {
-    public enum Tool { Terrain, Water, Forest, Paths, Track, Train, Houses, Decor, Eraser }
+    public enum Tool { Terrain, Water, Forest, Paths, Track, Train, Houses, Decor, Watch, Eraser }
 
     /// <summary>One pressable element of the palette (tool tile or option chip).</summary>
     public sealed class PaletteButton : MonoBehaviour
@@ -61,13 +61,38 @@ namespace Wonderland
         private readonly List<PaletteButton> options = new();
         private readonly List<PaletteButton> items = new();
         private readonly List<PaletteButton> globals = new();
-        private TextMeshPro status, hint, title;
+        private TextMeshPro hint, title;
         private Material uiMaterial, litMaterial;
         private Transform optionRow, itemRow;
         public PaletteButton Hovered { get; private set; }
         public event Action<Tool> ToolSelected;
 
-        public static readonly string[] ToolNames = { "Terrain", "Water", "Forest", "Paths", "Track", "Train", "Build", "Life", "Eraser" };
+        public static readonly string[] ToolNames = { "Terrain", "Water", "Forest", "Paths", "Track", "Train", "Build", "Life", "Watch", "Eraser" };
+        private MeshRenderer viewer;
+
+        /// <summary>The CCTV viewer: a little monitor above the palette showing a live feed (null hides it).</summary>
+        public void SetViewer(Material feed)
+        {
+            if (feed == null) { if (viewer) viewer.transform.parent.gameObject.SetActive(false); return; }
+            if (viewer == null)
+            {
+                var frame = new GameObject("Viewer");
+                frame.transform.SetParent(transform, false);
+                frame.transform.localPosition = new Vector3(0f, Height / 2 + 0.07f, 0f);
+                Quad("Bezel", frame.transform, 0.172f, 0.13f, 0.008f, new Color(0.12f, 0.12f, 0.14f, 0.97f), new Color(0.08f, 0.08f, 0.1f, 0.97f), 0.0015f, 2990);
+                var q = GameObject.CreatePrimitive(PrimitiveType.Quad);
+                if (q.TryGetComponent<Collider>(out var c)) { if (Application.isPlaying) Destroy(c); else DestroyImmediate(c); }
+                q.name = "Feed";
+                q.layer = UiLayer;
+                q.transform.SetParent(frame.transform, false);
+                q.transform.localPosition = new Vector3(0f, 0f, -0.002f);
+                q.transform.localScale = new Vector3(0.16f, 0.12f, 1f);
+                viewer = q.GetComponent<MeshRenderer>();
+                viewer.shadowCastingMode = ShadowCastingMode.Off; viewer.receiveShadows = false;
+            }
+            viewer.sharedMaterial = feed;
+            viewer.transform.parent.gameObject.SetActive(true);
+        }
 
         public void Build(Material ui, Material lit)
         {
@@ -101,21 +126,181 @@ namespace Wonderland
 
             hint = Text("Hint", transform, "", new Vector3(0f, -0.054f, -0.002f), new Vector2(Width - 0.02f, 0.011f), 0.05f, TextAlignmentOptions.Center);
             hint.color = new Color(0.86f, 0.84f, 0.8f);
-            status = Text("Status", transform, "", new Vector3(0f, Height / 2 - 0.011f, -0.002f), new Vector2(0.15f, 0.012f), 0.055f, TextAlignmentOptions.Right);
-            status.rectTransform.localPosition = new Vector3(Width / 2 - 0.085f, Height / 2 - 0.011f, -0.002f);
-            status.color = new Color(1f, 0.95f, 0.85f);
+
+            // Always there: the village clock and a light for how the headset is keeping up.
+            clock = Text("Clock", transform, "", new Vector3(-0.022f, Height / 2 - 0.011f, -0.002f), new Vector2(0.04f, 0.012f), 0.06f, TextAlignmentOptions.Right);
+            clock.color = new Color(0.95f, 0.92f, 0.85f);
+            health = Quad("Health", transform, 0.0075f, 0.0075f, 0.0037f, Color.white, Color.white, -0.002f, 2995);
+            health.transform.localPosition = new Vector3(0.006f, Height / 2 - 0.011f, -0.002f);
         }
+
+        private TextMeshPro clock;
+        public string ClockText => clock != null ? clock.text : null;
+        private MeshRenderer health;
+        private static readonly int TintId = Shader.PropertyToID("_Color");
+
+        /// <summary>The clock ("14:20") and the performance light: green (keeping up), orange (close to the limit), red (falling behind).</summary>
+        public void SetClock(string time, Color light)
+        {
+            if (clock == null) return;
+            if (clock.text != time) clock.text = time;
+            health.sharedMaterial.SetColor(TintId, light);
+        }
+
+        public const float GlobalWidth = 0.034f;   // nine fit along the bottom
 
         public PaletteButton AddGlobal(string label, Action onClick)
         {
-            int i = globals.Count;
-            const float w = 0.048f;
-            var b = Button(label, transform, new Vector3(-Width / 2 + 0.03f + i * (w + 0.004f), -0.078f, 0f), new Vector2(w, 0.02f), label, false);
+            var b = Button(label, transform, Vector3.zero, new Vector2(GlobalWidth, 0.02f), label, false);
             b.OnClick = onClick;
             b.ApplyVisuals();
             globals.Add(b);
+            // Spread the row evenly across the palette, however many there are.
+            float pitch = (Width - 0.008f) / globals.Count;
+            for (int k = 0; k < globals.Count; k++)
+            {
+                globals[k].transform.localPosition = new Vector3(-Width / 2 + 0.004f + pitch * (k + 0.5f), -0.078f, 0f);
+            }
             return b;
         }
+
+        // ------------------------------------------------------------------ side panels: the card (left), help and stats (right)
+
+        private sealed class Panel
+        {
+            public Transform Root, Portrait;
+            public TextMeshPro Title, Subtitle, Body;
+            public PaletteButton Close;
+            public readonly List<MeshRenderer> Parts = new();
+        }
+
+        private Panel card, info;
+
+        /// <summary>Side panels are taller than the palette (centred on it), so a card never has to shrink its text.</summary>
+        public const float PanelHeight = 0.25f, BodySize = 0.058f;
+
+        /// <summary>
+        /// A side panel: a header band (portrait, title in bold, a one-line summary under it, Close), then the body in
+        /// <see cref="CardText"/> rich text at a fixed size - sections and two-column rows, never auto-shrunk.
+        /// </summary>
+        private Panel MakePanel(string name, float x, float width, bool portrait)
+        {
+            var p = new Panel();
+            var go = new GameObject(name);
+            go.layer = UiLayer;
+            go.transform.SetParent(transform, false);
+            go.transform.localPosition = new Vector3(x, 0f, 0f);
+            p.Root = go.transform;
+            float h = PanelHeight, top = h / 2;
+            Quad("Border", p.Root, width + 0.006f, h + 0.006f, 0.02f, new Color(1f, 0.93f, 0.8f, 0.3f), new Color(1f, 0.93f, 0.8f, 0.15f), 0.002f, 2990);
+            Quad("Panel", p.Root, width, h, 0.018f, new Color(0.17f, 0.15f, 0.2f, 0.94f), new Color(0.1f, 0.09f, 0.12f, 0.94f), 0f, 2991);
+            // Header band: a slightly lighter strip behind the portrait and the title.
+            const float band = 0.046f;
+            var header = Quad("Header", p.Root, width - 0.008f, band, 0.012f, new Color(0.26f, 0.22f, 0.3f, 0.95f), new Color(0.2f, 0.17f, 0.24f, 0.95f), -0.001f, 2992);
+            header.transform.localPosition = new Vector3(0f, top - 0.004f - band / 2, -0.001f);
+            float textLeft = portrait ? 0.044f : 0.008f;
+            float textWidth = width - textLeft - 0.036f;
+            p.Title = Text("Title", p.Root, "", new Vector3(-width / 2 + textLeft + textWidth / 2, top - 0.019f, -0.002f), new Vector2(textWidth, 0.016f), 0.085f, TextAlignmentOptions.Left);
+            p.Title.color = new Color(1f, 0.88f, 0.6f); p.Title.fontStyle = FontStyles.Bold; p.Title.fontSizeMin = 0.06f;
+            p.Subtitle = Text("Subtitle", p.Root, "", new Vector3(-width / 2 + textLeft + textWidth / 2, top - 0.037f, -0.002f), new Vector2(textWidth, 0.013f), 0.05f, TextAlignmentOptions.Left);
+            p.Subtitle.color = new Color(0.8f, 0.77f, 0.86f); p.Subtitle.fontSizeMin = 0.04f;
+            float bodyTop = top - 0.004f - band - 0.008f, bodyBottom = -top + 0.008f;
+            p.Body = Text("Body", p.Root, "", new Vector3(0f, (bodyTop + bodyBottom) / 2, -0.002f), new Vector2(width - 0.022f, bodyTop - bodyBottom), BodySize, TextAlignmentOptions.TopLeft);
+            p.Body.enableAutoSizing = false; p.Body.fontSize = BodySize;
+            p.Body.textWrappingMode = TextWrappingModes.Normal; p.Body.overflowMode = TextOverflowModes.Truncate;
+            p.Body.lineSpacing = 6f;
+            p.Body.color = new Color(0.95f, 0.93f, 0.9f);
+            p.Close = Button("Close", p.Root, new Vector3(width / 2 - 0.019f, top - 0.019f, 0f), new Vector2(0.026f, 0.018f), "Close", false);
+            p.Close.ApplyVisuals();
+            if (portrait)
+            {
+                p.Portrait = new GameObject("Portrait").transform;
+                p.Portrait.SetParent(p.Root, false);
+                p.Portrait.localPosition = new Vector3(-width / 2 + 0.026f, top - 0.032f, -0.014f);
+            }
+            return p;
+        }
+
+        /// <summary>
+        /// The character card beside the palette: a little turning model of them, a title ("Emma - Baker") and a few lines
+        /// of what is true about them now. <paramref name="close"/> runs when its Close button is pressed.
+        /// </summary>
+        public void ShowCard(string title, string body, IReadOnlyList<(Mesh mesh, Matrix4x4 at)> model, Action close) => ShowCard(title, null, body, model, close);
+
+        /// <summary>The card with a one-line summary under the title ("Baker · grown-up · early riser").</summary>
+        public void ShowCard(string title, string subtitle, string body, IReadOnlyList<(Mesh mesh, Matrix4x4 at)> model, Action close)
+        {
+            card ??= MakePanel("Card", -Width / 2 - CardWidth / 2 - 0.006f, CardWidth, true);
+            card.Root.gameObject.SetActive(true);
+            card.Title.text = title; card.Subtitle.text = subtitle ?? ""; card.Body.text = body;
+            if (model == null) foreach (var part in card.Parts) part.gameObject.SetActive(false);
+            card.Close.OnClick = close;
+            if (model != null)
+            {
+                while (card.Parts.Count < model.Count)
+                {
+                    var go = new GameObject("Part");
+                    go.layer = UiLayer;
+                    go.transform.SetParent(card.Portrait, false);
+                    go.AddComponent<MeshFilter>();
+                    var r = go.AddComponent<MeshRenderer>();
+                    r.sharedMaterial = litMaterial; r.shadowCastingMode = ShadowCastingMode.Off; r.receiveShadows = false;
+                    card.Parts.Add(r);
+                }
+                var bounds = new Bounds();
+                for (int k = 0; k < card.Parts.Count; k++)
+                {
+                    bool on = k < model.Count;
+                    card.Parts[k].gameObject.SetActive(on);
+                    if (!on) continue;
+                    var (mesh, at) = model[k];
+                    card.Parts[k].GetComponent<MeshFilter>().sharedMesh = mesh;
+                    var t = card.Parts[k].transform;
+                    t.localPosition = at.GetColumn(3); t.localRotation = at.rotation; t.localScale = at.lossyScale;
+                    var b = mesh.bounds; var centre = at.MultiplyPoint3x4(b.center);
+                    if (k == 0) bounds = new Bounds(centre, b.size); else bounds.Encapsulate(new Bounds(centre, b.size));
+                }
+                float scale = 0.036f / Mathf.Max(0.001f, Mathf.Max(bounds.size.x, bounds.size.y, bounds.size.z));
+                card.Portrait.localScale = Vector3.one * scale;
+                portraitCentre = bounds.center;
+            }
+        }
+
+        private Vector3 portraitCentre;
+
+        public void HideCard() { if (card != null) card.Root.gameObject.SetActive(false); }
+        public bool CardShown => card != null && card.Root.gameObject.activeSelf;
+        public string CardTitle => card != null ? card.Title.text : null;
+
+        /// <summary>The panel on the right of the palette (help, the world's statistics); null text hides it.</summary>
+        public const float CardWidth = 0.22f, InfoWidth = 0.23f;
+
+        public void ShowInfo(string title, string body, Action close) => ShowInfo(title, null, body, close);
+
+        public void ShowInfo(string title, string subtitle, string body, Action close)
+        {
+            if (body == null) { if (info != null) info.Root.gameObject.SetActive(false); return; }
+            info ??= MakePanel("Info", Width / 2 + InfoWidth / 2 + 0.006f, InfoWidth, false);
+            info.Root.gameObject.SetActive(true);
+            info.Title.text = title; info.Subtitle.text = subtitle ?? ""; info.Body.text = body;
+            info.Close.OnClick = close;
+        }
+
+        public bool InfoShown => info != null && info.Root.gameObject.activeSelf;
+
+        private void Update()
+        {
+            if (card == null || !card.Root.gameObject.activeSelf || card.Portrait == null) return;
+            // The little model turns slowly about its own middle.
+            float yaw = Time.time * 40f;
+            var rot = Quaternion.Euler(-15f, yaw, 0f);
+            card.Portrait.localRotation = rot;
+            float s = card.Portrait.localScale.x;
+            card.Portrait.localPosition = new Vector3(-0.196f / 2 + 0.024f, Height / 2 - 0.032f, -0.014f) - rot * portraitCentre * s;
+        }
+
+        /// <summary>The palette's title: "Wonderland · World 2".</summary>
+        public void SetTitle(string text) { if (title != null) title.text = text; }
 
         public void SetTool(Tool tool)
         {
@@ -157,8 +342,62 @@ namespace Wonderland
             }
         }
 
-        public void SetStatus(string text) => status.text = text;
+        /// <summary>
+        /// What just happened, or what letting go will do: a banner just above the palette, two lines at a fixed, readable
+        /// size (wrapping, never shrinking); hidden when there is nothing to say.
+        /// </summary>
+        public void SetStatus(string text)
+        {
+            text ??= "";
+            if (statusText == text) return;
+            statusText = text;
+            if (message.root == null) message = Banner("Message", new Color(0.17f, 0.15f, 0.2f, 0.92f), new Color(1f, 0.96f, 0.88f));
+            message.text.text = text;
+            message.root.gameObject.SetActive(text.Length > 0);
+            PlaceBanners();
+        }
+
+        /// <summary>A tip (amber banner above the message): how to use what is in hand, what to try next. Null hides it.</summary>
+        public void SetTip(string text)
+        {
+            text ??= "";
+            if (tipText == text) return;
+            tipText = text;
+            if (tip.root == null) tip = Banner("Tip", new Color(0.36f, 0.26f, 0.08f, 0.94f), new Color(1f, 0.9f, 0.62f));
+            tip.text.text = text.Length > 0 ? $"<b>Tip</b>   {text}" : "";
+            tip.root.gameObject.SetActive(text.Length > 0);
+            PlaceBanners();
+        }
+
+        public string StatusText => statusText;
+        public string TipText => tipText;
+
+        private (Transform root, TextMeshPro text) message, tip;
+        private string statusText = "", tipText = "";
+        private const float BannerHeight = 0.028f;
+
+        private (Transform, TextMeshPro) Banner(string name, Color back, Color ink)
+        {
+            var go = new GameObject(name);
+            go.layer = UiLayer;
+            go.transform.SetParent(transform, false);
+            Quad("Back", go.transform, Width, BannerHeight, 0.008f, back, Color.Lerp(back, Color.black, 0.15f), 0f, 2991);
+            var t = Text("Text", go.transform, "", new Vector3(0f, 0f, -0.002f), new Vector2(Width - 0.016f, BannerHeight - 0.004f), 0.052f, TextAlignmentOptions.Center);
+            t.enableAutoSizing = false; t.fontSize = 0.052f;
+            t.textWrappingMode = TextWrappingModes.Normal; t.overflowMode = TextOverflowModes.Ellipsis;
+            t.color = ink;
+            go.SetActive(false);
+            return (go.transform, t);
+        }
+
+        private void PlaceBanners()
+        {
+            float y = Height / 2 + 0.006f + BannerHeight / 2;
+            if (message.root != null && message.root.gameObject.activeSelf) { message.root.localPosition = new Vector3(0f, y, 0f); y += BannerHeight + 0.004f; }
+            if (tip.root != null && tip.root.gameObject.activeSelf) tip.root.localPosition = new Vector3(0f, y, 0f);
+        }
         public void SetHint(string text) => hint.text = text;
+        public string HintText => hint.text;
 
         /// <summary>The button under the ray (UI layer colliders), and hover state for all buttons.</summary>
         public PaletteButton Raycast(Ray ray, out float distance)
@@ -321,6 +560,7 @@ namespace Wonderland
                 Tool.Train => TrainFactory.LocoMesh(),
                 Tool.Houses => HouseFactory.Get(Catalog.Church),
                 Tool.Decor => SheepIcon(),
+                Tool.Watch => HouseFactory.CameraHead(),
                 _ => EraserIcon(),
             };
             var pivot = new GameObject("Icon").transform;

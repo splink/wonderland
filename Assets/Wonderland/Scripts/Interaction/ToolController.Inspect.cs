@@ -1,0 +1,394 @@
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using UnityEngine;
+
+namespace Wonderland
+{
+    /// <summary>
+    /// Getting to know the world: the character card (trigger on a villager or an animal with the Life tool), a marker
+    /// over whoever is followed with a line along the way they are going and pins over their home and work, the Stats
+    /// panel (frame rate, CPU and GPU time, what the simulation costs, what the world holds) and the Help panel (the
+    /// controls of the tool in hand). Who is followed is kept by their seed, so they are not lost when others come and go.
+    /// Nothing here runs while the card and panels are closed.
+    /// </summary>
+    public sealed partial class ToolController
+    {
+        private int hoverAnimal = -1, peekPerson = -1, peekAnimal = -1, peekHouse = -1, peekBoat = -1;
+
+        /// <summary>"Emma, baker - grip: their card", when pointing at someone with any tool but Life (which says more).</summary>
+        private string peekText; private int peekKey = -2; private float peekUntil;
+
+        private string Peek()
+        {
+            if (Tool == Tool.Decor && peekHouse < 0 && peekBoat < 0) return null;
+            int key = peekPerson >= 0 ? peekPerson : peekAnimal >= 0 ? 100000 + peekAnimal : peekBoat >= 0 ? 300000 + peekBoat : peekHouse >= 0 ? 200000 + peekHouse : -1;
+            if (key == peekKey && Time.time < peekUntil) return peekText;   // (worked out a few times a second, not every frame)
+            peekKey = key; peekUntil = Time.time + 0.3f;
+            return peekText = PeekNow();
+        }
+
+        private string PeekNow()
+        {
+            if (peekPerson >= 0 && peekPerson < World.People.People.Count)
+            {
+                var c = World.People.CardOf(peekPerson);
+                return $"{c.Name}, {c.Role.ToLower()} - {c.Now.ToLower()}  ·  grip: their card";
+            }
+            if (peekAnimal >= 0 && peekAnimal < World.Animals.Animals.Count) return AnimalLine(peekAnimal) + "  ·  grip: its card";
+            if (peekBoat >= 0 && peekBoat < World.Boats.Boats.Count) return World.Boats.Describe(peekBoat);
+            if (peekHouse >= 0 && peekHouse < World.Buildings.Houses.Count)
+            {
+                var c = World.People.PlaceCardOf(peekHouse);
+                string state = c.Home ? (c.Living > 0 ? $"{c.Living} live here" : "nobody lives here yet") : c.Status != null ? c.Status.ToLower() : null;
+                string crowd = !c.Home && c.Visitors > 0 ? $"{c.Visitors} here" : null;
+                return string.Join(" · ", new[] { c.Name, state, crowd, "grip: its card" }.Where(x => x != null));
+            }
+            return null;
+        }
+        private int followSeed, followKind;          // kind: 0 nobody, 1 a villager, 2 an animal, 3 a building
+        private Vector2 followHouse;                 // the building's position (buildings are kept by where they stand)
+        private float cardTimer, infoTimer;
+        private int infoMode;                        // 0 closed, 1 stats, 2 help
+        private Transform followMarker, homePin, workPin;
+        private LineRenderer routeLine;
+        private readonly List<Vector3> route = new();
+        private readonly List<(Mesh, Matrix4x4)> model = new();
+        public PerfLog Perf;
+        public bool Following => followKind != 0;
+        public int HoverPerson => hoverPerson;
+
+        private string AnimalLine(int i)
+        {
+            var c = World.Animals.CardOf(i, PersonName);
+            return $"{(c.Name != null ? c.Name + " the " + c.Species.ToLower() : "A " + c.Species.ToLower())} - {c.Now.ToLower()}";
+        }
+
+        private string PersonName(int i) => i >= 0 && i < World.People.People.Count ? World.People.NameOf(i) : null;
+
+        /// <summary>Opens the card of a villager (or animal) and follows them.</summary>
+        private void Inspect(int person, int animal)
+        {
+            if (person >= 0) { followKind = 1; followSeed = World.People.People[person].seed; }
+            else { followKind = 2; followSeed = World.Animals.Animals[animal].seed; }
+            cardTimer = 0f;
+            Haptic(0.4f, 0.03f);
+        }
+
+        /// <summary>Opens the card of a building (visitors, hours, staff, goods; residents for a home).</summary>
+        private void InspectHouse(int house)
+        {
+            var h = World.Buildings.Houses[house];
+            followKind = 3; followHouse = new Vector2(h.x, h.z);
+            cardTimer = 0f;
+            Haptic(0.4f, 0.03f);
+        }
+
+        private void CloseCard()
+        {
+            followKind = 0;
+            Palette.HideCard();
+            if (followMarker) { followMarker.gameObject.SetActive(false); homePin.gameObject.SetActive(false); workPin.gameObject.SetActive(false); routeLine.enabled = false; }
+        }
+
+        private int Followed()
+        {
+            if (followKind == 1) { var list = World.People.People; for (int i = 0; i < list.Count; i++) if (list[i].seed == followSeed) return i; }
+            else if (followKind == 2) { var list = World.Animals.Animals; for (int i = 0; i < list.Count; i++) if (list[i].seed == followSeed) return i; }
+            else if (followKind == 3) { var list = World.Buildings.Houses; for (int i = 0; i < list.Count; i++) if (Mathf.Abs(list[i].x - followHouse.x) < 1e-4f && Mathf.Abs(list[i].z - followHouse.y) < 1e-4f) return i; }
+            return -1;
+        }
+
+        private void UpdateInspection(float dt)
+        {
+            if (infoMode != 0) { infoTimer -= dt; if (infoTimer <= 0f) { infoTimer = 0.5f; if (infoMode == 1) ShowStats(); } }
+            if (followKind == 0) return;
+            int i = Followed();
+            if (i < 0) { Say(followKind == 1 ? "They have left the world" : followKind == 3 ? "It was taken down" : "It has gone"); CloseCard(); return; }
+            EnsureMarkers();
+            var root = World.transform;
+            Vector3 head;
+            Vector3? home = null, work = null;
+            cardTimer -= dt;
+            bool refresh = cardTimer <= 0f;
+            if (refresh) cardTimer = 0.5f;
+            if (followKind == 1)
+            {
+                var people = World.People;
+                head = people.HeadOf(i) + Vector3.up * (people.IsChild(i) ? 0.03f : 0.042f);
+                if (refresh)
+                {
+                    var c = people.CardOf(i);
+                    PersonModel(c.Style, c.Child);
+                    Palette.ShowCard(c.Name, $"{c.Role} · {c.Stage}", PersonBody(c), model, CloseCard);
+                    home = c.HomeAt; work = c.WorkAt;
+                    Pin(homePin, home); Pin(workPin, work);
+                    people.RouteOf(i, route);
+                    routeLine.positionCount = route.Count;
+                    for (int k = 0; k < route.Count; k++) routeLine.SetPosition(k, root.TransformPoint(route[k]));
+                    routeLine.enabled = route.Count > 1;
+                }
+            }
+            else if (followKind == 3)
+            {
+                var h = World.Buildings.Houses[i];
+                head = new Vector3(h.x, World.Buildings.TopOf(i) + 0.012f, h.z);
+                if (refresh)
+                {
+                    var c = World.People.PlaceCardOf(i);
+                    model.Clear();
+                    model.Add((HouseFactory.Get(h.variant, h.style), Matrix4x4.Rotate(Quaternion.Euler(0f, 180f, 0f))));
+                    Palette.ShowCard(c.Name, c.Status != null ? $"{c.Kind} · {CardText.Tint(c.Status, c.StatusColour)}" : c.Kind, PlaceBody(c, i), model, CloseCard);
+                    Pin(homePin, null); Pin(workPin, null);
+                    routeLine.enabled = false;
+                }
+            }
+            else
+            {
+                var animals = World.Animals;
+                var c = animals.CardOf(i, PersonName);
+                head = c.Position + Vector3.up * 0.03f;
+                if (refresh)
+                {
+                    var body = new CardText().Section("Now").Row("Doing", c.Now).Row("Going to", c.Goal).Section("Lives").Row("Home", c.Home);
+                    model.Clear();
+                    model.Add((AnimalFactory.Body(c.Kind), Matrix4x4.identity));
+                    model.Add((AnimalFactory.Head(c.Kind), Matrix4x4.Translate(AnimalFactory.NeckOffset(c.Kind))));
+                    Palette.ShowCard(c.Name ?? c.Species, c.Name != null ? c.Species : "wild - no name", body.ToString(), model, CloseCard);
+                    Pin(homePin, null); Pin(workPin, null);
+                    routeLine.positionCount = 2;
+                    routeLine.SetPosition(0, root.TransformPoint(c.Position + Vector3.up * 0.004f));
+                    routeLine.SetPosition(1, root.TransformPoint((c.Destination ?? c.Position) + Vector3.up * 0.004f));
+                    routeLine.enabled = c.Destination.HasValue;
+                }
+            }
+            followMarker.gameObject.SetActive(true);
+            followMarker.position = root.TransformPoint(head + Vector3.up * (Mathf.Sin(Time.time * 3f) * 0.003f));
+            followMarker.rotation = root.rotation * Quaternion.Euler(0f, Time.time * 90f, 0f);
+        }
+
+        private void Pin(Transform pin, Vector3? at)
+        {
+            pin.gameObject.SetActive(at.HasValue);
+            if (at.HasValue) pin.position = World.transform.TransformPoint(at.Value);
+        }
+
+        private void PersonModel(int style, bool child)
+        {
+            model.Clear();
+            var m = Matrix4x4.Scale(Vector3.one * (child ? 0.72f : 1f));
+            model.Add((PersonFactory.Body(style), m));
+            foreach (int side in new[] { -1, 1 })
+            {
+                model.Add((PersonFactory.Leg(style), m * Matrix4x4.Translate(PersonFactory.Hip + Vector3.right * side * PersonFactory.LegX)));
+                model.Add((PersonFactory.Arm(style), m * Matrix4x4.TRS(new Vector3(side * PersonFactory.ShoulderX, PersonFactory.ShoulderY, 0f), Quaternion.Euler(0f, 0f, side * 8f), Vector3.one)));
+            }
+        }
+
+        private void EnsureMarkers()
+        {
+            if (followMarker != null) return;
+            followMarker = Marker("Followed", new Color(1f, 0.85f, 0.3f), 1f);
+            homePin = Marker("Home pin", new Color(0.45f, 0.95f, 0.5f), 0.8f);
+            workPin = Marker("Work pin", new Color(0.45f, 0.75f, 1f), 0.8f);
+            var go = new GameObject("Route");
+            routeLine = go.AddComponent<LineRenderer>();
+            routeLine.sharedMaterial = World.Materials.UI;
+            routeLine.widthMultiplier = 0.002f;
+            routeLine.startColor = routeLine.endColor = new Color(1f, 0.85f, 0.3f, 0.8f);
+            routeLine.numCapVertices = 2;
+            routeLine.enabled = false;
+        }
+
+        private Transform Marker(string name, Color colour, float size)
+        {
+            var b = new MeshBuilder();
+            var glow = Pal.Glow(colour);
+            b.AddCylinder(new Vector3(0f, 0f, 0f), 0f, 0.006f * size, 0.009f * size, 4, glow, glow, false, false, false);
+            b.AddCylinder(new Vector3(0f, 0.009f * size, 0f), 0.006f * size, 0f, 0.004f * size, 4, glow, glow, false, false, false);
+            var go = new GameObject(name);
+            go.AddComponent<MeshFilter>().sharedMesh = b.ToMesh(name);
+            var r = go.AddComponent<MeshRenderer>();
+            r.sharedMaterial = World.Materials.Lit; r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            go.SetActive(false);
+            return go.transform;
+        }
+
+        // ------------------------------------------------------------------ the performance light
+
+        public static readonly Color Green = new(0.35f, 0.9f, 0.4f), Orange = new(1f, 0.65f, 0.2f), Red = new(1f, 0.3f, 0.25f), Grey = new(0.6f, 0.6f, 0.6f);
+
+        /// <summary>
+        /// How the headset is keeping up, from the measured frame time against the display's budget: green at full rate
+        /// (room to build more), orange when frames start to run late (close to the limit), red when it falls well behind.
+        /// </summary>
+        public Color Health(out string words)
+        {
+            if (Perf == null || Perf.FrameMs <= 0f) { words = "measuring..."; return Grey; }
+            float budget = 1000f / Perf.Refresh;
+            float ratio = Perf.FrameMs / budget;
+            if (ratio <= 1.08f) { words = "keeping up - room for more"; return Green; }
+            if (ratio <= 1.5f) { words = "close to the limit"; return Orange; }
+            words = "falling behind - the world is heavy for the headset";
+            return Red;
+        }
+
+        // ------------------------------------------------------------------ stats and help
+
+        /// <summary>The Stats button: frame rate and the world's numbers (again: closes).</summary>
+        public void ToggleStats() { infoMode = infoMode == 1 ? 0 : 1; infoTimer = 0f; if (infoMode == 0) Palette.ShowInfo(null, null, null); else ShowStats(); }
+
+        /// <summary>The Help button: the controls of the tool in hand (again: closes).</summary>
+        public void ToggleHelp() { infoMode = infoMode == 2 ? 0 : 2; if (infoMode == 0) Palette.ShowInfo(null, null, null); else ShowHelp(); }
+
+        private void CloseInfo() { infoMode = 0; Palette.ShowInfo(null, null, null); }
+
+        private void ShowStats() => Palette.ShowInfo("Stats", $"{World.Clock.Label} · day {World.Clock.Day + 1}", StatsText(), CloseInfo);
+
+        public string StatsText()
+        {
+            var t = new CardText(30);
+            t.Section("Headset");
+            if (Perf != null && Perf.FrameMs > 0f)
+            {
+                float budget = 1000f / Perf.Refresh;
+                var light = Health(out string words);
+                string colour = light == Green ? CardText.Good : light == Orange ? CardText.Warn : CardText.Bad;
+                t.Row("Keeping up", words, colour);
+                t.Row("Frame rate", $"{Perf.Fps:0} fps of {Perf.Refresh:0}");
+                t.Row("Frame time", $"{Perf.FrameMs:0.0} ms (budget {budget:0.0})");
+                t.Row("CPU main", Perf.CpuMs > 0f ? $"{Perf.CpuMs:0.0} ms" : "not reported");
+                t.Row("GPU", Perf.GpuMs > 0f ? $"{Perf.GpuMs:0.0} ms" : Perf.GpuUtil >= 0f ? $"{Perf.GpuUtil * 100f:0}% busy" : "not reported");
+            }
+            else t.Line("Measuring...", true);
+            t.Section("Simulation");
+            var costs = new List<(float ms, string name)>();
+            for (int k = 0; k < SimCost.Count; k++) if (SimCost.Ms[k] >= 0.05f) costs.Add((SimCost.Ms[k], SimCost.Names[k]));
+            costs.Sort((a, b) => b.ms.CompareTo(a.ms));
+            var top = new StringBuilder();
+            for (int k = 0; k < costs.Count && k < 4; k++) top.Append(k > 0 ? ", " : "").Append($"{costs[k].name} {costs[k].ms:0.0}");
+            t.Row("Per frame", $"{SimCost.Total:0.0} ms");
+            t.Row("Most", top.Length > 0 ? top.ToString() : "-");
+            t.Section("World");
+            var people = World.People;
+            int asleep = people.Count(PeopleSystem.Activity.Sleeping), walking = people.Count(PeopleSystem.Activity.Walking), working = people.Count(PeopleSystem.Activity.Working);
+            int homeless = 0; for (int k = 0; k < people.People.Count; k++) if (people.HomeOf(k) < 0) homeless++;
+            t.Row("People", $"{people.People.Count} people · {walking} walking, {working} at work, {asleep} asleep");
+            int homes = 0, beds = 0;
+            foreach (var h in World.Buildings.Houses) { var bp = Catalog.Get(h.variant); if (bp.Dwelling) { homes++; beds += bp.Residents + 2; } }
+            t.Row("Homes", $"{homes} homes, beds for {beds}" + (homeless > 0 ? $" · {homeless} without a home" : ""), homeless > 0 ? CardText.Warn : null);
+            t.Row("Buildings", $"{World.Buildings.Houses.Count} buildings · {World.Forest.Trees.Count} trees");
+            int[] kinds = new int[AnimalFactory.KindCount];
+            foreach (var a in World.Animals.Animals) kinds[Mathf.Clamp(a.kind, 0, kinds.Length - 1)]++;
+            var animals = new StringBuilder($"{World.Animals.Animals.Count}");
+            int listed = 0;
+            for (int k = 0; k < kinds.Length; k++) if (kinds[k] > 0 && listed++ < 4) animals.Append(listed == 1 ? ": " : ", ").Append($"{kinds[k]} {AnimalFactory.Names[k].ToLower()}");
+            t.Row("Animals", animals.ToString());
+            var net = World.Track.Network;
+            int running = 0; foreach (var tr in World.Trains.Trains) if (tr.Running) running++;
+            t.Row("Railway", $"{World.Trains.Trains.Count} trains ({running} running) · {net.TotalLength:0.0} m · {net.Joints.Count} switches · {World.Trains.Stations.Count} stations");
+            t.Row("Roads", $"{World.Traffic.Vehicles.Count} vehicles ({World.Traffic.Moving} moving) · {World.Cctv.Count} cameras");
+            t.Row("Land", $"{World.Terrain.LandArea():0.0} m²");
+            return t.ToString();
+        }
+
+        /// <summary>A villager's card: what they're doing (and why), their day, who they are, home and work, friends.</summary>
+        private static string PersonBody(PeopleSystem.PersonCard c)
+        {
+            var t = new CardText();
+            t.Section("Now").Row("Doing", c.Now).Row("Going to", c.Goal).Row("Then", c.Next);
+            if (c.Today != null && c.Today.Count > 0)
+            {
+                t.Section("Today");
+                foreach (var (line, now, done) in c.Today)
+                {
+                    string time = line.Substring(0, 5), what = line.Substring(6);
+                    t.Row(time, now ? CardText.Tint(what + "  (now)", CardText.Accent) : done ? CardText.Tint(what, CardText.Muted) : what);
+                }
+            }
+            t.Section(c.Child ? "Family and school" : "Home and work").Row("Home", c.Home ?? CardText.Tint("none yet", CardText.Warn)).Row(c.Child ? "School" : "Works at", c.Work);
+            t.Section("About").Row("Character", c.Traits).Row("Day", c.Hours).Row("Friends", c.Friends);
+            return t.ToString();
+        }
+
+        /// <summary>A building's card: open or not, who is there, its staff and goods, how busy it gets; residents for a home.</summary>
+        private string PlaceBody(PeopleSystem.PlaceCard c, int house)
+        {
+            var t = new CardText();
+            if (c.Home)
+            {
+                t.Section("Home").Row("Living here", c.Living > 0 ? c.Residents : "nobody yet").Row("Beds", $"{c.Living} of {c.Beds} taken").Row("Now", c.Here);
+                return t.ToString();
+            }
+            t.Section("Now");
+            if (c.Hours != null) t.Row("Hours", c.Hours);
+            if (c.Name != null && Catalog.Get(World.Buildings.Houses[house].variant).Serves != Need.None)
+                t.Row("Visitors", c.Visitors == 0 ? "nobody here" + (c.Coming > 0 ? $", {c.Coming} on the way" : "") : $"{c.Visitors} here" + (c.Coming > 0 ? $", {c.Coming} on the way" : ""))
+                 .Row("Here", c.Here);
+            if (c.Staff != null || c.Goods != null) t.Section("Work").Row("Staff", c.Staff).Row("Goods", c.Goods);
+            if (c.Busiest != null) t.Section("Visits").Row("Today", $"{c.Today}").Row("Yesterday", $"{c.Yesterday}").Row("Busiest", c.Busiest);
+            if (Catalog.IsStation(World.Buildings.Houses[house].variant))
+            {
+                var hh = World.Buildings.Houses[house];
+                int st = World.Trains.StationAt(new Vector2(hh.x, hh.z));
+                t.Section("Trains").Row("Station", st >= 0 ? World.Trains.StationName(st) : CardText.Tint("not beside a railway", CardText.Warn));
+                if (st >= 0)
+                {
+                    var calling = new List<string>();
+                    for (int k = 0; k < World.Trains.Trains.Count; k++)
+                    {
+                        var tr = World.Trains.Trains[k];
+                        if (tr.AtStation == st) calling.Insert(0, $"train {k + 1} standing here");
+                        else if (World.Trains.CallsAt(tr, st, 1)) calling.Add($"train {k + 1} next");
+                    }
+                    t.Row("Calling", calling.Count > 0 ? string.Join(", ", calling) : "no train is due");
+                    float crates = World.People.WaitingAt(house);
+                    if (crates >= 1f) t.Row("Platform", $"{Mathf.FloorToInt(crates)} crates for the goods train");
+                }
+            }
+            string s = t.ToString();
+            return s.Length > 0 ? s : new CardText().Line("A quiet spot: nobody visits it on purpose", true).ToString();
+        }
+
+        /// <summary>Help as sections: this tool's controls (one row per control), then everywhere.</summary>
+        private static string HelpBody(string text)
+        {
+            var t = new CardText(30);
+            int split = text.IndexOf("\n\nEverywhere: ");
+            string here = split >= 0 ? text.Substring(0, split) : text, everywhere = split >= 0 ? text.Substring(split + 14) : null;
+            void Rows(string block)
+            {
+                foreach (var line in block.Split('\n'))
+                    foreach (var piece in line.Split(" · "))
+                    {
+                        int colon = piece.IndexOf(": ");
+                        if (colon > 0 && colon < 34) t.Row(piece.Substring(0, colon), piece.Substring(colon + 2)); else t.Line(piece);
+                    }
+            }
+            t.Section("This tool"); Rows(here);
+            if (everywhere != null) { t.Section("Everywhere"); Rows(everywhere); }
+            return t.ToString();
+        }
+
+        private void ShowHelp() => Palette.ShowInfo("Help", $"{PaletteUI.ToolNames[(int)Tool]} tool", HelpBody(HelpText(Tool)), CloseInfo);
+
+        /// <summary>What the controller does - with the tool in hand, then everywhere.</summary>
+        public static string HelpText(Tool tool)
+        {
+            string here = tool switch
+            {
+                Tool.Terrain => "Trigger: sculpt where you point (Raise, Lower, Smooth, Flatten, Peaks; Grow / Trim paint land on or off the floor)\nStick left/right: brush size · up/down: strength\nA: next brush",
+                Tool.Water => "Trigger: dig a pond (start inside one to grow it) · Stream: draw it, it flows downhill · Drain: hold over water\nStick: size · A: Pond / Stream / Drain",
+                Tool.Forest => "Trigger: paint trees · A: erase instead\nStick left/right: size · up/down: density",
+                Tool.Paths => "Trigger: draw a road, lane, path, trail, fence, hedge or wall (chips) - start on a way to join it; across water a way gets a bridge; tap a bridge for another style\nA: next kind",
+                Tool.Track => "Trigger: draw a railway. Come back to the start (the ring lights up) for a loop\nWhile drawing: green = it can be built, red = it can't (the banner says why); green arrows show which way trains will run\nOne way: the whole railway runs the way the arrows on the track point, so trains never meet head-on\nStart on a track: a branch · end on a track: join it · from one loop to another: link them - and a second link back, so trains can return\nTap a switch to throw it · grip on the track: bend it\nA: Signals - trigger beside the track puts one up (automatic: red while a train is near); tap it to hold trains at red",
+                Tool.Train => "Trigger on the track: a train - pick it on the second row (Steam, Express, Tank engine, Goods, Railcar); it runs the way the arrows point\nPointing at a train: trigger stop / go · stick up/down: speed · grip: pick it up and put it elsewhere\nCarriages: point at a train, then + Carriage / - Carriage · Turn round: the engine moves to the other end (a train running backwards runs engine first)\nThe hint says what it is doing and why it waits (a red signal, the train ahead, the buffers)\nSwitches: Spread (trains take the way with fewer trains ahead, so they cover the whole railway), Random, Manual (tap a switch) · A: start / stop all",
+                Tool.Houses => "Pick a category, then a building. Trigger: place it · stick: a flick turns it 15°, hold to turn smoothly (the arrow is its front) · A: next\nTrigger (or grip) on a building: pick it up and move it · pointing at one says who is there\nTravel: a landing stage at a pond's edge, and boats on the water",
+                Tool.Decor => "Trigger: place people or animals (hold and sweep for a herd)\nTrigger on a villager or animal: their card - a marker follows them, a line shows where they are going, pins mark home and work\nChips: days pass / fast / stop time, Fête, Emergency, Clouds · A: next kind",
+                Tool.Watch => "Put cameras up with Build, Small, Camera (they look the way their front faces)\nTrigger on a camera: watch it · stick: turn and tilt it · trigger on the land: point it there\nTrain 1, 2...: the view from the front of each train · A: next camera",
+                _ => "Trigger on anything you built: take it away · hold over trees: clear them",
+            };
+            return here + "\n\nEverywhere: Grip on a villager, animal or building: its card · B undo (Redo below) · point at the palette and pull the trigger to choose\nSave / Load: Worlds 1-6 · Move: place the world elsewhere · New: start again (press twice) · Sound: on / quiet / muted · Stats: frame rate and the world's numbers";
+        }
+    }
+}

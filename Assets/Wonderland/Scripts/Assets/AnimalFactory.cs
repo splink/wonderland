@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace Wonderland
 {
-    public enum AnimalKind { Sheep = 0, Cow = 1, Horse = 2, Pig = 3, Chicken = 4, Duck = 5, Deer = 6 }
+    public enum AnimalKind { Sheep = 0, Cow = 1, Horse = 2, Pig = 3, Chicken = 4, Duck = 5, Deer = 6, Dog = 7, Cat = 8 }
 
     /// <summary>
     /// Storybook farm animals as two meshes each: the body (with legs and tail) and the head, which nods separately while
@@ -11,20 +11,21 @@ namespace Wonderland
     /// </summary>
     public static class AnimalFactory
     {
-        public const int KindCount = 7;
-        public static readonly string[] Names = { "Sheep", "Cow", "Horse", "Pig", "Hen", "Duck", "Deer" };
+        public const int KindCount = 9;
+        public static readonly string[] Names = { "Sheep", "Cow", "Horse", "Pig", "Hen", "Duck", "Deer", "Dog", "Cat" };
+        public static bool Pet(AnimalKind k) => k == AnimalKind.Dog || k == AnimalKind.Cat;
         private static readonly Mesh[] Bodies = new Mesh[KindCount], Heads = new Mesh[KindCount];
 
         public static Mesh Body(AnimalKind kind) => Bodies[(int)kind] ??= kind switch
         {
             AnimalKind.Sheep => SheepBody(), AnimalKind.Cow => CowBody(), AnimalKind.Horse => HorseBody(), AnimalKind.Pig => PigBody(),
-            AnimalKind.Chicken => ChickenBody(), AnimalKind.Duck => DuckBody(), _ => DeerBody(),
+            AnimalKind.Chicken => ChickenBody(), AnimalKind.Duck => DuckBody(), AnimalKind.Dog => DogBody(), AnimalKind.Cat => CatBody(), _ => DeerBody(),
         };
 
         public static Mesh Head(AnimalKind kind) => Heads[(int)kind] ??= kind switch
         {
             AnimalKind.Sheep => SheepHead(), AnimalKind.Cow => CowHead(), AnimalKind.Horse => HorseHead(), AnimalKind.Pig => PigHead(),
-            AnimalKind.Chicken => ChickenHead(), AnimalKind.Duck => DuckHead(), _ => DeerHead(),
+            AnimalKind.Chicken => ChickenHead(), AnimalKind.Duck => DuckHead(), AnimalKind.Dog => DogHead(), AnimalKind.Cat => CatHead(), _ => DeerHead(),
         };
 
         /// <summary>Neck joint position relative to the body pivot.</summary>
@@ -36,13 +37,15 @@ namespace Wonderland
             AnimalKind.Pig => new Vector3(0f, 0.009f, 0.011f),
             AnimalKind.Chicken => new Vector3(0f, 0.0085f, 0.003f),
             AnimalKind.Duck => new Vector3(0f, 0.004f, 0.0045f),
+            AnimalKind.Dog => new Vector3(0f, 0.0085f, 0.0058f),
+            AnimalKind.Cat => new Vector3(0f, 0.0068f, 0.0046f),
             _ => new Vector3(0f, 0.019f, 0.011f),
         };
 
         public static float Radius(AnimalKind kind) => kind switch
         {
             AnimalKind.Sheep => 0.012f, AnimalKind.Cow => 0.018f, AnimalKind.Horse => 0.02f, AnimalKind.Pig => 0.012f,
-            AnimalKind.Chicken => 0.006f, AnimalKind.Duck => 0.007f, _ => 0.015f,
+            AnimalKind.Chicken => 0.006f, AnimalKind.Duck => 0.007f, AnimalKind.Dog => 0.007f, AnimalKind.Cat => 0.005f, _ => 0.015f,
         };
 
         private static void Legs(MeshBuilder b, float x, float zFront, float zBack, float height, float r, Color colour, Color hoof)
@@ -53,6 +56,66 @@ namespace Wonderland
                 b.AddCylinder(new Vector3(s * x, 0.0012f, z), r, r * 0.9f, height, 6, colour, colour, false);
                 b.AddCylinder(new Vector3(s * x, 0f, z), r * 1.1f, r * 1.05f, 0.0012f, 6, hoof, hoof, true);
             }
+        }
+
+        // ---------------------------------------------------------------- pets
+
+        private static readonly Color DogCoat = Pal.Hex("#C98A4B"), DogDark = Pal.Hex("#7A4E2C"), CatCoat = Pal.Hex("#E39A4E"), CatStripe = Pal.Hex("#B8662E");
+
+        private static Mesh DogBody()
+        {
+            var b = new MeshBuilder();
+            Legs(b, 0.0021f, 0.0038f, -0.0036f, 0.0046f, 0.0006f, DogCoat, DogDark);
+            b.AddBlob(new Vector3(0f, 0.0068f, 0f), new Vector3(0.0028f, 0.0027f, 0.0058f), 1, 0.05f, 21, (d, _) => Color.Lerp(Pal.Shade(DogCoat, 0.8f), Pal.Hex("#F2DFC0"), Mathf.Clamp01(-d.y * 1.2f)));
+            b.AddBlob(new Vector3(0f, 0.0074f, 0.0042f), new Vector3(0.0026f, 0.0028f, 0.0028f), 1, 0f, 22, (_, __) => DogCoat);   // chest
+            b.AddBox(new Vector3(0f, 0.0083f, 0.0052f), new Vector3(0.0046f, 0.0008f, 0.0016f), Pal.Hex("#C3312A"));            // collar
+            b.Push(new Vector3(0f, 0.0084f, -0.0055f), Quaternion.Euler(-50f, 0f, 0f));
+            b.AddCylinder(Vector3.zero, 0.0007f, 0.0004f, 0.005f, 5, DogCoat, Pal.Hex("#F2DFC0"), true);                         // a happy tail
+            b.Pop();
+            return b.ToMesh("DogBody");
+        }
+
+        private static Mesh DogHead()
+        {
+            var b = new MeshBuilder();
+            b.AddBlob(new Vector3(0f, 0.0018f, 0.0016f), new Vector3(0.0022f, 0.0021f, 0.0022f), 1, 0f, 23, (_, __) => DogCoat);
+            b.AddBlob(new Vector3(0f, 0.0011f, 0.0039f), new Vector3(0.0013f, 0.0011f, 0.0016f), 1, 0f, 24, (_, __) => Pal.Hex("#F2DFC0"));
+            b.AddBlob(new Vector3(0f, 0.0016f, 0.0054f), Vector3.one * 0.0006f, 0, 0f, 25, (_, __) => Pal.TrainBlack);
+            foreach (int s in new[] { -1, 1 })
+            {
+                b.AddBlob(new Vector3(s * 0.0021f, 0.0016f, 0.0013f), new Vector3(0.0007f, 0.0017f, 0.0011f), 1, 0f, 26 + s, (_, __) => DogDark);   // floppy ears
+                b.AddBlob(new Vector3(s * 0.0009f, 0.0027f, 0.0033f), Vector3.one * 0.00035f, 0, 0f, 28 + s, (_, __) => Pal.TrainBlack);
+            }
+            return b.ToMesh("DogHead");
+        }
+
+        private static Mesh CatBody()
+        {
+            var b = new MeshBuilder();
+            Legs(b, 0.0015f, 0.003f, -0.003f, 0.0036f, 0.00045f, CatCoat, Pal.Hex("#F2DFC0"));
+            b.AddBlob(new Vector3(0f, 0.0052f, 0f), new Vector3(0.0021f, 0.0021f, 0.0048f), 1, 0f, 31, (d, p) => Mathf.Repeat(p.z * 1400f, 1f) < 0.35f && d.y > -0.2f ? CatStripe : CatCoat);
+            b.Push(new Vector3(0f, 0.0058f, -0.0045f), Quaternion.Euler(-70f, 0f, 0f));
+            b.AddCylinder(Vector3.zero, 0.00045f, 0.0004f, 0.0045f, 5, CatCoat, CatStripe, false);
+            b.Pop();
+            b.Push(new Vector3(0f, 0.0099f, -0.0058f), Quaternion.Euler(-10f, 0f, 0f));
+            b.AddCylinder(Vector3.zero, 0.0004f, 0.0003f, 0.0025f, 5, CatStripe, CatStripe, true);   // the tip curls back
+            b.Pop();
+            return b.ToMesh("CatBody");
+        }
+
+        private static Mesh CatHead()
+        {
+            var b = new MeshBuilder();
+            b.AddBlob(new Vector3(0f, 0.0014f, 0.0014f), new Vector3(0.0019f, 0.0017f, 0.0017f), 1, 0f, 33, (d, _) => d.y < -0.3f && d.z > 0.3f ? Pal.Hex("#F2DFC0") : CatCoat);
+            foreach (int s in new[] { -1, 1 })
+            {
+                b.Push(new Vector3(s * 0.0011f, 0.0029f, 0.0012f), Quaternion.Euler(0f, 0f, -s * 15f));
+                b.AddCylinder(Vector3.zero, 0.0007f, 0f, 0.0013f, 4, CatCoat, CatStripe, false, true, false, Mathf.PI / 4f);   // pointy ears
+                b.Pop();
+                b.AddBlob(new Vector3(s * 0.0008f, 0.0018f, 0.003f), Vector3.one * 0.0003f, 0, 0f, 34 + s, (_, __) => Pal.Hex("#5E9A3E"));
+            }
+            b.AddBlob(new Vector3(0f, 0.0011f, 0.0032f), Vector3.one * 0.00028f, 0, 0f, 36, (_, __) => Pal.FlowerPink);
+            return b.ToMesh("CatHead");
         }
 
         private static Mesh SheepBody()

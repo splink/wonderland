@@ -242,6 +242,17 @@ namespace Wonderland
             return inside;
         }
 
+        /// <summary>The top of a wall, fence or hedge right at a point (a cat's perch), or 0.</summary>
+        public float BarrierTop(Vector2 p)
+        {
+            foreach (var l in Lines)
+            {
+                if (!IsBarrier(l.kind) || Distance(l, p) > HalfWidth(l.kind) + 0.002f) continue;
+                return l.kind == (int)PathKind.Fence ? 0.013f : l.kind == (int)PathKind.Hedge ? 0.017f : 0.011f;
+            }
+            return 0f;
+        }
+
         public bool NearLevelCrossing(Vector2 p, float within)
         {
             foreach (var c in LevelCrossings)

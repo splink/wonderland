@@ -87,3 +87,4 @@ __pycache__.meta
 *.webm
 *.avi
 *.exr
+Tests/Saves/

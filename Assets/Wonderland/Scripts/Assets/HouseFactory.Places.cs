@@ -20,6 +20,7 @@ namespace Wonderland
             {
                 var b = new MeshBuilder();
                 var rng = new Rng(900 + id);
+                if (id == Catalog.Disco || id == Catalog.Balloon) { Rotors[id] = m = TownRotor(id, ref rng); return m; }
                 switch (id)
                 {
                     case Catalog.Windmill: Sails(b); break;
@@ -46,6 +47,8 @@ namespace Wonderland
         /// <summary>Builds catalog object <paramref name="id"/>; <paramref name="warp"/>: give it the hand-made lean.</summary>
         private static float Place(MeshBuilder b, ref Rng rng, Style s, int id, int style, out bool warp)
         {
+            float town = Town(b, ref rng, s, id, style, out warp);
+            if (town >= 0f) return town;
             warp = true;
             switch (id)
             {

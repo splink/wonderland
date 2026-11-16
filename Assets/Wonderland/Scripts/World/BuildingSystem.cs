@@ -24,11 +24,25 @@ namespace Wonderland
         private readonly List<MeshRenderer> renderers = new();
         private readonly List<Transform> rotors = new();
         private readonly List<Transform[]> gondolas = new();
+        private readonly List<MeshRenderer[]> neon = new();   // glowing sign letters (the disco), switched on and off
         private TerrainField terrain;
         private Material material;
         private MaterialPropertyBlock block;
         private int highlighted = -1;
-        private static readonly int HighlightId = Shader.PropertyToID("_Highlight");
+        private readonly List<float> glow = new();   // window glow per building (NaN: the material's own)
+        private readonly Dictionary<int, Material> glowMaterials = new();   // shared variants of the material, one per glow level
+        private static readonly int HighlightId = Shader.PropertyToID("_Highlight"), GlowId = Shader.PropertyToID("_EmissionStrength");
+
+        /// <summary>Bumped whenever buildings are added, removed or replaced (caches of places refresh on it).</summary>
+        public int Version { get; private set; }
+
+        /// <summary>Whether the fair's rides are running (0-1; they wind down at night).</summary>
+        public float RidesOpen = 1f;
+        private float rideSpeed = 1f, rideClock;
+        /// <summary>Whether balloons take off (by day): one aloft finishes its flight first.</summary>
+        public bool BalloonsFly = true;
+        private readonly List<float> flights = new();   // each balloon's time into its flight
+        public const float FlightSeconds = 100f;
 
         public void Init(TerrainField field, Material lit) { terrain = field; material = lit; block = new MaterialPropertyBlock(); }
 
@@ -41,16 +55,18 @@ namespace Wonderland
         public void Rebuild()
         {
             foreach (var r in renderers) if (r) DestroyObject(r.gameObject);
-            renderers.Clear(); rotors.Clear(); gondolas.Clear();
+            renderers.Clear(); rotors.Clear(); gondolas.Clear(); glow.Clear(); flights.Clear(); neon.Clear();
             foreach (var h in Houses) AddRenderer(h);
             Resit();
             highlighted = -1;
+            Version++;
         }
 
         private void AddRenderer(HouseInstance h)
         {
             var r = CreateRenderer(h, transform, material);
             renderers.Add(r);
+            glow.Add(float.NaN);
             var bp = Catalog.Get(h.variant);
             Transform rotor = null;
             var rotorMesh = HouseFactory.Rotor(h.variant);
@@ -60,6 +76,7 @@ namespace Wonderland
                 rotor.localPosition = bp.RotorPivot;
             }
             rotors.Add(rotor);
+            flights.Add(rotors.Count * 37f % FlightSeconds * 0.1f);
             Transform[] cabins = null;
             if (bp.Gondolas > 0)
             {
@@ -67,7 +84,20 @@ namespace Wonderland
                 for (int g = 0; g < bp.Gondolas; g++) cabins[g] = Child(r.transform, HouseFactory.Gondola(), "Gondola");
             }
             gondolas.Add(cabins);
-            Animate(Time.time, renderers.Count - 1);
+            var signs = HouseFactory.Neon(h.variant);
+            MeshRenderer[] lights = null;
+            if (signs != null)
+            {
+                lights = new MeshRenderer[signs.Length];
+                for (int k = 0; k < signs.Length; k++)
+                {
+                    var part = Child(r.transform, signs[k], "Neon");
+                    lights[k] = part.GetComponent<MeshRenderer>();
+                    lights[k].shadowCastingMode = ShadowCastingMode.Off;
+                }
+            }
+            neon.Add(lights);
+            Animate(Time.time, rideClock, renderers.Count - 1);
         }
 
         private Transform Child(Transform parent, Mesh mesh, string name)
@@ -80,16 +110,41 @@ namespace Wonderland
             return go.transform;
         }
 
-        private void Update() => Animate(Time.time);
+        private void Update()
+        {
+            long t0 = SimCost.Now;
+            rideSpeed = Mathf.MoveTowards(rideSpeed, RidesOpen, Time.deltaTime * 0.25f);   // rides wind down and start up gently
+            rideClock += Time.deltaTime * rideSpeed;
+            StepFlights(Time.deltaTime);
+            Animate(Time.time, rideClock);
+            SimCost.Add(SimCost.Buildings, t0);
+        }
 
-        /// <summary>Turns the carousels, sails and wheels (cabins stay upright).</summary>
-        public void Animate(float time, int only = -1)
+        /// <summary>How many of a building's neon letters shine now (-1: it has no neon sign).</summary>
+        public int NeonLit(int index)
+        {
+            var lights = index >= 0 && index < neon.Count ? neon[index] : null;
+            if (lights == null) return -1;
+            int n = 0; foreach (var l in lights) if (l.enabled) n++;
+            return n;
+        }
+
+        /// <summary>Turns the carousels, sails and wheels (cabins stay upright). Rides follow their own clock.</summary>
+        public void Animate(float time, float rides, int only = -1)
         {
             for (int i = only < 0 ? 0 : only; i < (only < 0 ? rotors.Count : only + 1); i++)
             {
+                var lights = i < neon.Count ? neon[i] : null;
+                if (lights != null)
+                    for (int k = 0; k < lights.Length; k++)
+                    {
+                        bool on = HouseFactory.NeonOn(k, lights.Length, time + i * 1.3f);
+                        if (lights[k].enabled != on) lights[k].enabled = on;
+                    }
                 if (rotors[i] == null) continue;
                 var bp = Catalog.Get(Houses[i].variant);
-                float angle = time * bp.RotorSpeed + i * 37f;
+                if (bp.Id == Catalog.Balloon) { rotors[i].localPosition = Flight(flights[i], i, out var sway); rotors[i].localRotation = sway; continue; }
+                float angle = (bp.Ride ? rides : time) * bp.RotorSpeed + i * 37f;
                 rotors[i].localRotation = Quaternion.AngleAxis(angle, bp.RotorAxis);
                 var cabins = gondolas[i];
                 if (cabins == null) continue;
@@ -101,10 +156,51 @@ namespace Wonderland
             }
         }
 
+        /// <summary>Balloons: a flight takes 100 s; on the ground they wait for the day (and a flight under way always lands).</summary>
+        public void StepFlights(float dt)
+        {
+            for (int i = 0; i < flights.Count && i < Houses.Count; i++)
+            {
+                if (Houses[i].variant != Catalog.Balloon) continue;
+                float t = flights[i] % FlightSeconds;
+                if (!BalloonsFly && t < FlightSeconds * 0.1f) continue;   // grounded for the night
+                flights[i] = t + dt;
+            }
+        }
+
+        /// <summary>Whether a balloon is up in the air.</summary>
+        public bool Aloft(int i) => i >= 0 && i < flights.Count && flights[i] % FlightSeconds > FlightSeconds * 0.12f;
+
+        /// <summary>
+        /// Where the balloon is (in its launch field's frame) a time into its flight: ten seconds on the ground, a gentle
+        /// rise to 45 cm, a wide loop drifting over the countryside (a third of a metre out), and down again.
+        /// </summary>
+        public static Vector3 Flight(float t, int seed, out Quaternion sway)
+        {
+            float u = Mathf.Repeat(t, FlightSeconds) / FlightSeconds;
+            float air = Mathf.InverseLerp(0.1f, 1f, u);
+            float height = 0.45f * Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.1f, 0.3f, u)) * (1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.82f, 1f, u)));
+            float r = 0.33f * Mathf.Sin(air * Mathf.PI);
+            float a = air * Mathf.PI * 1.7f + seed * 1.3f;
+            sway = Quaternion.Euler(Mathf.Sin(t * 0.7f) * 3f * air, t * 4f, Mathf.Cos(t * 0.53f) * 3f * air);
+            return new Vector3(Mathf.Cos(a) * r - Mathf.Cos(seed * 1.3f) * r, height, Mathf.Sin(a) * r - Mathf.Sin(seed * 1.3f) * r);
+        }
+
         /// <summary>The turning part of a placed object (carousel riders sit on it), or null.</summary>
         public Transform RotorOf(int index) => index >= 0 && index < rotors.Count ? rotors[index] : null;
 
         /// <summary>Where a placed object's activity spot is, in world-root space, and the yaw a person there faces.</summary>
+        /// <summary>A point in a building's own frame (front -Z) in the world's frame, standing where the building stands.</summary>
+        public Vector3 LocalToWorld(int index, Vector3 local)
+        {
+            var h = Houses[index];
+            var p = Quaternion.Euler(0f, h.rotation, 0f) * local;
+            return new Vector3(h.x + p.x, renderers[index].transform.localPosition.y + p.y, h.z + p.z);
+        }
+
+        /// <summary>About the top of a building (smoke from its roof).</summary>
+        public float TopOf(int index) => renderers[index].transform.localPosition.y + Catalog.Get(Houses[index].variant).Height * 0.85f;
+
         public Vector3 SpotPosition(int index, int spot, out float yaw)
         {
             var h = Houses[index];
@@ -125,7 +221,7 @@ namespace Wonderland
             return r;
         }
 
-        private static void DestroyObject(GameObject go)
+        private static void DestroyObject(UnityEngine.Object go)
         {
             if (Application.isPlaying) Destroy(go); else DestroyImmediate(go);
         }
@@ -158,6 +254,14 @@ namespace Wonderland
         /// <summary>The house's ground level: the footprint's average height (its pad is graded to exactly this).</summary>
         public float SitHeight(HouseInstance h, out float range)
         {
+            if (h.variant == Catalog.Jetty)
+            {
+                // Level with its bank (its land end), and never below the water it reaches over.
+                var back = new Vector3(h.x, 0f, h.z) + Quaternion.Euler(0f, h.rotation, 0f) * new Vector3(0f, 0f, Catalog.Get(Catalog.Jetty).Half.y * 0.8f);
+                var tip = new Vector3(h.x, 0f, h.z) + Quaternion.Euler(0f, h.rotation, 0f) * new Vector3(0f, 0f, -Catalog.Get(Catalog.Jetty).Half.y * 0.8f);
+                range = 0f;
+                return Mathf.Max(terrain.SurfaceAt(back.x, back.z) - 0.003f, terrain.WaterLevelAt(tip.x, tip.z) + 0.001f);
+            }
             float min = float.MaxValue, max = float.MinValue, sum = 0f;
             var samples = FootprintSamples(h);
             foreach (var p in samples)
@@ -174,17 +278,17 @@ namespace Wonderland
         /// <summary>Why a house cannot go here, or null when it can.</summary>
         public string Validate(HouseInstance h, int ignore, Func<Vector2, float> trackDistance)
         {
-            bool station = h.variant == HouseFactory.Station;   // a station stands beside the rails on purpose
+            bool station = Catalog.IsStation(h.variant);   // a station stands beside the rails on purpose
             var bp = Catalog.Get(h.variant);
             foreach (var p in FootprintSamples(h))
             {
                 if (terrain.EdgeAt(p.x, p.y) < 0.5f) return "Too close to the edge";
-                if (terrain.WaterAt(p.x, p.y) > 0.2f) return "That's water";
+                if (terrain.WaterAt(p.x, p.y) > 0.2f && h.variant != Catalog.Jetty) return "That's water";   // (a landing stage reaches out over it)
                 if (!station && trackDistance(p) < TrackSystem.BedHalfWidth + 0.012f) return "That's the railway";
             }
             if (!station && trackDistance(new Vector2(h.x, h.z)) < TrackSystem.BedHalfWidth + 0.03f) return "That's the railway";
             SitHeight(h, out float range);
-            if (range > (bp.Pad ? MaxSlopeRange : MaxSlopeRange * 1.6f)) return "Too steep here - smooth it a little first";
+            if (h.variant != Catalog.Jetty && range > (bp.Pad ? MaxSlopeRange : MaxSlopeRange * 1.6f)) return "Too steep here - smooth it a little first";
             float r = Radius(h.variant) * (bp.Small ? 0.7f : 0.82f);
             for (int i = 0; i < Houses.Count; i++)
             {
@@ -202,6 +306,7 @@ namespace Wonderland
             Houses.Add(h);
             AddRenderer(h);
             Resit();
+            Version++;
         }
 
         public HouseInstance RemoveAt(int index)
@@ -209,8 +314,9 @@ namespace Wonderland
             var h = Houses[index];
             Houses.RemoveAt(index);
             DestroyObject(renderers[index].gameObject);
-            renderers.RemoveAt(index); rotors.RemoveAt(index); gondolas.RemoveAt(index);
+            renderers.RemoveAt(index); rotors.RemoveAt(index); gondolas.RemoveAt(index); glow.RemoveAt(index); neon.RemoveAt(index);
             highlighted = -1;
+            Version++;
             return h;
         }
 
@@ -246,12 +352,52 @@ namespace Wonderland
         public void Highlight(int index, Color colour)
         {
             if (highlighted == index && index < 0) return;
-            for (int i = 0; i < renderers.Count; i++)
-            {
-                if (i == index) { block.SetColor(HighlightId, colour); renderers[i].SetPropertyBlock(block); }
-                else if (i == highlighted) renderers[i].SetPropertyBlock(null);
-            }
+            int old = highlighted;
             highlighted = index;
+            highlightColour = colour;
+            if (old >= 0 && old < renderers.Count && old != index) ApplyBlock(old);
+            if (index >= 0 && index < renderers.Count) ApplyBlock(index);
+        }
+
+        private Color highlightColour;
+
+        /// <summary>
+        /// How brightly a building's windows glow (NaN: the material's own): lit homes at night, dark empty ones. Levels
+        /// share a handful of material variants (steps of 0.1), which batch like the base material.
+        /// </summary>
+        public void SetGlow(int index, float strength)
+        {
+            if (index < 0 || index >= glow.Count) return;
+            if (!float.IsNaN(strength)) strength = Mathf.Round(strength * 10f) / 10f;
+            float old = glow[index];
+            if ((float.IsNaN(old) && float.IsNaN(strength)) || old == strength) return;
+            glow[index] = strength;
+            renderers[index].sharedMaterial = float.IsNaN(strength) ? material : GlowMaterial(strength);
+        }
+
+        private Material GlowMaterial(float strength)
+        {
+            int key = Mathf.RoundToInt(strength * 10f);
+            if (glowMaterials.TryGetValue(key, out var m) && m != null) return m;
+            m = new Material(material) { name = $"{material.name} glow {strength:0.0}" };
+            m.SetFloat(GlowId, strength);
+            glowMaterials[key] = m;
+            return m;
+        }
+
+        private void OnDestroy()
+        {
+            foreach (var m in glowMaterials.Values) if (m != null) DestroyObject(m);
+        }
+
+        public float GlowOf(int index) => index >= 0 && index < glow.Count ? glow[index] : float.NaN;
+
+        private void ApplyBlock(int i)
+        {
+            if (i != highlighted) { renderers[i].SetPropertyBlock(null); return; }
+            block.Clear();
+            block.SetColor(HighlightId, highlightColour);
+            renderers[i].SetPropertyBlock(block);
         }
 
         public bool Contains(Vector2 p, float margin)

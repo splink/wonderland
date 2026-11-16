@@ -20,6 +20,35 @@ namespace Wonderland
         private readonly FrameTiming[] timings = new FrameTiming[1];
         public System.Func<string> Context;   // what the world looks like (trees, houses, land) for the log line
 
+        /// <summary>Live, smoothed numbers for the Stats panel: frames per second, frame time, the CPU main thread's and
+        /// the GPU's time per frame (0: the platform doesn't report it), the GPU's utilisation from the headset (-1: not
+        /// reported), and the display's refresh rate.</summary>
+        public float Fps { get; private set; }
+        public float FrameMs { get; private set; }
+        public float CpuMs { get; private set; }
+        public float GpuMs { get; private set; }
+        public float GpuUtil { get; private set; } = -1f;
+        public float Refresh { get; private set; } = 72f;
+        private float utilTimer;
+
+        private void Live(float dt)
+        {
+            float k = 0.05f;
+            FrameMs += (dt * 1000f - FrameMs) * k;
+            Fps = FrameMs > 0.01f ? 1000f / FrameMs : 0f;
+            if (timings[0].cpuMainThreadFrameTime > 0) CpuMs += ((float)timings[0].cpuMainThreadFrameTime - CpuMs) * k;
+            if (timings[0].gpuFrameTime > 0) GpuMs += ((float)timings[0].gpuFrameTime - GpuMs) * k;
+            utilTimer -= dt;
+            if (utilTimer > 0f) return;
+            utilTimer = 1f;
+            try
+            {
+                if (OVRPlugin.gpuUtilSupported) GpuUtil = OVRPlugin.gpuUtilLevel;
+                if (OVRManager.display != null && OVRManager.display.displayFrequency > 1f) Refresh = OVRManager.display.displayFrequency;
+            }
+            catch (System.Exception) { }
+        }
+
         private void Update()
         {
             float dt = Time.unscaledDeltaTime;
@@ -28,9 +57,11 @@ namespace Wonderland
             FrameTimingManager.CaptureFrameTimings();
             if (FrameTimingManager.GetLatestTimings(1, timings) > 0)
             {
+                Live(dt);
                 cpuMain += timings[0].cpuMainThreadFrameTime; cpuRender += timings[0].cpuRenderThreadFrameTime; gpu += timings[0].gpuFrameTime;
                 timingFrames++;
             }
+            else Live(dt);
             if (elapsed < Window) return;
             Report();
             elapsed = 0f; count = 0; cpuMain = cpuRender = gpu = 0; timingFrames = 0;

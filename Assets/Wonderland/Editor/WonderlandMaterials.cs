@@ -13,6 +13,7 @@ namespace Wonderland.Editor
         public static Material UI => Ensure("WonderlandUI", "Wonderland/UI", m => m.renderQueue = 3000);
         public static Material Smoke => Ensure("WonderlandSmoke", "Wonderland/Smoke", m => m.renderQueue = 3001);
         public static Material Water => Ensure("WonderlandWater", "Wonderland/Water", m => m.renderQueue = 2480);
+        public static Material Screen => Ensure("WonderlandScreen", "Wonderland/Screen", null);
 
         public static Material Ensure(string name, string shaderName, System.Action<Material> setup)
         {

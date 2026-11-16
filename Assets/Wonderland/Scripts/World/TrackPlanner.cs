@@ -173,6 +173,27 @@ namespace Wonderland
             return new TrackAttach { Kind = AttachKind.Mid, Edge = edge, S = layout.Cum[index], Point = Flat(at), Dir = Vector2.Dot(dir, t) >= 0f ? t : -t };
         }
 
+        /// <summary>
+        /// An attachment in the middle of a piece moved along it by <paramref name="shift"/> (positive: on the way the new
+        /// line goes), or Kind None when that runs into a switch, a crossing or the end of the piece. Others stay as they are.
+        /// </summary>
+        private static TrackAttach Slide(TrackNetwork network, TrackAttach a, float shift)
+        {
+            if (a.Kind != AttachKind.Mid) return a;
+            var none = new TrackAttach { Kind = AttachKind.None };
+            var l = network.Edges[a.Edge].Layout;
+            l.Evaluate(a.S, out var t0);
+            float sign = Vector2.Dot(a.Dir, Flat(t0)) >= 0f ? 1f : -1f;
+            float s = a.S + sign * shift;
+            if (!l.Closed && (s < MinJointGap || s > l.Length - MinJointGap)) return none;
+            s = l.Wrap(s);
+            if (network.DistanceToJoint(a.Edge, s) < MinJointGap || network.DistanceToCrossing(a.Edge, s) < MinJointGap * 0.7f) return none;
+            int index = IndexAt(l, s);
+            if (!l.Closed) index = Mathf.Clamp(index, 1, l.Points.Count - 2);
+            l.Evaluate(l.Cum[index], out var t);
+            return new TrackAttach { Kind = AttachKind.Mid, Edge = a.Edge, S = l.Cum[index], Point = Flat(l.Points[index]), Dir = Flat(t).normalized * sign };
+        }
+
         private static TrackAttach EndAttach(TrackNetwork network, EdgeEnd end, bool start)
         {
             var into = network.IntoEdge(end);
@@ -194,7 +215,7 @@ namespace Wonderland
         /// short, tracks crossing at a very shallow angle or right at a switch, and track squeezed against other track.
         /// </summary>
         public static TrackPlan Plan(IReadOnlyList<Vector3> drawn, TerrainField terrain, TrackNetwork network,
-            System.Func<List<Vector2>, bool> ensureLand = null)
+            System.Func<List<Vector2>, bool> ensureLand = null, bool landWillGrow = false)
         {
             var plan = new TrackPlan();
             var raw = new List<Vector2>();
@@ -218,14 +239,38 @@ namespace Wonderland
 
             List<Vector2> pts = null;
             float radius = 0f;
-            foreach (var (trim, turn) in new[] { (0.1f, 0.24f), (0.16f, 0.28f), (0.24f, 0.34f), (0.34f, 0.42f), (0.06f, 0.2f), (0.12f, 0.2f) })
+            void ShapeWith(TrackAttach start, TrackAttach finish, out List<Vector2> best, out float bestR)
             {
-                var shaped = Shape(path, closed, plan.Start, plan.Finish, trim, turn);
-                if (shaped == null) continue;
-                float r = MinRadiusOf(shaped, closed);
-                if (pts == null || r > radius) { pts = shaped; radius = r; }
-                if (radius >= MinRadius * 0.95f) break;
+                best = null; bestR = 0f;
+                foreach (var (trim, turn) in new[] { (0.1f, 0.24f), (0.16f, 0.28f), (0.24f, 0.34f), (0.34f, 0.42f), (0.06f, 0.2f), (0.12f, 0.2f) })
+                {
+                    var shaped = Shape(path, closed, start, finish, trim, turn);
+                    if (shaped == null) continue;
+                    float r = MinRadiusOf(shaped, closed);
+                    if (best == null || r > bestR) { best = shaped; bestR = r; }
+                    if (bestR >= MinRadius * 0.95f) break;
+                }
+                // An attached stroke whose drawn line can't be bent to meet the track (a short extension, a line from one
+                // track to another): fit the smoothest curve that leaves (and meets) each attachment along the track.
+                if (attached && !closed && (best == null || bestR < MinRadius * 0.95f))
+                {
+                    var fit = Fit(path, start, finish);
+                    if (fit != null) { float r = MinRadiusOf(fit, false); if (best == null || r > bestR) { best = fit; bestR = r; } }
+                }
             }
+            ShapeWith(plan.Start, plan.Finish, out pts, out radius);
+            // Still too tight where it leaves or meets a track: give the curve room by sliding the new switch a little
+            // back along the track (and the joining one a little on), as a railway builder would.
+            if (attached && !closed && (pts == null || radius < MinRadius * 0.95f))
+                foreach (float shift in new[] { 0.06f, 0.12f, 0.18f })
+                {
+                    var sa = Slide(network, plan.Start, -shift); var sb = Slide(network, plan.Finish, shift);
+                    if (sa.Kind == AttachKind.None && plan.Start.Kind != AttachKind.None) sa = plan.Start;
+                    if (sb.Kind == AttachKind.None && plan.Finish.Kind != AttachKind.None) sb = plan.Finish;
+                    ShapeWith(sa, sb, out var tried, out float r);
+                    if (tried != null && (pts == null || r > radius)) { pts = tried; radius = r; plan.Start = sa; plan.Finish = sb; }
+                    if (radius >= MinRadius * 0.95f) break;
+                }
             if (pts == null || pts.Count < 3) { plan.Error = "Draw a longer track"; return plan; }
             plan.Smoothed = pts.ConvertAll(p => terrain.PointAt(p.x, p.y) + Vector3.up * 0.006f);
             if (closed && Perimeter(pts, true) < MinLoopLength) { plan.Error = "Make the loop a little bigger"; return plan; }
@@ -240,11 +285,79 @@ namespace Wonderland
             bool offLand = false;
             foreach (var p in dense) if (terrain.EdgeAt(p.x, p.y) < 0.4f) { offLand = true; break; }
             if (offLand && ensureLand != null) ensureLand(dense);
-            foreach (var p in dense)
-                if (terrain.EdgeAt(p.x, p.y) < 0.4f) { plan.Error = "Part of the railway is too far out to build"; return plan; }
+            if (!landWillGrow)
+                foreach (var p in dense)
+                    if (terrain.EdgeAt(p.x, p.y) < 0.4f) { plan.Error = "Part of the railway is too far out to build"; return plan; }
             plan.Path = dense;
             plan.Closed = closed;
             return plan;
+        }
+
+        /// <summary>
+        /// A smooth curve for an attached stroke: cubic Béziers leaving the start along its direction and arriving at the
+        /// finish along its direction (the track's at an attachment, the stroke's at a free end), either directly or through
+        /// the stroke's middle (when it bulges). The handle lengths giving the gentlest curve win, ties going to the curve
+        /// nearest the stroke. Null for a stroke with nothing to fit.
+        /// </summary>
+        private static List<Vector2> Fit(List<Vector2> path, TrackAttach start, TrackAttach finish)
+        {
+            if (path.Count < 2) return null;
+            Vector2 StrokeDir(int from, int step)
+            {
+                var p0 = path[from];
+                for (int i = from + step; i >= 0 && i < path.Count; i += step) { var d = path[i] - p0; if (d.magnitude > 0.05f) return step > 0 ? d.normalized : -d.normalized; }
+                var dd = path[^1] - path[0];
+                return dd.sqrMagnitude > 1e-8f ? dd.normalized : Vector2.up;
+            }
+            var a = start.Kind != AttachKind.None ? start.Point : path[0];
+            var da = start.Kind != AttachKind.None ? start.Dir.normalized : StrokeDir(0, 1);
+            var b = finish.Kind != AttachKind.None ? finish.Point : path[^1];
+            var db = finish.Kind != AttachKind.None ? finish.Dir.normalized : StrokeDir(path.Count - 1, -1);
+            float chord = (b - a).magnitude;
+            if (chord < 0.05f) return null;
+            // The stroke's middle, and how far it bulges from the straight line between the ends.
+            int mid = path.Count / 2;
+            var m = path[mid];
+            var dm = (path[Mathf.Min(path.Count - 1, mid + 2)] - path[Mathf.Max(0, mid - 2)]);
+            dm = dm.sqrMagnitude > 1e-8f ? dm.normalized : (b - a).normalized;
+            float bulge = Mathf.Abs((m.x - a.x) * (b - a).normalized.y - (m.y - a.y) * (b - a).normalized.x);
+            List<Vector2> best = null; float bestR = 0f, bestFollow = float.MaxValue;
+            void Try(List<Vector2> c)
+            {
+                float r = MinRadiusOf(c, false);
+                float follow = 0f;
+                foreach (var q in path) { float d = float.MaxValue; foreach (var cq in c) d = Mathf.Min(d, (cq - q).sqrMagnitude); follow += d; }
+                follow /= path.Count;
+                bool better = best == null || r > bestR * 1.05f || (r > bestR * 0.95f && follow < bestFollow) || (r >= MinRadius && bestR >= MinRadius && follow < bestFollow);
+                if (bestR >= MinRadius && r < MinRadius) better = false;
+                if (better) { best = c; bestR = r; bestFollow = follow; }
+            }
+            foreach (float k in new[] { 0.25f, 0.35f, 0.5f, 0.65f, 0.8f, 1f, 1.3f })
+            {
+                Try(Bezier(a, a + da * chord * k, b - db * chord * k, b));
+                if (bulge > 0.06f)
+                {
+                    float h1 = (m - a).magnitude * k, h2 = (b - m).magnitude * k;
+                    var first = Bezier(a, a + da * h1, m - dm * h1, m);
+                    var second = Bezier(m, m + dm * h2, b - db * h2, b);
+                    first.RemoveAt(first.Count - 1); first.AddRange(second);
+                    Try(first);
+                }
+            }
+            return best;
+        }
+
+        private static List<Vector2> Bezier(Vector2 p0, Vector2 p1, Vector2 p2, Vector2 p3)
+        {
+            float length = (p1 - p0).magnitude + (p2 - p1).magnitude + (p3 - p2).magnitude;
+            int n = Mathf.Max(4, Mathf.CeilToInt(length / Coarse * 2f));
+            var pts = new List<Vector2>(n + 1);
+            for (int i = 0; i <= n; i++)
+            {
+                float t = i / (float)n, u = 1f - t;
+                pts.Add(u * u * u * p0 + 3f * u * u * t * p1 + 3f * u * t * t * p2 + t * t * t * p3);
+            }
+            return Resample(pts, Coarse, false);
         }
 
         /// <summary>

@@ -70,6 +70,213 @@ namespace Wonderland
         private const float GridCell = 0.08f;
 
         public bool Empty => Edges.Count == 0;
+
+        // ------------------------------------------------------------------ one way
+
+        /// <summary>
+        /// The railway runs one way: trains travel along each piece from its end 0 to its end 1 (round a loop, the way its
+        /// points go). Every switch then either splits one line into two going the same way (trains arrive on the trunk)
+        /// or merges two into one (they leave on the trunk), so trains never meet head-on. False for a network that can't
+        /// run one way (a line that turns back into itself): trains then shuttle as before.
+        /// </summary>
+        public bool OneWay { get; private set; }
+        public string TwoWayReason { get; private set; }
+
+        /// <summary>Do trains arrive at a switch through this end (true), or leave through it?</summary>
+        public static bool Arrives(EdgeEnd e) => e.End == 1;
+
+        /// <summary>
+        /// Turns pieces round so the whole network runs one way. Which way each connected part runs is free: it is chosen
+        /// to agree with <paramref name="agreement"/> (per piece: positive if it runs the way it should already, negative
+        /// if it would rather be turned; e.g. the way the railway ran before a new piece was added), so the old railway
+        /// keeps its direction and a loop being joined to it turns to match. False (nothing turned) when some switch can't
+        /// be made one way, with the reason in <paramref name="why"/>.
+        /// </summary>
+        public bool Orient(Func<int, float> agreement, out string why)
+        {
+            why = null;
+            int n = Edges.Count;
+            var flip = new int[n]; var seen = new bool[n];
+            var links = new List<(int other, int parity)>[n];
+            for (int i = 0; i < n; i++) links[i] = new List<(int, int)>();
+            foreach (var j in Joints)
+            {
+                if (j == null || j.Ends.Count != 3) continue;
+                var t = j.Trunk;
+                foreach (var b in j.Ends)
+                {
+                    if (b == t) continue;
+                    // Trunk and branch must differ: one arrives, the other leaves.
+                    int p = (Arrives(t) ? 1 : 0) ^ (Arrives(b) ? 1 : 0) ^ 1;
+                    if (t.Edge == b.Edge) { if (p != 0) { why = TurnBack; OneWay = false; TwoWayReason = why; return false; } continue; }
+                    links[t.Edge].Add((b.Edge, p)); links[b.Edge].Add((t.Edge, p));
+                }
+            }
+            var comp = new List<int>(); var queue = new Queue<int>();
+            for (int s = 0; s < n; s++)
+            {
+                if (seen[s]) continue;
+                comp.Clear(); queue.Enqueue(s); seen[s] = true; flip[s] = 0;
+                while (queue.Count > 0)
+                {
+                    int e = queue.Dequeue(); comp.Add(e);
+                    foreach (var (o, p) in links[e])
+                    {
+                        int want = flip[e] ^ p;
+                        if (!seen[o]) { seen[o] = true; flip[o] = want; queue.Enqueue(o); }
+                        else if (flip[o] != want) { why = TurnBack; OneWay = false; TwoWayReason = why; return false; }
+                    }
+                }
+                float keep = 0f;
+                foreach (int e in comp) keep += (agreement?.Invoke(e) ?? 0f) * (flip[e] == 0 ? 1f : -1f);
+                if (keep < 0f) foreach (int e in comp) flip[e] ^= 1;
+            }
+            for (int e = 0; e < n; e++) if (flip[e] == 1) Reverse(e);
+            OneWay = true; TwoWayReason = null;
+            return true;
+        }
+
+        public const string TurnBack = "Trains would have to turn round here: the new line must run the same way as the track it joins - follow the arrows";
+
+        /// <summary>
+        /// How much a piece agrees with the way the railway ran in <paramref name="before"/> (positive: same way): its
+        /// direction compared with the old track it lies on, sampled along it. Zero for new track.
+        /// </summary>
+        public float Agreement(int edge, TrackNetwork before)
+        {
+            if (before == null || before.Empty) return 0f;
+            var l = Edges[edge].Layout;
+            float sum = 0f;
+            for (float s = 0.02f; s < l.Length; s += 0.1f)
+            {
+                var p = l.Evaluate(s, out var t);
+                if (!before.Nearest(p, out int oe, out float os, out float d, 0.004f)) continue;
+                before.Edges[oe].Layout.Evaluate(os, out var ot);
+                sum += Vector3.Dot(new Vector3(t.x, 0f, t.z).normalized, new Vector3(ot.x, 0f, ot.z).normalized) > 0f ? 0.1f : -0.1f;
+            }
+            return sum;
+        }
+
+        /// <summary>
+        /// Pieces trains can carry on from, running one way (they don't lead only into a dead end): what the trains'
+        /// routing prefers at a switch. Cached until the network changes.
+        /// </summary>
+        public bool Through(int edge)
+        {
+            if (through == null || through.Length != Edges.Count || throughVersion != Version) ComputeThrough();
+            return edge >= 0 && edge < through.Length && through[edge];
+        }
+
+        private bool[] through;
+        private int throughVersion = -1;
+
+        /// <summary>
+        /// The circuit a piece belongs to: pieces trains can go round between, running one way (a strongly connected part).
+        /// Two loops joined by one link are two circuits: trains can go from one to the other but not back.
+        /// </summary>
+        public int CircuitOf(int edge)
+        {
+            if (circuit == null || circuit.Length != Edges.Count || circuitVersion != Version) ComputeCircuits();
+            return edge >= 0 && edge < circuit.Length ? circuit[edge] : -1;
+        }
+
+        /// <summary>Circuits trains can go round in (with at least one way round them).</summary>
+        public int Circuits { get { CircuitOf(0); return circuitCount; } }
+
+        /// <summary>
+        /// One-way traps: parts of one connected railway that trains can enter but never leave again (a single link from
+        /// one loop to another). Zero when every train can get everywhere and back.
+        /// </summary>
+        public int Traps
+        {
+            get
+            {
+                if (Empty || !OneWay) return 0;
+                CircuitOf(0);
+                // Circuits with a way in from another circuit but no way out to one: each extra one is a trap.
+                var into = new HashSet<int>(); var outOf = new HashSet<int>();
+                for (int e = 0; e < Edges.Count; e++)
+                    foreach (int n in Successors(e))
+                        if (circuit[n] != circuit[e]) { outOf.Add(circuit[e]); into.Add(circuit[n]); }
+                int traps = 0;
+                foreach (int c in into) if (!outOf.Contains(c) && cyclic.Contains(c)) traps++;
+                return traps;
+            }
+        }
+
+        private int[] circuit;
+        private int circuitVersion = -1, circuitCount;
+        private readonly HashSet<int> cyclic = new();
+
+        /// <summary>Pieces a train can run onto from the far end of this one (running one way).</summary>
+        private IEnumerable<int> Successors(int e)
+        {
+            if (Edges[e].Closed) { yield return e; yield break; }
+            var exit = new EdgeEnd(e, 1);
+            int ji = JointAt(exit);
+            if (ji < 0) yield break;
+            var j = Joints[ji];
+            foreach (var x in j.Ends)
+                if (x != exit && (exit == j.Trunk ? x != j.Trunk : x == j.Trunk) && !Arrives(x)) yield return x.Edge;
+        }
+
+        private void ComputeCircuits()
+        {
+            // Tarjan's strongly connected components over the pieces.
+            int n = Edges.Count;
+            circuit = new int[n]; circuitCount = 0; cyclic.Clear();
+            var index = new int[n]; var low = new int[n]; var on = new bool[n];
+            for (int i = 0; i < n; i++) index[i] = -1;
+            var stack = new Stack<int>(); int counter = 0;
+            void Visit(int v)
+            {
+                index[v] = low[v] = counter++; stack.Push(v); on[v] = true;
+                foreach (int w in Successors(v))
+                {
+                    if (index[w] < 0) { Visit(w); low[v] = Mathf.Min(low[v], low[w]); }
+                    else if (on[w]) low[v] = Mathf.Min(low[v], index[w]);
+                }
+                if (low[v] != index[v]) return;
+                int size = 0; bool self = false;
+                while (true)
+                {
+                    int w = stack.Pop(); on[w] = false; circuit[w] = circuitCount; size++;
+                    foreach (int x in Successors(w)) if (x == w) self = true;
+                    if (w == v) break;
+                }
+                if (size > 1 || self) cyclic.Add(circuitCount);
+                circuitCount++;
+            }
+            for (int v = 0; v < n; v++) if (index[v] < 0) Visit(v);
+            circuitVersion = Version;
+        }
+        /// <summary>Bumped whenever the shape of the network changes.</summary>
+        public int Version { get; private set; }
+
+        private void ComputeThrough()
+        {
+            through = new bool[Edges.Count];
+            for (int e = 0; e < through.Length; e++) through[e] = true;
+            for (bool changed = true; changed;)
+            {
+                changed = false;
+                for (int e = 0; e < through.Length; e++)
+                {
+                    if (!through[e] || Edges[e].Closed) continue;
+                    var exit = new EdgeEnd(e, 1);
+                    int ji = JointAt(exit);
+                    bool on = false;
+                    if (ji >= 0)
+                    {
+                        var j = Joints[ji];
+                        foreach (var x in j.Ends)
+                            if (x != exit && (exit == j.Trunk ? x != j.Trunk : x == j.Trunk) && !Arrives(x) && through[x.Edge]) on = true;
+                    }
+                    if (!on) { through[e] = false; changed = true; }
+                }
+            }
+            throughVersion = Version;
+        }
         public float TotalLength { get { float l = 0f; foreach (var e in Edges) l += e.Layout.Length; return l; } }
 
         // ------------------------------------------------------------------ geometry queries
@@ -152,6 +359,7 @@ namespace Wonderland
         /// <summary>Rebuilds the lookup grid and the diamond crossings; call after any change of the pieces.</summary>
         public void Reindex()
         {
+            Version++;
             grid.Clear();
             for (int e = 0; e < Edges.Count; e++)
             {
@@ -361,7 +569,13 @@ namespace Wonderland
                     var j = Joints[ji];
                     if (j == null) continue;
                     if (j.Ends.Count == 3) { if (!j.Ends.Contains(j.Trunk)) ChooseTrunk(j); continue; }
-                    if (j.Ends.Count == 2) { Merge(ji, j.Ends[0], j.Ends[1]); changed = true; continue; }
+                    if (j.Ends.Count == 2)
+                    {
+                        // Merge so the running direction is kept: the piece trains arrive on, then the one they leave on.
+                        var a = j.Ends[0]; var b = j.Ends[1];
+                        if (!Arrives(a) && Arrives(b)) (a, b) = (b, a);
+                        Merge(ji, a, b); changed = true; continue;
+                    }
                     foreach (var e in j.Ends) Edges[e.Edge].Joint[e.End] = -1;
                     Joints[ji] = null;
                     changed = true;
@@ -476,9 +690,97 @@ namespace Wonderland
                     j.Trunk = j.Ends[0];
                     n.Joints.Add(j);
                 }
+            n.Heal();
+            n.Orient(null, out _);
             n.Reindex();
             return n;
         }
+
+        /// <summary>
+        /// Repairs a switch that lists a track end which isn't there (saved before a bug was fixed: a line drawn from a
+        /// dead end back onto its own piece joined the wrong end, and trains taking the switch jumped across): each
+        /// switch gets the free track end that really meets it. Returns whether anything was repaired.
+        /// </summary>
+        public bool Heal(float within = 0.005f)
+        {
+            bool repaired = false;
+            // A piece with a jump in it (two pieces merged end to wrong end): cut it at the jump.
+            for (int e = 0; e < Edges.Count; e++)
+            {
+                var l = Edges[e].Layout;
+                if (l == null) continue;
+                for (int i = 1; i < l.Points.Count; i++)
+                {
+                    if (Flat(l.Points[i], l.Points[i - 1]) <= 0.03f) continue;
+                    if (l.Closed)
+                    {
+                        var open = new List<Vector3>(l.Points.Count);
+                        for (int k = 0; k < l.Points.Count; k++) open.Add(l.Points[(i + k) % l.Points.Count]);
+                        Edges[e].Layout = new TrackLayout(open, false);
+                    }
+                    else
+                    {
+                        Edges[e].Layout = new TrackLayout(l.Points.GetRange(0, i), false);
+                        int b = AddEdge(new TrackLayout(l.Points.GetRange(i, l.Points.Count - i), false));
+                        int far = Edges[e].Joint[1];
+                        Edges[e].Joint[1] = -1; Edges[b].Joint[1] = far;
+                        if (far >= 0) Replace(Joints[far], new EdgeEnd(e, 1), new EdgeEnd(b, 1));
+                    }
+                    Edges[e].Tunnel = null;
+                    repaired = true;
+                    e--;   // look at what is left of this piece again
+                    break;
+                }
+            }
+            for (int ji = 0; ji < Joints.Count; ji++)
+            {
+                var j = Joints[ji];
+                if (j == null) continue;
+                bool changed = false;
+                for (int i = j.Ends.Count - 1; i >= 0; i--)
+                {
+                    var e = j.Ends[i];
+                    bool valid = e.Edge >= 0 && e.Edge < Edges.Count && Edges[e.Edge].Layout != null && !Edges[e.Edge].Closed;
+                    if (valid && Flat(EndPoint(e), j.Position) <= within) continue;
+                    if (valid && Edges[e.Edge].Joint[e.End] == ji) Edges[e.Edge].Joint[e.End] = -1;
+                    var free = FreeEndAt(j.Position, within, j.Ends);
+                    if (free.Edge >= 0) { if (j.Trunk == e) j.Trunk = free; j.Ends[i] = free; Edges[free.Edge].Joint[free.End] = ji; }
+                    else j.Ends.RemoveAt(i);
+                    changed = true;
+                }
+                if (changed) { repaired = true; if (j.Ends.Count == 3) ChooseTrunk(j); }
+            }
+            // ...and a track end that thinks it meets a switch which doesn't list it.
+            for (int e = 0; e < Edges.Count; e++)
+                for (int k = 0; k < 2; k++)
+                {
+                    int ji = Edges[e].Joint[k];
+                    if (ji < 0) continue;
+                    if (ji >= Joints.Count || Joints[ji] == null || !Joints[ji].Ends.Contains(new EdgeEnd(e, k))) { Edges[e].Joint[k] = -1; repaired = true; }
+                }
+            if (repaired) Normalize();
+            return repaired;
+        }
+
+        /// <summary>A track end with no switch at <paramref name="at"/> (not one of <paramref name="taken"/>), or Edge -1.</summary>
+        public EdgeEnd FreeEndAt(Vector3 at, float within, List<EdgeEnd> taken = null)
+        {
+            var best = new EdgeEnd(-1, 0); float bestD = within;
+            for (int e = 0; e < Edges.Count; e++)
+            {
+                if (Edges[e].Layout == null || Edges[e].Closed) continue;
+                for (int k = 0; k < 2; k++)
+                {
+                    var c = new EdgeEnd(e, k);
+                    if (Edges[e].Joint[k] >= 0 || taken != null && taken.Contains(c)) continue;
+                    float d = Flat(EndPoint(c), at);
+                    if (d <= bestD) { bestD = d; best = c; }
+                }
+            }
+            return best;
+        }
+
+        private static float Flat(Vector3 a, Vector3 b) => new Vector2(a.x - b.x, a.z - b.z).magnitude;
 
         public TrackNetwork Clone() => FromData(ToData());
     }

@@ -74,7 +74,7 @@ Shader "Wonderland/Lit"
                 half3 normalWS = normalize(i.normalWS);
                 half3 colour = WL_Shade(albedo, i.positionWS, normalWS);
                 half glow = 1.0h - i.color.a;
-                colour += albedo * _EmissionColor.rgb * (_EmissionStrength * glow);
+                colour += albedo * _EmissionColor.rgb * (_EmissionStrength * (1.0h + _WL_Night * 0.8h) * glow);
                 colour = lerp(colour, _Highlight.rgb, _Highlight.a);
                 return half4(colour, 1.0h);
             }

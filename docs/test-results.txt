@@ -31,7 +31,7 @@ PASS  A figure 8 becomes a loop with a diamond crossing (1 crossing)
 PASS  Both tracks meet at the same height at the crossing (0.0 mm)
 PASS  The train runs the figure 8 through its crossing (5.1 m, worst offset 0.0 mm)
 PASS  Network: a first loop
-PASS  A stop signal goes up beside the track
+PASS  A signal goes up beside the track, on automatic
 PASS  The train waits at the red signal (moved 0.0 cm in 8 s)
 PASS  Green: the train goes on
 PASS  The eraser takes the signal away
@@ -39,19 +39,19 @@ PASS  Drawing from the loop outwards branches off with a switch to a dead end (1
 PASS  The branch leaves the loop smoothly, like a real switch (1 degrees apart at the switch)
 PASS  The train is still on the track after the switch went in
 PASS  Manual switches: a switch set for the loop keeps the train on it
-PASS  Explore: the train takes the branch, reverses at the buffers and comes back (branch True, reversed True, back True)
+PASS  One way: the train keeps to the line it can run round and off the dead-end branch (branch False, reversed False)
 PASS  Drawing on from the buffers extends the line (3.40 -> 3.72 m)
 PASS  Drawing from the end back onto the loop joins it with a second switch (2 switches, 3 pieces)
 PASS  A goods train and a railcar join the steam train (3 trains)
 PASS  Every train gets its own colours
-PASS  Trains sharing the network never touch (closest 5.7 cm between cars in 3 minutes)
-PASS  All trains keep running (no jams) (41.4, 22.0, 20.2 m)
+PASS  Trains sharing the network never touch (closest 5.8 cm between cars in 3 minutes)
+PASS  All trains keep running (no jams) (41.4, 23.2, 20.6 m)
 PASS  Every train stays on the rails through the switches (worst offset 0.0 mm)
 PASS  Speed setting: half speed is half speed (6.5 cm/s)
 PASS  A tapped switch stays where it was set ("Switch set - trains will keep this way")
 PASS  Grip and drag bends a piece of track (moved 12 cm, track within 1.1 cm of the hand)
 PASS  The trains stay on the bent track (3/3)
-PASS  Trains run on over the bent track (closest 5.2 cm)
+PASS  Trains run on over the bent track (closest 5.0 cm)
 PASS  A bend that would squeeze into other track is refused ("That bend is too tight for the train")
 PASS  Save/load keeps the network (3 pieces, 2 switches, 3 trains)
 PASS  The eraser takes away one piece of track ("Track removed": 0 switches, 1 pieces left)
@@ -60,9 +60,9 @@ PASS  A line drawn across the loop crosses it with two diamond crossings (2)
 PASS  Trains take turns at the crossings (closest 7.0 cm)
 PASS  The railcar shuttles along its line, reversing at the buffers (14.6 m)
 PASS  An open line with buffers at both ends
-PASS  Head-on on single track: they stop short and one backs away (closest 4.7 cm)
-PASS  Both keep running (2.9 m, 2.8 m)
-PASS  Every one of the 41 library objects builds (largest: Wheat field, 16552 vertices)
+PASS  Head-on on single track: they stop short and one backs away (closest 4.9 cm)
+PASS  Both keep running (2.9 m, 2.6 m)
+PASS  Every one of the 57 library objects builds (largest: Wheat field, 16552 vertices)
 PASS  Library objects stay within the vertex budget
 PASS  A village square goes up (9/9 places)
 PASS  New homes and shops bring their residents (5 moved in)
@@ -113,6 +113,149 @@ PASS  A footpath crosses on a little footbridge
 PASS  Each crossing has its bridge (6)
 PASS  Short spans don't offer a suspension bridge (13 cm)
 PASS  Long spans do (34 cm)
+PASS  The village clock runs a day in 7.6 minutes (360 s of daylight, 97 s of night)
+PASS  The daily rhythm: shops in the morning, lunch at midday, the fair in the afternoon, the square in the evening
+PASS  A railway loop divides the land
+PASS  A village goes up around the railway (13/13 places, 8 residents moved in)
+PASS  The walk grid sees the railway as a divide (2 regions over 6972 cells, built in 37 ms)
+PASS  Every resident knows their home (8/8; 2 live inside the loop)
+PASS  The baker lives over the bakery
+PASS  At two in the morning everyone is asleep at home (8/8)
+PASS  The streets are empty at night (0 out)
+PASS  The fair's rides stop at night and run in the afternoon
+PASS  In the evening windows glow where people are home (1.9) and stay dark where nobody is (0.1)
+PASS  Mornings fill the shops (errands 29% of visits in the morning, 4% in the afternoon)
+PASS  Afternoons fill the fair (fun 32% of visits in the afternoon, 3% in the morning)
+PASS  Evenings gather people at the fountain (68% vs 0% in the morning)
+PASS  Shopkeepers mind their shops in opening hours, not at night
+PASS  Places never hold more people than they have spots, and no spot is shared
+PASS  Nobody inside the loop sets off for a place they cannot reach
+PASS  Removing a building at night leaves the sleepers asleep (8)
+PASS  A new café draws visitors (first one after 58 s)
+PASS  ...and the village notices ("Kit is the first to visit the new café")
+PASS  Removing the café while 1 sit there sends them elsewhere (8 busy again)
+PASS  Stations inside and outside the loop, and a train (2 stations)
+PASS  People inside the loop take the train to the village
+PASS  ...get off at the far station and walk on to where they were going
+PASS  A lane with a level crossing joins the two sides (1 regions)
+PASS  ...and people from inside the loop walk over it to the village
+PASS  Save/load keeps the time (10:00), the clock speed, needs and homes (8/8)
+PASS  40 villagers: 0.25 ms per frame on average, worst 2.8 ms, 1.3 decisions/s, slowest decision 2.3 ms, places directory 0.5 ms (editor timing)
+PASS  After an edit the walk grid rebuilds over 32 frames (65 ms of work, worst frame 8.3 ms)
+PASS  With no places at all, villagers wander by day and sleep under the stars at night
+PASS  A working village goes up (15/15 places, 10 villagers)
+PASS  Opening hours: the bakery opens at half six and shuts at six, the carousel stops in the evening, the fountain never closes
+PASS  Jobs go to the villagers: Gus the baker lives over the bakery, Otto farms the field, Hugo teaches (6/6 places staffed, 4 without a job)
+PASS  Workers keep their shifts: the teacher indoors at the school, the farmer out in the field, nobody at work at night
+PASS  Farms grow produce while the farmer works, and it is carried to the shops ("Milo brought the first vegetables to the grocer")
+PASS  After closing time nobody shops at the bakery ("Bakery: closed, opens at 6:30 · Gus is the baker · shelves half empty")
+PASS  The village tells the player what changes: The shelves at the grocer are bare - a farm nearby would help / Milo brought the first vegetables to the grocer / Cleo brought the first sacks of wheat to the café / Otto brought the first sacks of wheat to the bakery
+PASS  With no farm, shelves run bare and the village says so ("The shelves at the bakery are bare - a farm nearby would help")
+PASS  ...pointing at the shop shows it ("Bakery: 1 visitor, 1 on the way - people come for the morning shopping, busiest in the morning · Gus is the baker · shelves bare · open till 18:00")
+PASS  Villagers who spend time together become friends (6 friendships; "Frida and Viggo have become friends at the café")
+PASS  Save and load keep the friendships (6) and what is on the shelves (2.6 crates at the bakery)
+PASS  A fête at the fountain - everyone's invited! - 9 of 10 gather at the fountain
+PASS  The fête ends after 2.5 hours and everyone gets on with their day (0 still gathering)
+PASS  A decider from outside fills the café (4 of 5 spots, asked 17 times); one handing out nonsense is ignored
+PASS  Deciders that are done are dropped
+PASS  A farm inside a railway loop, a bakery outside, two stations and a goods train (6/6 places; farmer Greta)
+PASS  The farmer carries crates to the station for the goods train (up to 2 waiting on the platform)
+PASS  The goods train loads them and unloads at the far station (2 aboard, 4 unloaded)
+PASS  ...where the shopkeeper fetches them ("Finn brought the first goods to the bakery")
+PASS  A loop with a branch line, a station on each and a train (1 switch)
+PASS  The destination board follows the switches: set for the loop the train won't call at the branch station; set for the branch it will
+PASS  With the switch set for the loop, the passenger lets the train go by (plan: 0->1)
+PASS  Set for the branch: they board, ride to the branch station and walk on to the bench
+PASS  A small town with homes, shops, a school, a park and a road (11 villagers)
+PASS  Everyone leaves home during the day; most visit two or more places (10/11; e.g. "Ugo (Curator): On the way to work at the museum; going to work at the museum (as planned); then 12:00 lunch at the café")
+PASS  Workers go to work and children to school (9/11)
+PASS  Days follow plans (planned choices seen 3574 times) and nobody with a home wanders aimlessly (0)
+PASS  The card says where they are really going (400 checked, 0 wrong)
+PASS  Nobody walks for ages without getting anywhere (0)
+PASS  By one in the morning everyone with a home is in bed there (11/11)
+PASS  A planned place taken away drops out of Vera's plan (then: "08:00 home")
+PASS  New places (11/11), vehicles (6/6), a dog and a cat are generated
+PASS  The disco opens at eight and dances past midnight; the restaurant is busiest at supper
+PASS  Every sound is synthesised, audible and unclipped (22 clips)
+PASS  A town goes up along two crossing roads and a lane (23/23 places, 11 villagers)
+PASS  The roads make one network, joined where they cross (124 nodes)
+PASS  Homes by the road have vehicles (3 cars, 0 motorbikes, 2 bicycles), and the stations theirs
+PASS  A dog and a cat move in
+PASS  Vehicles drive the roads all day and never leave them (worst 2.4 cm from a road's centre line; 16 trips, 12 stops for traffic or people)
+PASS  Households drive to the shops, the restaurant and the park and come home (16 round trips)
+PASS  Supper fills the restaurant terrace (135 in the evening vs 104 in the afternoon)
+PASS  The disco comes alive after dark (41 dancing, 2 night owls; heard 187 times; nobody there by day)
+PASS  Visitors come to the museum (339) and the park (38)
+PASS  Children go to school and play football: a match with a ball (1.6 m of passes, 9 goals)
+PASS  The factory chimney smokes while it works (Dora works there; next door: Dora (child False, works at 15))
+PASS  The dog goes out with its owner, in their footsteps, and never strays from home
+PASS  The cat keeps to its territory and sits up on the wall
+PASS  The balloon flies by day and stays down at night
+PASS  The disco's DISCO sign lights up letter by letter, blinks and shines (6 different states)
+PASS  Clouds drift on the breeze
+PASS  Unwell: "Lotte feels faint - the ambulance is on its way" - answered with lights and siren, dealt with, and back at the station (5 resolved, 0 given up)
+PASS  Fire: "Smoke from the cottage! The fire engine is coming" - answered with lights and siren, dealt with, and back at the station (6 resolved, 0 given up)
+PASS  Police: "A bicycle has gone missing at the townhouse - the police are coming" - answered with lights and siren, dealt with, and back at the station (7 resolved, 0 given up)
+PASS  CCTV: 2 cameras; the watched feed is filmed 15 times a second, the studio's screens 3.3 a second between them
+PASS  Save and load keep where the cameras look (71 / 15 degrees; loaded 71 / 15, 2 cameras), the pets (2), and the vehicles come back with their homes (8 of 8)
+PASS  Erasing a camera leaves the other selected, still aimed where it was
+PASS  Sound: 3 sources near the crossroads (at most 8); off means silent; five barks in a row play once; a meow out of earshot isn't played
+PASS  Taking a road away re-routes or parks the traffic (worst 1.4 cm off the remaining roads)
+PASS  A busy town (40 villagers, 8 vehicles, 2 animals, sound and a camera feed): 0.15 ms per frame on average, worst 2.0 ms (editor timing, simulation only)
+PASS  A road crosses the railway at a level crossing; homes on both sides have vehicles (5 places, 4 vehicles)
+PASS  Vehicles wait at the level crossing while a train goes by (609 waits, 7 trips), and are never on it with the train
+PASS  A loop drawn in two halves closes (1 pieces, 0 dead ends)
+PASS  Branches drawn off a loop at any angle from 20 to 90 degrees are built (44/44; refused: )
+PASS  Two loops are joined by a line drawn from one to the other (2 switches, 0 dead ends)
+PASS  A connector with no room for its curves is refused with a reason ("built")
+PASS  The railway runs one way: one link between loops is a one-way trap (1), a second link the other way frees it (0 left)
+PASS  A train on the joined network runs through the switches into both loops
+PASS  A line drawn onto a track joins it with a switch (1 switch)
+PASS  Drawing on from a dead end extends the line (still 1 dead end)
+PASS  A hook joining its own line the wrong way is refused: "Trains would have to turn round here: the new line must run the same way as the track it joins - follow the arrows"
+PASS  A line, then a hook from its end back onto itself the way it runs (End -> Mid)
+PASS  Every switch joins the track ends that are really there, and no piece jumps (1 switches)
+PASS  A train runs round the hook and back without leaving the rails (worst 0.0 cm over 11.6 m)
+PASS  ...and a piece with a jump in it is cut at the jump
+PASS  A railway saved with a wrongly joined switch is repaired when loaded
+PASS  A loop with a branch, a signal, a station and two trains
+PASS  Carriages couple on behind the engine (41 -> 67 cm, engine still); more than the most is refused ("That's as long as this train gets (6 carriages)")
+PASS  Wagons uncouple (Goods train, 1 wagon - running at 100 %, next stop Hazelbank)
+PASS  The automatic signal turns red as a train passes and green once the line is clear
+PASS  Two trains share the network without touching (closest 8.7 cm), and keep off the dead-end branch (one way, they couldn't come back out)
+PASS  Pointing at a train says what it is doing ("Steam train, 4 carriages - running at 100 %, next stop Hazelbank")
+PASS  Held at red, the signal stops a train, and the train says so ("Goods train, 1 wagon - waiting at a red signal (tap it for automatic), next stop Hazelbank")
+PASS  Save and load keep the network (2 pieces, 1 switch), the held signal, the station (Hazelbank) and each train's carriages
+INFO  Joining two loops: 56/60 built; 2x "Tracks must cross at a wider angle"; 2x "Too close to the other track - leave a little gap"
+PASS  What the drawing shows while the trigger is held is what letting go builds (60/60 agree)
+PASS  Most hand-drawn links between two loops can be built (56/60)
+PASS  A station and a country halt beside the line (2 stops)
+PASS  An express (faster) and a tank engine (slower) join the steam train (Express, 4 carriages - running at 130 %, next stop Willowmere; Tank engine, 2 carriages - running at 80 %, next stop Orchard End)
+PASS  Every train runs one way round the network, never backing up or meeting another (closest 4.7 cm, 0 reversals)
+PASS  Trains share both loops rather than piling into one (48% of train-time in the quieter loop)
+PASS  Trains call at the country halt (120 calls)
+PASS  A shower: rain falls from the clouds over the land (369 drops)
+PASS  Villagers know it is raining: the park is out, the museum is in
+PASS  14 clouds drift on the wind
+PASS  The rain stops when the shower passes
+PASS  Rain can be heard
+PASS  A stream joins two ponds
+PASS  It flows from the higher pond down to the lower, whichever way it was drawn (8.1 -> 1.7 cm)
+PASS  It leaves and enters at the ponds' own surfaces (high 8.2/8.1 cm, low 1.9/1.7 cm), not their beds
+PASS  The ponds are left as they were (no dam, no ditch across them)
+PASS  Every train carries a camera to watch (1 feeds)
+PASS  Watched from the front of the engine: "Train 1 - from the front of the engine (Steam train, 2 carriages)"
+PASS  A pond to sail on
+PASS  A landing stage can't go inland
+PASS  A landing stage goes at the pond's edge, reaching out over the water
+PASS  Boats can't be put on land
+PASS  A paddle steamer, a rowing boat and a sailing boat on the pond (all afloat)
+PASS  Boats move about the pond and never leave the water (furthest 24 cm)
+PASS  Villagers who want a boat trip wait on the landing stage (4 sent)
+PASS  A boat comes alongside and takes them round the lake ("Paddle steamer Mallard - on a trip round the lake with 4 aboard")
+PASS  ...and brings them back, and they step off and go on with their day
+PASS  Boats are saved with the world (3)
+PASS  The eraser takes a boat away, and Undo brings it back
 PASS  A railway under a big hill becomes a tunnel (hill 29 cm, 30 cm of tunnel, hill kept above it)
 PASS  The train runs into the tunnel (steam off underground)
 PASS  Railway across a pond rises onto a bridge and the water stays
@@ -130,8 +273,8 @@ PASS  Pointer ray picks the house below it
 PASS  House repositioned and rotated
 PASS  Train placed on the railway
 PASS  Train runs continuously (1.44 m in 12 s)
-PASS  Locomotive stays on the rails (worst offset 4.1 mm)
-PASS  Locomotive follows the curves (worst alignment 1.000)
+PASS  Locomotive stays on the rails (worst offset 4.2 mm)
+PASS  Locomotive follows the curves (worst alignment 0.999)
 PASS  Train stops smoothly
 PASS  Station snaps to the railway
 PASS  Station placed beside the rails with a platform
@@ -144,10 +287,10 @@ PASS  Animals wander and graze (up to 21 cm from home in a minute)
 PASS  Animals stay on free grass near home
 PASS  Eraser removes an animal ("Sheep removed")
 PASS  Stream drawn
-PASS  Stream level only falls downstream (1.4 -> 1.4 cm)
+PASS  Stream level only falls downstream (5.0 -> 1.4 cm)
 PASS  Stream carves a channel below its water
 PASS  No trees standing in the stream
-PASS  The railway bridges the stream (clearance 62 mm)
+PASS  The railway bridges the stream (clearance 32 mm)
 PASS  Villagers move into the village (6)
 PASS  Villagers are refused on the rails and in the pond
 PASS  The train runs for the villagers
@@ -160,7 +303,7 @@ PASS  Villagers keep off the rails, out of water and out of houses
 PASS  Eraser removes a villager ("Villager removed")
 PASS  Fourth house placed at a free spot (0.20, 0.00)
 PASS  Undo removes the last house (3 -> 4 -> 3)
-PASS  Save/load keeps trees and houses (131 trees, 3 houses, 1863 KB)
+PASS  Save/load keeps trees and houses (131 trees, 3 houses, 1864 KB)
 PASS  Save/load keeps the railway
 PASS  Save/load keeps the running train
 PASS  Save/load keeps the station and its stop
@@ -181,6 +324,6 @@ PASS  Bad room data does not block growth ("room (room scan) sizes the start; la
 PASS  Land still grows with bad room data
 PASS  Trimmed land grows back (1.19 -> 1.04 -> 1.16 m2)
 INFO  terrain: 6 chunk meshes, 17 k triangles, land 3.49 m2 of a 4.8 x 4.8 m grid
-INFO  static budget of this world: 166 mesh renderers (~draw calls per eye pass before batching, excl. shadows/UI), 448 k triangles, ground cover 8073 tufts
-INFO  trees 131, forest chunks 30, houses 3, track 3.40 m, undo depth 9, journey simulated in 34.2 s wall time
+INFO  static budget of this world: 180 mesh renderers (~draw calls per eye pass before batching, excl. shadows/UI), 477 k triangles, ground cover 8073 tufts
+INFO  trees 131, forest chunks 30, houses 3, track 3.40 m, undo depth 9, journey simulated in 68.2 s wall time
 RESULT: PASS

@@ -53,6 +53,17 @@ namespace Wonderland
 
         public void AddTriangle(int a, int b, int c) { Triangles.Add(a); Triangles.Add(b); Triangles.Add(c); }
 
+        /// <summary>Copies a finished mesh in (placed by <paramref name="at"/>).</summary>
+        public void AddMesh(Mesh mesh, Matrix4x4 at)
+        {
+            Push(at);
+            var v = mesh.vertices; var n = mesh.normals; var c = mesh.colors32; var t = mesh.triangles;
+            int first = VertexCount;
+            for (int i = 0; i < v.Length; i++) AddVertex(v[i], n.Length > i ? n[i] : Vector3.up, c.Length > i ? c[i] : (Color32)Color.white);
+            for (int i = 0; i < t.Length; i += 3) AddTriangle(first + t[i], first + t[i + 1], first + t[i + 2]);
+            Pop();
+        }
+
         /// <summary>Moves every vertex from <paramref name="firstVertex"/> on through <paramref name="warp"/> (hand-made irregularity).</summary>
         public void Warp(int firstVertex, System.Func<Vector3, Vector3> warp)
         {
