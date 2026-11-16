@@ -27,10 +27,12 @@ case "$task" in
   pond) method=Wonderland.Editor.WonderlandJourney.PondRenders; graphics=() ;;
   railrender) method=Wonderland.Editor.WonderlandJourney.RailRenders; graphics=() ;;
   shops) method=Wonderland.Editor.WonderlandTownGallery.Run; graphics=() ;;
+  trackprobe) method=Wonderland.Editor.WonderlandTrackProbe.Run ;;
+  budget) method=Wonderland.Editor.WonderlandTrackProbe.Budget ;;
   gallery) method=Wonderland.Editor.WonderlandRenders.Gallery; graphics=() ;;
   renders) method=Wonderland.Editor.WonderlandJourney.Renders; graphics=() ;;
   compile) method="" ;;
-  *) echo "Usage: $0 [configure|build|test|village|town|rail|questworld|interaction|cards|pond|railrender|shops|gallery|renders|compile]" >&2; exit 2 ;;
+  *) echo "Usage: $0 [configure|build|test|village|town|rail|questworld|interaction|cards|pond|railrender|shops|trackprobe|budget|gallery|renders|compile]" >&2; exit 2 ;;
 esac
 mkdir -p "$project_dir/Logs"
 log="$project_dir/Logs/$task.log"

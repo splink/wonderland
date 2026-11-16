@@ -593,6 +593,28 @@ lamp, FUEL pylon), and the disco's neon sign: dark glass tubes in the building m
 `BuildingSystem` switches in a 7-second cycle (chase, blink, shine). Added after the hand-made warp, so lettering stays
 straight. Tested: the neon passes through 6 distinct lit states over its cycle.
 
+## Railway building restored; GPU load cut
+
+**Railway building blocked (regression).** Three of the player's four worlds held an old railway that turns back on
+itself (a loop and a line meeting at one switch, joined the wrong way, from before the railway ran one way). Building
+oriented the *whole* network and refused when any part couldn't run one way - so every new piece, even a loop in open
+land, was refused ("trains would have to turn round"), while the preview (which skipped that check for loops) showed
+green. Now each connected part is oriented on its own: a part that can't run one way stays two-way (no arrows, trains
+shuttle there), and a new piece is refused only if it *creates* a new turn-back. Preview and build use the same test.
+`WonderlandTrackProbe` on the four headset worlds: a loop in open land builds on all four; branches 10/12 on the old
+worlds (the 2 refusals: too close to track / a switch); green previews always built. Regression test in the rail journey.
+
+**Grabbing track.** The drag works through the controller path (new controller check); on the headset it gave no hint
+where to grip and its refusals were in the tiny old status line. Now the grab point is ringed on hover, the hint says
+"GRIP and move: bend this piece of track", refusals show in the banner, and grabs are logged.
+
+**GPU load** (the player's current world: 59 buildings, 93 trees, 75 people; headset ~39 fps, CPU main ~6.5 ms, so
+GPU-bound). `WonderlandTrackProbe.Budget`: 976 k triangles drawn + 703 k for shadows. Changes: simple stand-ins
+(`MeshProxy`, built from each mesh's own area-weighted colours, with the name board) cast the shadows of buildings and
+trees and are drawn instead of them beyond 2.2 m; ground cover 30 % thinner and not drawn beyond 2.6 m; clouds a
+quarter of the triangles. Shadow triangles 703 k -> 266 k; buildings beyond 2.2 m: 47 stand-ins = 850 triangles
+(instead of ~190 k). `editor-standins.png` shows full models beside their stand-ins. Not yet measured on the headset.
+
 ## Known defects and risks
 
 - **Station, water, bridges, tunnels, animals and villagers are untested on the device.** They are covered by the
@@ -638,7 +660,7 @@ scripts/unity.sh build   # -> Builds/Android/Wonderland.apk
 metavr app install Builds/Android/Wonderland.apk && metavr app launch com.splink.wonderland
 ```
 
-Built 2026-11-16: `Builds/Android/Wonderland.apk`, 58.8 MB, sha256 `15b5d7a2c6e61943…`, installed on the Quest, package `com.splink.wonderland`
+Built 2026-11-16: `Builds/Android/Wonderland.apk`, 58.8 MB, sha256 `1af0a91e09ac4a08…`, installed on the Quest, package `com.splink.wonderland`
 0.1.0 (versionCode 1), minSdk 32 / targetSdk 34. Shader-error check clean. The APK manifest declares USE_SCENE,
 USE_ANCHOR_API, BOUNDARY_VISIBILITY, HEADSET_CAMERA and INTERNET (the last added by Unity/Meta SDK defaults).
 

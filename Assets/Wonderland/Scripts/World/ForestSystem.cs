@@ -27,7 +27,9 @@ namespace Wonderland
         public readonly List<TreeInstance> Trees = new();
         private readonly Dictionary<int, (GameObject go, Mesh mesh)> chunks = new();
         private readonly HashSet<int> dirty = new();
-        private readonly Dictionary<int, MeshData> meshData = new();
+        private readonly Dictionary<int, MeshData> meshData = new(), proxyData = new();
+        private readonly Dictionary<int, Mesh> proxyMeshes = new();
+        private readonly MeshBuilder proxyBuilder = new();
         private TerrainField terrain;
         private Material material;
         private Rng rng = new(4242);
@@ -88,6 +90,7 @@ namespace Wonderland
                 if (list.Count == 0)
                 {
                     if (chunks.TryGetValue(k, out var empty)) { Release(empty.go); Release(empty.mesh); chunks.Remove(k); }
+                    if (proxyMeshes.TryGetValue(k, out var emptyProxy)) { Release(emptyProxy); proxyMeshes.Remove(k); }
                     continue;
                 }
                 if (!chunks.TryGetValue(k, out var chunk))
@@ -110,7 +113,25 @@ namespace Wonderland
                 }
                 builder.ToMesh(chunk.go.name, chunk.mesh);
                 chunk.mesh.RecalculateBounds();
+                // The same trees as simple stand-ins: drawn far away, and for the shadows.
+                proxyBuilder.Clear();
+                foreach (var t in list)
+                {
+                    float y = terrain.SurfaceAt(t.x, t.z) - 0.003f * t.scale;
+                    proxyBuilder.AppendFast(ProxyData((TreeKind)t.kind, t.variant), new Vector3(t.x, y, t.z), Quaternion.Euler(0f, t.rotation, 0f), t.scale, new Color(t.tint, t.tint, t.tint * 0.97f));
+                }
+                if (!proxyMeshes.TryGetValue(k, out var proxy)) proxyMeshes[k] = proxy = new Mesh { name = chunk.go.name + " proxy" };
+                proxyBuilder.ToMesh(proxy.name, proxy);
+                proxy.RecalculateBounds();
+                MeshProxy.Attach(chunk.go.GetComponent<MeshRenderer>(), proxy, 0.09f);
             }
+        }
+
+        private MeshData ProxyData(TreeKind kind, int variant)
+        {
+            int key = (int)kind * 10 + variant;
+            if (!proxyData.TryGetValue(key, out var d)) proxyData[key] = d = new MeshData(MeshProxy.Tree(TreeFactory.Get(kind, variant), kind is TreeKind.Conifer or TreeKind.Cypress));
+            return d;
         }
 
         private static void Release(UnityEngine.Object o)

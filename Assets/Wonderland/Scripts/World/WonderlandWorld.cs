@@ -782,7 +782,8 @@ namespace Wonderland
             var before = net.Clone();
             Attach(net, plan);
             // One way: the new piece runs the way the track it joins runs (a loop being joined turns to match).
-            if (!net.Orient(e => net.Agreement(e, before), out string why)) { Undo(false); plan.Error = why; return plan; }
+            net.Orient(e => net.Agreement(e, before), out _);
+            if (net.NewTurnBack(before)) { Undo(false); plan.Error = TrackNetwork.TurnBack; return plan; }
             AfterNetworkChanged();
             return plan;
         }
@@ -798,11 +799,12 @@ namespace Wonderland
             var net = Track.Network;
             var plan = TrackPlanner.Plan(drawn, Terrain, net, null, landWillGrow: true);
             if (!plan.Ok || plan.Path == null) return plan;
-            if (plan.Closed || net.Empty) { direction = 1; return plan; }
+            if (plan.Closed || net.Empty) { direction = 1; return plan; }   // a new loop on its own: it runs the way it was drawn
             var before = net.Clone();
             var copy = net.Clone();
             Attach(copy, plan);
-            if (!copy.Orient(e => copy.Agreement(e, before), out string why)) { plan.Error = why; return plan; }
+            copy.Orient(e => copy.Agreement(e, before), out _);
+            if (copy.NewTurnBack(before)) { plan.Error = TrackNetwork.TurnBack; return plan; }
             copy.Reindex();
             int m = plan.Path.Count / 2;
             var a = plan.Path[Mathf.Max(0, m - 2)]; var b = plan.Path[Mathf.Min(plan.Path.Count - 1, m + 2)];

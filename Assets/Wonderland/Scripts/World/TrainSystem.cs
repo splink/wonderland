@@ -172,7 +172,7 @@ namespace Wonderland
             error = null;
             if (Trains.Count >= MaxTrains) { error = $"That's plenty of trains ({MaxTrains})"; return null; }
             var t = new Train { Kind = kind, Livery = livery, Length = LengthOf(kind), SpeedFactor = kind == TrainKind.Express ? 1.3f : kind == TrainKind.Tank ? 0.8f : 1f };
-            if (Net.OneWay) orientation = 1;   // one way: every train faces the way the railway runs
+            if (Net.Directed(edge)) orientation = 1;   // one way: every train faces the way the railway runs
             if (!Lay(t, edge, s, orientation, t.Length * 0.5f, null)) { error = "Not enough track here for this train"; return null; }
             var mine = Intervals(t.Path);
             RefreshHeld();
@@ -660,7 +660,7 @@ namespace Wonderland
             var heading = new EdgeEnd(last.Edge, last.Dir > 0 ? 1 : 0);
             if (heading != j.Trunk) return;                                                       // trailing: nothing to choose
             for (int i = 0; i < Trains.Count; i++) if (TouchesJoint(held[i], ji)) return;        // in use: leave it
-            int setting = Mode == SwitchMode.Random ? random.Next(2) : (Net.OneWay ? Spread(ji) : j.Setting);
+            int setting = Mode == SwitchMode.Random ? random.Next(2) : (Net.Directed(j.Trunk.Edge) ? Spread(ji) : j.Setting);
             if (setting != j.Setting) { j.Setting = setting; SwitchesChanged = true; }
         }
 
@@ -807,11 +807,11 @@ namespace Wonderland
                 if (t.Dwell > 0f) { Pose(t); return; }
                 // Explore: now and then a train turns back at a station, so in time it runs every way through every
                 // switch (a train circling a loop one way would never take a branch that faces the other way).
-                if (!Net.OneWay && Mode == SwitchMode.Explore && random.NextDouble() < 0.3 && Alone(t, 0.8f)) TurnBack(t);
+                if (!OneWayHere(t) && Mode == SwitchMode.Explore && random.NextDouble() < 0.3 && Alone(t, 0.8f)) TurnBack(t);
                 // One that had to back away from another train: at the station its engine runs round to lead again.
                 else if (t.Dir < 0 && t.Kind != TrainKind.Railcar) TurnRound(t);
                 // Keeping their distance: a train ahead that is close? Wait a little longer, so trains spread round the railway.
-                if (Net.OneWay && t.HeldBack < 8f && Trains.Count > 1 && GapAhead(t) < EvenSpacing() * 0.45f) { t.Dwell = 1f; t.HeldBack += 1f; Pose(t); return; }
+                if (OneWayHere(t) && t.HeldBack < 8f && Trains.Count > 1 && GapAhead(t) < EvenSpacing() * 0.45f) { t.Dwell = 1f; t.HeldBack += 1f; Pose(t); return; }
                 t.HeldBack = 0f;
             }
             // Never beyond the reservation.
@@ -862,6 +862,14 @@ namespace Wonderland
             return true;
         }
 
+        /// <summary>Is the train on a part of the railway that runs one way (every piece under it)?</summary>
+        private bool OneWayHere(Train t)
+        {
+            if (t.Path.Count == 0) return false;
+            foreach (var sp in t.Path) if (!Net.Directed(sp.Edge)) return false;
+            return true;
+        }
+
         /// <summary>Is the train running the way the railway runs (one way), engine first?</summary>
         private bool WithFlow(Train t)
         {
@@ -873,7 +881,7 @@ namespace Wonderland
         /// <summary>One way: a train facing against the railway's direction runs round and sets off the right way.</summary>
         public void AlignToFlow(Train t)
         {
-            if (!Net.OneWay || t.Path.Count == 0) return;
+            if (t.Path.Count == 0 || !OneWayHere(t)) return;
             int lead = t.Dir > 0 ? t.Path[^1].Dir : -t.Path[0].Dir;
             if (lead < 0) { Reverse(t); t.Reversals--; }                      // the right way round, but moving backwards
             if (t.Dir < 0) TurnRound(t);                                        // engine at the back: run round
@@ -929,7 +937,7 @@ namespace Wonderland
                 var other = Trains[t.BlockedBy];
                 bool mutual = other.Blocked == BlockReason.Train && other.BlockedBy == i;
                 bool queueing = other.Blocked == BlockReason.Signal || other.Dwell > 0f;   // behind a train at a red signal or a station: wait
-                if (Net.OneWay && !mutual) continue;   // one way: whoever is ahead moves on in time; never back into oncoming trains
+                if (OneWayHere(t) && !mutual) continue;   // one way: whoever is ahead moves on in time; never back into oncoming trains
                 if ((mutual && i > t.BlockedBy && t.WaitTime > 1.5f) || (!queueing && t.WaitTime > 12f)) Reverse(t);
             }
         }
@@ -937,11 +945,11 @@ namespace Wonderland
         /// <summary>Explore: a switch a train went through facing flips once it is clear, so the next train goes the other way.</summary>
         private void AlternateSwitches()
         {
-            if (Net.OneWay) return;   // one way: switches are chosen as each train comes (see PrepareSwitch)
             for (int ji = 0; ji < Net.Joints.Count; ji++)
             {
                 var j = Net.Joints[ji];
                 if (!j.FlipPending) continue;
+                if (Net.Directed(j.Trunk.Edge)) { j.FlipPending = false; continue; }   // one way: chosen as each train comes (see PrepareSwitch)
                 bool busy = false;
                 for (int i = 0; i < Trains.Count && !busy; i++) busy = TouchesJoint(held[i], ji);
                 if (busy) continue;

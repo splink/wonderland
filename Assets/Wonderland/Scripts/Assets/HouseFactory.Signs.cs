@@ -14,6 +14,18 @@ namespace Wonderland
     {
         private static readonly Color Gold = new(0.98f, 0.82f, 0.36f), Cream = new(0.97f, 0.94f, 0.86f), Ink = new(0.12f, 0.1f, 0.12f);
 
+        private static readonly Dictionary<int, Mesh> signCache = new();
+
+        /// <summary>Just a building's name board and symbol (for its far-away stand-in), or null if it has none.</summary>
+        public static Mesh SignMesh(int variant)
+        {
+            if (signCache.TryGetValue(variant, out var m)) return m;
+            var b = new MeshBuilder();
+            Signage(b, variant);
+            if (variant == Catalog.Disco) DiscoSign(b, 0);   // (lit: the stand-in's neon just shines)
+            return signCache[variant] = b.VertexCount > 0 ? b.ToMesh("Sign_" + variant) : null;
+        }
+
         private static void Signage(MeshBuilder b, int variant)
         {
             switch (variant)

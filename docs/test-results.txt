@@ -117,7 +117,7 @@ PASS  The village clock runs a day in 7.6 minutes (360 s of daylight, 97 s of ni
 PASS  The daily rhythm: shops in the morning, lunch at midday, the fair in the afternoon, the square in the evening
 PASS  A railway loop divides the land
 PASS  A village goes up around the railway (13/13 places, 8 residents moved in)
-PASS  The walk grid sees the railway as a divide (2 regions over 6972 cells, built in 37 ms)
+PASS  The walk grid sees the railway as a divide (2 regions over 6972 cells, built in 48 ms)
 PASS  Every resident knows their home (8/8; 2 live inside the loop)
 PASS  The baker lives over the bakery
 PASS  At two in the morning everyone is asleep at home (8/8)
@@ -140,8 +140,8 @@ PASS  ...get off at the far station and walk on to where they were going
 PASS  A lane with a level crossing joins the two sides (1 regions)
 PASS  ...and people from inside the loop walk over it to the village
 PASS  Save/load keeps the time (10:00), the clock speed, needs and homes (8/8)
-PASS  40 villagers: 0.25 ms per frame on average, worst 2.8 ms, 1.3 decisions/s, slowest decision 2.3 ms, places directory 0.5 ms (editor timing)
-PASS  After an edit the walk grid rebuilds over 32 frames (65 ms of work, worst frame 8.3 ms)
+PASS  40 villagers: 0.25 ms per frame on average, worst 5.5 ms, 1.3 decisions/s, slowest decision 2.6 ms, places directory 0.9 ms (editor timing)
+PASS  After an edit the walk grid rebuilds over 38 frames (74 ms of work, worst frame 4.2 ms)
 PASS  With no places at all, villagers wander by day and sleep under the stars at night
 PASS  A working village goes up (15/15 places, 10 villagers)
 PASS  Opening hours: the bakery opens at half six and shuts at six, the carousel stops in the evening, the fountain never closes
@@ -201,7 +201,7 @@ PASS  Save and load keep where the cameras look (71 / 15 degrees; loaded 71 / 15
 PASS  Erasing a camera leaves the other selected, still aimed where it was
 PASS  Sound: 3 sources near the crossroads (at most 8); off means silent; five barks in a row play once; a meow out of earshot isn't played
 PASS  Taking a road away re-routes or parks the traffic (worst 1.4 cm off the remaining roads)
-PASS  A busy town (40 villagers, 8 vehicles, 2 animals, sound and a camera feed): 0.15 ms per frame on average, worst 2.0 ms (editor timing, simulation only)
+PASS  A busy town (40 villagers, 8 vehicles, 2 animals, sound and a camera feed): 0.15 ms per frame on average, worst 2.8 ms (editor timing, simulation only)
 PASS  A road crosses the railway at a level crossing; homes on both sides have vehicles (5 places, 4 vehicles)
 PASS  Vehicles wait at the level crossing while a train goes by (609 waits, 7 trips), and are never on it with the train
 PASS  A loop drawn in two halves closes (1 pieces, 0 dead ends)
@@ -218,6 +218,9 @@ PASS  Every switch joins the track ends that are really there, and no piece jump
 PASS  A train runs round the hook and back without leaving the rails (worst 0.0 cm over 11.6 m)
 PASS  ...and a piece with a jump in it is cut at the jump
 PASS  A railway saved with a wrongly joined switch is repaired when loaded
+PASS  An old two-way railway in the world doesn't stop a new loop being built (preview ok, built ok)
+PASS  ...nor a branch off the old part (built)
+PASS  The new loop runs one way (arrows), the old part stays two-way (1 two-way part)
 PASS  A loop with a branch, a signal, a station and two trains
 PASS  Carriages couple on behind the engine (41 -> 67 cm, engine still); more than the most is refused ("That's as long as this train gets (6 carriages)")
 PASS  Wagons uncouple (Goods train, 1 wagon - running at 100 %, next stop Hazelbank)
@@ -324,6 +327,6 @@ PASS  Bad room data does not block growth ("room (room scan) sizes the start; la
 PASS  Land still grows with bad room data
 PASS  Trimmed land grows back (1.19 -> 1.04 -> 1.16 m2)
 INFO  terrain: 6 chunk meshes, 17 k triangles, land 3.49 m2 of a 4.8 x 4.8 m grid
-INFO  static budget of this world: 180 mesh renderers (~draw calls per eye pass before batching, excl. shadows/UI), 477 k triangles, ground cover 8073 tufts
-INFO  trees 131, forest chunks 30, houses 3, track 3.40 m, undo depth 9, journey simulated in 68.2 s wall time
+INFO  static budget of this world: 247 mesh renderers (~draw calls per eye pass before batching, excl. shadows/UI), 451 k triangles, ground cover 5538 tufts
+INFO  trees 131, forest chunks 30, houses 3, track 3.40 m, undo depth 9, journey simulated in 67.6 s wall time
 RESULT: PASS

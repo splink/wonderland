@@ -92,7 +92,7 @@ namespace Wonderland
             var e = Network.Edges[i];
             var b = new MeshBuilder();
             BuildTrack(b, e.Layout, e.Joint[0] < 0, e.Joint[1] < 0);
-            if (Network.OneWay) Arrows(b, e.Layout, 1, ArrowColour, RailTop - 0.0012f, 0.16f);
+            if (Network.Directed(i)) Arrows(b, e.Layout, 1, ArrowColour, RailTop - 0.0012f, 0.16f);
             if (e.Tunnel != null) BuildTunnels(b, e.Layout, e.Tunnel);
             b.ToMesh("Track piece", pieces[i].mesh);
             pieces[i].mesh.RecalculateBounds();

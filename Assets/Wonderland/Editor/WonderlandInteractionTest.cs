@@ -24,7 +24,7 @@ namespace Wonderland.Editor
         private static PaletteUI palette;
         private static WonderlandWorld world;
         private static PointerInput current;
-        private static bool triggerHeld;
+        private static bool triggerHeld, gripHeld;
 
         public static void Run()
         {
@@ -143,6 +143,25 @@ namespace Wonderland.Editor
                 Check(net.Joints[0].Setting != setting && net.Joints[0].Pinned, "Tapping the switch throws it (and pins it)");
             }
 
+            // Grip on the track and drag: the piece bends like a rope to where the pointer is let go.
+            {
+                ClickButton(hand, "Track");
+                var n0 = world.Track.Network;
+                int big = 0; for (int e = 1; e < n0.Edges.Count; e++) if (n0.Edges[e].Layout.Length > n0.Edges[big].Layout.Length) big = e;
+                var l = n0.Edges[big].Layout;
+                var grabAt = l.Evaluate(l.Length * 0.5f, out var tan); tan.y = 0f;
+                var away = Vector3.Cross(Vector3.up, tan.normalized);
+                if (Vector3.Dot(away, grabAt) < 0f) away = -away;   // away from the middle of the loop
+                var to = grabAt + away * 0.08f;
+                Vector3 W(Vector3 local) => world.transform.TransformPoint(new Vector3(local.x, world.Terrain.SurfaceAt(local.x, local.z), local.z));
+                Frame(hand, W(grabAt), false); Frame(hand, W(grabAt), false, grip: true);
+                for (int i = 1; i <= 30; i++) Frame(hand, W(Vector3.Lerp(grabAt, to, i / 30f)), false, grip: true);
+                for (int i = 0; i < 10; i++) Frame(hand, W(to), false, grip: true);
+                string dragSaid = tools.LastMessage;
+                Frame(hand, W(to), false);
+                float near = world.Track.Network.DistanceTo(to);
+                Check(near < 0.015f, $"Grip on the track and drag bends it to where you let go (now {near * 100f:0.0} cm from there; \"{tools.LastMessage}\", while dragging \"{dragSaid}\")");
+            }
             // Trains: click the tile, trigger on the track places a running train; Stop all / Start all.
             ClickButton(hand, "Train");
             var mainEdge = 0; float longest = 0f;
@@ -399,9 +418,9 @@ namespace Wonderland.Editor
             {
                 Valid = true, Ray = new Ray(hand, (target - hand).normalized),
                 Trigger = trigger, TriggerDown = trigger && !triggerHeld, TriggerUp = !trigger && triggerHeld,
-                Stick = stick, PrimaryDown = primary, SecondaryDown = secondary, Grip = grip, GripDown = grip,
+                Stick = stick, PrimaryDown = primary, SecondaryDown = secondary, Grip = grip, GripDown = grip && !gripHeld, GripUp = !grip && gripHeld,
             };
-            triggerHeld = trigger;
+            triggerHeld = trigger; gripHeld = grip;
             tools.Process(input, Dt);
             world.Forest.RebuildDirty();
         }

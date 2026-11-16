@@ -12,6 +12,7 @@ PASS  Track tool selected
 PASS  Drawing a loop with the trigger lays a closed railway (2.79 m)
 PASS  Drawing from the track outwards branches off with a switch (1 switch, 2 pieces; "Joined one way: trains can go across but not back yet - draw a second link the other way (follow the arrows) so they can return")
 PASS  Tapping the switch throws it (and pins it)
+PASS  Grip on the track and drag bends it to where you let go (now 0.7 cm from there; "Track reshaped", while dragging "Move the pointer and let go of grip - the track bends like a rope (red: it can't go there, the banner says why)")
 PASS  Trigger on the railway puts a running train on it
 PASS  Train moves (0.27 m)
 PASS  Point at a train, then + / - Carriage couple and uncouple a carriage (2 -> 3 -> 2)

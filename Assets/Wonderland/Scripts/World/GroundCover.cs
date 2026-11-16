@@ -43,7 +43,7 @@ namespace Wonderland
         {
             foreach (var k in chunks.Keys) dirty.Add(k);
             tufts.Clear(); count = 0;
-            const float spacing = 0.042f;
+            const float spacing = 0.05f;   // (was 0.042: 30 % fewer tufts - the grass reads the same from a step away)
             int ix0 = Mathf.FloorToInt(terrain.X0 / spacing), ix1 = Mathf.CeilToInt(terrain.XMax / spacing);
             int iz0 = Mathf.FloorToInt(terrain.Z0 / spacing), iz1 = Mathf.CeilToInt(terrain.ZMax / spacing);
             for (int iz = iz0; iz <= iz1; iz++)
@@ -153,6 +153,10 @@ namespace Wonderland
                     go.AddComponent<MeshFilter>();
                     var r = go.AddComponent<MeshRenderer>();
                     r.sharedMaterial = material; r.shadowCastingMode = ShadowCastingMode.Off; r.receiveShadows = true;
+                    // Tufts a centimetre tall are less than a pixel beyond a couple of metres: not drawn there.
+                    var lod = go.AddComponent<LODGroup>();
+                    lod.SetLODs(new[] { new LOD(0.1f / (2f * 2.6f * Mathf.Tan(48f * Mathf.Deg2Rad)) * QualitySettings.lodBias, new Renderer[] { r }) });
+                    lod.size = 0.1f;
                     chunk = (go, new Mesh { name = go.name });
                     go.GetComponent<MeshFilter>().sharedMesh = chunk.mesh;
                     chunks[k] = chunk;

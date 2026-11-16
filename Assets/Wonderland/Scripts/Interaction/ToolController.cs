@@ -60,6 +60,7 @@ namespace Wonderland
         private int hoverPerson = -1, newsSeen, hoverCamera = -1;
         private TrafficSystem.Vehicle hoverVehicle;
         private float carTimer, turnHeld, turnSaid, nextPlan;
+        private bool grabbable;
         private TrackPlan livePlan;
         private int liveDirection, planCount;
         private string liveNote;
@@ -412,6 +413,7 @@ namespace Wonderland
                 : Draining ? "Hold trigger over water to drain it (tap a stream to remove it)  ·  A: next mode" : "Hold trigger to dig a pond; start in a pond to make it bigger  ·  A: next mode  ·  stick: size",
             Tool.Forest => ForestErase ? "Hold trigger to clear trees  ·  A: paint" : "Hold trigger to paint a forest  ·  A: erase  ·  stick: size / density",
             Tool.Track => SignalMode ? "Trigger beside the track: put up a stop signal  ·  tap a signal: red / green  ·  A: draw"
+                : grabbable ? "On the track: trigger and draw to branch off  ·  GRIP and move: bend this piece of track  ·  tap a switch to throw it"
                 : World.Track.HasTrack ? (World.Bridges.Bridges.Count > 0 ? "Tap a bridge to change its style  ·  draw from the track to branch, from an end to extend  ·  tap a switch to throw it  ·  grip: bend track"
                     : "Draw from the track to branch off, from an end to extend, back onto track to join  ·  tap a switch to throw it  ·  grip: bend track  ·  A: signals")
                 : "Hold trigger and draw a railway - come back to the start for a loop (over bare floor is fine)",
@@ -783,15 +785,20 @@ namespace Wonderland
                 {
                     string error = hit ? World.Reshape(dragEdge, dragIndex, local) : "Point at the ground to put the track down";
                     World.Track.HidePreview();
-                    if (error != null) { Say(error); Haptic(0.7f, 0.1f); } else { Say("Track reshaped"); Haptic(0.5f, 0.05f); }
+                    Debug.Log($"Wonderland track: reshape {(error ?? "done")}");
+                    if (error != null) { Say("Can't bend it there: " + error, 4f); Haptic(0.7f, 0.1f); } else { Say("Track reshaped"); Haptic(0.5f, 0.05f); }
                     dragEdge = -1;
                 }
                 return;
             }
-            if (drawn.Count == 0 && hit && input.GripDown && net.Nearest(local, out int grabEdge, out float grabS, out _, 0.05f))
+            // Pointing at a piece of track (not drawing): it can be grabbed - show where, and say so.
+            int grabEdge = -1; float grabS = 0f;
+            grabbable = drawn.Count == 0 && hit && net.Nearest(local, out grabEdge, out grabS, out _, 0.06f) && World.Track.PickJoint(local, 0.045f) < 0;
+            if (grabbable && input.GripDown)
             {
                 dragEdge = grabEdge; dragIndex = TrackPlanner.IndexAt(net.Edges[grabEdge].Layout, grabS); dragError = null; dragPreviewAt = 0f;
-                Say("Move the track and let go");
+                Debug.Log($"Wonderland track: grabbed piece {grabEdge} at {grabS:0.00} m");
+                Say("Move the pointer and let go of grip - the track bends like a rope (red: it can't go there, the banner says why)", 6f);
                 Haptic(0.4f, 0.04f);
                 return;
             }
@@ -805,7 +812,13 @@ namespace Wonderland
                     var probe = new List<Vector3> { local };
                     var a = TrackPlanner.Attach(net, probe, true, out _);
                     int bridge = World.Bridges.Pick(new Vector2(local.x, local.z));
-                    if (a.Kind != AttachKind.None) World.TerrainView.SetBrush(new Vector3(a.Point.x, local.y, a.Point.y), 0.022f, new Color(0.45f, 0.9f, 1f), 0.95f);
+                    if (grabbable && net.Nearest(local, out int ge, out float gs, out _, 0.06f))
+                    {
+                        // The grab point, ringed (pulsing): grip here to bend this piece.
+                        var gp = net.Edges[ge].Layout.Evaluate(gs, out _);
+                        World.TerrainView.SetBrush(gp, 0.026f + 0.004f * Mathf.Sin(Time.time * 6f), new Color(0.75f, 0.55f, 1f), 0.95f);
+                    }
+                    else if (a.Kind != AttachKind.None) World.TerrainView.SetBrush(new Vector3(a.Point.x, local.y, a.Point.y), 0.022f, new Color(0.45f, 0.9f, 1f), 0.95f);
                     else if (bridge >= 0) { var c = World.Bridges.Bridges[bridge].Anchor; World.TerrainView.SetBrush(new Vector3(c.x, local.y, c.y), 0.05f, new Color(0.55f, 0.85f, 1f), 0.95f); }
                     else World.TerrainView.SetBrush(local, 0.012f, new Color(1f, 0.9f, 0.5f), 0.9f);
                 }

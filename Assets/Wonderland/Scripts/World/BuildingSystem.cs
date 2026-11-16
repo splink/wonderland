@@ -215,9 +215,13 @@ namespace Wonderland
         {
             var go = new GameObject(HouseFactory.Name(h.variant));
             go.transform.SetParent(parent, false);
-            go.AddComponent<MeshFilter>().sharedMesh = HouseFactory.Get(h.variant, h.style);
+            var mesh = HouseFactory.Get(h.variant, h.style);
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
             var r = go.AddComponent<MeshRenderer>();
             r.sharedMaterial = material; r.shadowCastingMode = ShadowCastingMode.On;
+            // Far away (and for its shadow) a simple stand-in in the same colours - unless it is too small to matter.
+            if (!Catalog.Get(h.variant).Small && Catalog.BoatOf(h.variant) < 0)
+                MeshProxy.Attach(r, MeshProxy.Building(mesh, HouseFactory.SignMesh(h.variant)), Mathf.Max(mesh.bounds.size.x, mesh.bounds.size.y, mesh.bounds.size.z));
             return r;
         }
 
@@ -372,7 +376,10 @@ namespace Wonderland
             float old = glow[index];
             if ((float.IsNaN(old) && float.IsNaN(strength)) || old == strength) return;
             glow[index] = strength;
-            renderers[index].sharedMaterial = float.IsNaN(strength) ? material : GlowMaterial(strength);
+            var m = float.IsNaN(strength) ? material : GlowMaterial(strength);
+            renderers[index].sharedMaterial = m;
+            var proxy = renderers[index].transform.Find("Proxy");   // the stand-in far away glows the same
+            if (proxy != null) proxy.GetComponent<MeshRenderer>().sharedMaterial = m;
         }
 
         private Material GlowMaterial(float strength)

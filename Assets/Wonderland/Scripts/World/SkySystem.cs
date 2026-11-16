@@ -77,7 +77,7 @@ namespace Wonderland
                 float x = (i - (puffs - 1) / 2f) * 0.035f + r0.Range(-0.01f, 0.01f);
                 float r = 0.03f + (1f - Mathf.Abs(x) / 0.12f) * 0.025f + r0.Range(0f, 0.01f);
                 var c = new Vector3(x, r * 0.35f, r0.Range(-0.02f, 0.02f));
-                b.AddBlob(c, new Vector3(r, r * 0.75f, r * 0.9f), 2, 0.08f, 80 + v * 10 + i, (d, _) => Color.Lerp(under, top, Mathf.SmoothStep(0f, 1f, d.y * 0.7f + 0.45f)));
+                b.AddBlob(c, new Vector3(r, r * 0.75f, r * 0.9f), 1, 0.08f, 80 + v * 10 + i, (d, _) => Color.Lerp(under, top, Mathf.SmoothStep(0f, 1f, d.y * 0.7f + 0.45f)));
             }
             return meshes[key] = b.ToMesh(grey ? "Raincloud" + v : "Cloud" + v);
         }

@@ -49,6 +49,24 @@ namespace Wonderland.Editor
                 key.intensity = 0.3f; key.color = new Color(0.55f, 0.66f, 1f);
                 WonderlandRenders.Capture(cam, $"editor-town-shops-night-{set + 1}.png", 2400, 1100);
             }
+            // The stand-ins drawn far away: each building's beside it, and some trees.
+            if (root != null) Object.DestroyImmediate(root.gameObject);
+            Shader.SetGlobalFloat("_WL_Night", 0f); WonderlandLighting.Configure(key);
+            root = new GameObject("Stand-ins").transform;
+            for (int k = 0; k < 8; k++)
+            {
+                var full = HouseFactory.Get(Shops[k], 0);
+                WonderlandRenders.Place(root, full, lit, new Vector3((k - 3.5f) * Pitch, 0f, 0f), Quaternion.identity);
+                WonderlandRenders.Place(root, MeshProxy.Building(full, HouseFactory.SignMesh(Shops[k])), lit, new Vector3((k - 3.5f) * Pitch, 0f, 0.2f), Quaternion.identity);
+            }
+            for (int k = 0; k < TreeFactory.KindCount; k++)
+            {
+                var tree = TreeFactory.Get((TreeKind)k, 0);
+                WonderlandRenders.Place(root, tree, lit, new Vector3(-0.3f + k * 0.12f, 0f, -0.25f), Quaternion.identity);
+                WonderlandRenders.Place(root, MeshProxy.Tree(tree, k is 1 or 2), lit, new Vector3(-0.3f + k * 0.12f + 0.05f, 0f, -0.25f), Quaternion.identity);
+            }
+            cam.transform.position = new Vector3(0f, 0.5f, -1.2f); cam.transform.LookAt(new Vector3(0f, 0.03f, 0.05f)); cam.fieldOfView = 46f;
+            WonderlandRenders.Capture(cam, "editor-standins.png", 2400, 1300);
             Shader.SetGlobalFloat("_WL_Night", 0f);
             Object.DestroyImmediate(root.gameObject);
             if (Application.isBatchMode) EditorApplication.Exit(0);

@@ -79,8 +79,19 @@ namespace Wonderland
         /// or merges two into one (they leave on the trunk), so trains never meet head-on. False for a network that can't
         /// run one way (a line that turns back into itself): trains then shuttle as before.
         /// </summary>
-        public bool OneWay { get; private set; }
-        public string TwoWayReason { get; private set; }
+        public bool OneWay => !Empty && TwoWayParts == 0;
+        public string TwoWayReason => TwoWayParts > 0 ? TurnBack : null;
+
+        /// <summary>
+        /// Connected parts of the railway that can't run one way (a line that turns back into itself, built before the
+        /// railway ran one way): their pieces stay two-way - no arrows, trains shuttle as they always did - while every
+        /// other part runs one way.
+        /// </summary>
+        public int TwoWayParts { get; private set; }
+
+        /// <summary>Does this piece run one way (its part of the railway could be oriented)?</summary>
+        public bool Directed(int edge) => directed != null && edge >= 0 && edge < directed.Length && directed[edge];
+        private bool[] directed;
 
         /// <summary>Do trains arrive at a switch through this end (true), or leave through it?</summary>
         public static bool Arrives(EdgeEnd e) => e.End == 1;
@@ -97,7 +108,9 @@ namespace Wonderland
             why = null;
             int n = Edges.Count;
             var flip = new int[n]; var seen = new bool[n];
+            directed = new bool[n];
             var links = new List<(int other, int parity)>[n];
+            var selfConflict = new bool[n];   // a piece meeting itself at a switch the wrong way: its part can't run one way
             for (int i = 0; i < n; i++) links[i] = new List<(int, int)>();
             foreach (var j in Joints)
             {
@@ -108,33 +121,46 @@ namespace Wonderland
                     if (b == t) continue;
                     // Trunk and branch must differ: one arrives, the other leaves.
                     int p = (Arrives(t) ? 1 : 0) ^ (Arrives(b) ? 1 : 0) ^ 1;
-                    if (t.Edge == b.Edge) { if (p != 0) { why = TurnBack; OneWay = false; TwoWayReason = why; return false; } continue; }
+                    if (t.Edge == b.Edge) { if (p != 0) selfConflict[t.Edge] = true; continue; }
                     links[t.Edge].Add((b.Edge, p)); links[b.Edge].Add((t.Edge, p));
                 }
             }
+            // Each connected part on its own: oriented if it can be, otherwise left two-way exactly as it is.
+            int twoWay = 0;
             var comp = new List<int>(); var queue = new Queue<int>();
             for (int s = 0; s < n; s++)
             {
                 if (seen[s]) continue;
                 comp.Clear(); queue.Enqueue(s); seen[s] = true; flip[s] = 0;
+                bool conflict = false;
                 while (queue.Count > 0)
                 {
                     int e = queue.Dequeue(); comp.Add(e);
+                    conflict |= selfConflict[e];
                     foreach (var (o, p) in links[e])
                     {
                         int want = flip[e] ^ p;
                         if (!seen[o]) { seen[o] = true; flip[o] = want; queue.Enqueue(o); }
-                        else if (flip[o] != want) { why = TurnBack; OneWay = false; TwoWayReason = why; return false; }
+                        else if (flip[o] != want) conflict = true;
                     }
                 }
+                if (conflict) { twoWay++; foreach (int e in comp) flip[e] = 0; continue; }
                 float keep = 0f;
                 foreach (int e in comp) keep += (agreement?.Invoke(e) ?? 0f) * (flip[e] == 0 ? 1f : -1f);
                 if (keep < 0f) foreach (int e in comp) flip[e] ^= 1;
+                foreach (int e in comp) directed[e] = true;
             }
             for (int e = 0; e < n; e++) if (flip[e] == 1) Reverse(e);
-            OneWay = true; TwoWayReason = null;
-            return true;
+            TwoWayParts = twoWay;
+            if (twoWay > 0) why = TurnBack;
+            return twoWay == 0;
         }
+
+        /// <summary>
+        /// Whether a change made the railway worse (more parts that can't run one way than <paramref name="before"/>):
+        /// the only reason building track is refused for its direction. Old two-way parts never block anything else.
+        /// </summary>
+        public bool NewTurnBack(TrackNetwork before) => TwoWayParts > (before?.TwoWayParts ?? 0);
 
         public const string TurnBack = "Trains would have to turn round here: the new line must run the same way as the track it joins - follow the arrows";
 
@@ -191,7 +217,7 @@ namespace Wonderland
         {
             get
             {
-                if (Empty || !OneWay) return 0;
+                if (Empty) return 0;
                 CircuitOf(0);
                 // Circuits with a way in from another circuit but no way out to one: each extra one is a trap.
                 var into = new HashSet<int>(); var outOf = new HashSet<int>();
@@ -212,6 +238,7 @@ namespace Wonderland
         private IEnumerable<int> Successors(int e)
         {
             if (Edges[e].Closed) { yield return e; yield break; }
+            if (!Directed(e)) yield break;   // (two-way pieces take no part in the one-way circuits)
             var exit = new EdgeEnd(e, 1);
             int ji = JointAt(exit);
             if (ji < 0) yield break;
@@ -262,7 +289,7 @@ namespace Wonderland
                 changed = false;
                 for (int e = 0; e < through.Length; e++)
                 {
-                    if (!through[e] || Edges[e].Closed) continue;
+                    if (!through[e] || Edges[e].Closed || !Directed(e)) continue;   // (two-way pieces: trains turn back on them anyway)
                     var exit = new EdgeEnd(e, 1);
                     int ji = JointAt(exit);
                     bool on = false;

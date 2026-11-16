@@ -152,6 +152,37 @@ namespace Wonderland.Editor
                 Check(jointIndex >= 0 && JointsTrue(broken, out healed), $"A railway saved with a wrongly joined switch is repaired when loaded{healed}");
                 UnityEngine.Object.DestroyImmediate(w.gameObject);
             }
+            // 6. An old railway that turns back on itself (a lead into a loop, joined the wrong way, from before the railway
+            // ran one way) must not stop anything else being built: it stays two-way, the rest runs one way.
+            {
+                var w = Scratch("Old two-way", 386f);
+                var t = w.Terrain;
+                var data = new TrackNetwork.Data();
+                var lead = Line(t, new Vector2(-0.75f, -0.3f), new Vector2(-0.1f, -0.3f));
+                var loop = new List<Vector3>();
+                for (int i = 0; i <= 160; i++) { float a = Mathf.PI + i / 160f * Mathf.PI * 2f; loop.Add(t.PointAt(0.17f + Mathf.Cos(a) * 0.27f, -0.3f + Mathf.Sin(a) * 0.27f)); }
+                loop[0] = lead[^1]; loop[^1] = lead[^1];
+                data.edges.Add(new TrackNetwork.EdgeData { points = lead, joint1 = 0 });
+                data.edges.Add(new TrackNetwork.EdgeData { points = loop, joint0 = 0, joint1 = 0 });
+                data.joints.Add(new TrackNetwork.JointData { position = lead[^1], ends = new[] { 0 * 2 + 1, 1 * 2 + 0, 1 * 2 + 1 } });   // the lead is the trunk: trains would have to reverse
+                w.Track.SetNetwork(TrackNetwork.FromData(data));
+                var n = w.Track.Network;
+                int oldParts = n.TwoWayParts;
+                var loop2 = new List<Vector3>();
+                for (int i = 0; i <= 90; i++) { float a = i / 90f * Mathf.PI * 2f * 0.98f; loop2.Add(t.PointAt(-0.35f + Mathf.Cos(a) * 0.3f, 0.45f + Mathf.Sin(a) * 0.22f)); }
+                var preview = w.PreviewTrack(loop2, out _, out _);
+                var built = w.BuildTrack(loop2);
+                n = w.Track.Network;
+                Check(oldParts == 1 && preview.Ok && built.Ok, $"An old two-way railway in the world doesn't stop a new loop being built (preview {preview.Error ?? "ok"}, built {built.Error ?? "ok"})");
+                var branch = w.BuildTrack(Line(t, new Vector2(-0.55f, -0.3f), new Vector2(-0.4f, -0.4f), new Vector2(-0.3f, -0.62f)));
+                Check(branch.Ok, $"...nor a branch off the old part ({branch.Error ?? "built"})");
+                bool arrowsOnNew = false, noArrowsOnOld = true;
+                for (int e = 0; e < n.Edges.Count; e++) { if (n.Edges[e].Closed && n.Directed(e)) arrowsOnNew = true; }
+                n = w.Track.Network;
+                for (int e = 0; e < n.Edges.Count; e++) if (!n.Edges[e].Closed && n.Directed(e) && n.Edges[e].Layout.Points[0].z < -0.2f) noArrowsOnOld = false;
+                Check(arrowsOnNew && noArrowsOnOld && n.TwoWayParts == 1, $"The new loop runs one way (arrows), the old part stays two-way ({n.TwoWayParts} two-way part)");
+                UnityEngine.Object.DestroyImmediate(w.gameObject);
+            }
             RailOperations();
             LoopJoinProbe();
             OneWayJourney();
