@@ -32,6 +32,7 @@ namespace Wonderland
         public AnimalSystem Animals { get; private set; }
         public PeopleSystem People { get; private set; }
         public StreamSystem Streams { get; private set; }
+        public PathSystem Paths { get; private set; }
         public WorldMaterials Materials { get; private set; }
         public float PatchSize => Terrain.PatchSize;
         public int Seed { get; private set; }
@@ -68,15 +69,17 @@ namespace Wonderland
             Trains = Child<TrainSystem>("Trains");
             Trains.Init(Track, materials.Lit, materials.Smoke, materials.UI);
             Cover = Child<GroundCover>("Ground cover");
-            Cover.Init(Terrain, materials.Lit, seed, p => Buildings.Contains(p, 0.01f) || IsWet(p));
+            Cover.Init(Terrain, materials.Lit, seed, p => Buildings.Contains(p, 0.01f) || IsWet(p) || (Paths != null && Paths.Covers(p, 0.003f)));
             WaterView = Child<WaterRenderer>("Water");
             WaterView.Init(Terrain, materials.Water);
             Animals = Child<AnimalSystem>("Animals");
-            Animals.Init(Terrain, materials.Lit, IsFreeGrass);
+            Animals.Init(Terrain, materials.Lit, Habitat, (a, b) => Paths.CrossesBarrier(a, b), Threat);
             People = Child<PeopleSystem>("Villagers");
             People.Init(this, materials.Lit);
             Streams = Child<StreamSystem>("Streams");
             Streams.Init(materials.Water);
+            Paths = Child<PathSystem>("Paths");
+            Paths.Init(Terrain, materials.Lit, () => Track.Network);
             undo.Clear();
             FitToRoom();
         }
@@ -167,8 +170,8 @@ namespace Wonderland
             return go.AddComponent<T>();
         }
 
-        private bool trackDirty, streamsDirty;
-        private float trackUpdated, streamsUpdated;
+        private bool trackDirty, streamsDirty, pathsDirty;
+        private float trackUpdated, streamsUpdated, pathsUpdated;
 
         private void LateUpdate()
         {
@@ -176,6 +179,7 @@ namespace Wonderland
             // Sculpting under the railway: re-profile it a few times per second (and once more after the stroke).
             if (streamsDirty && Time.realtimeSinceStartup - streamsUpdated > 0.3f) UpdateStreamsFromTerrain();
             if (trackDirty && Time.realtimeSinceStartup - trackUpdated > 0.25f) UpdateTrackFromTerrain();
+            if (pathsDirty && Time.realtimeSinceStartup - pathsUpdated > 0.3f) { pathsDirty = false; pathsUpdated = Time.realtimeSinceStartup; Paths.Rebuild(); }
         }
 
         /// <summary>Sculpting near a stream: re-level it on its course (still flowing downhill) and re-carve its channel.</summary>
@@ -280,6 +284,7 @@ namespace Wonderland
         /// </summary>
         private RectInt PadHouse(HouseInstance h)
         {
+            if (!Catalog.Get(h.variant).Pad) return new RectInt(0, 0, 0, 0);   // rocks, camps and small details follow the ground
             float target = Buildings.SitHeight(h, out _);
             // Fully flat and protected out to 2.5 cm beyond the footprint (bilinear sampling reaches one 2 cm cell out),
             // then a soft 7 cm blend into the surrounding ground.
@@ -391,6 +396,7 @@ namespace Wonderland
             public AnimalInstance[] Animals;
             public PersonInstance[] People;
             public List<StreamPath> Streams;
+            public List<PathLine> Paths;
             public TrackNetwork.Data Network;
             public List<TrainSystem.TrainData> TrainList;
             public List<SignalInstance> Signals;
@@ -417,7 +423,7 @@ namespace Wonderland
             Height = (float[])Terrain.Height.Clone(), Land = Quantise(Terrain.Land), Lock = Quantise(Terrain.Lock), Soil = Quantise(Terrain.Soil),
             Water = Quantise(Terrain.Water), WaterLevel = (float[])Terrain.WaterLevel.Clone(),
             Trees = Forest.Trees.ToArray(), Houses = Buildings.Houses.ToArray(), Animals = Animals.Animals.ToArray(), People = People.People.ToArray(),
-            Streams = CopyStreams(Streams.Streams),
+            Streams = CopyStreams(Streams.Streams), Paths = PathSystem.Copy(Paths.Lines),
             Network = Track.Network.ToData(), TrainList = Trains.ToData(), Signals = new List<SignalInstance>(Track.Signals), Mode = Trains.Mode,
         };
 
@@ -440,11 +446,13 @@ namespace Wonderland
             Animals.SetAnimals(s.Animals ?? new AnimalInstance[0]);
             People.SetPeople(s.People ?? new PersonInstance[0]);
             Streams.SetStreams(s.Streams ?? new List<StreamPath>());
+            Paths.SetLines(s.Paths);
             Track.Signals.Clear();
             if (s.Signals != null) Track.Signals.AddRange(s.Signals);
             Trains.Mode = s.Mode;
             Track.SetNetwork(TrackNetwork.FromData(s.Network), WaterLevelFor, Terrain);
             Trains.FromData(s.TrainList);
+            Paths.Rebuild();
             RebuildStations();
             Cover.MarkAllDirty();
             if (room != null) FitToRoom();
@@ -479,6 +487,7 @@ namespace Wonderland
             if (region.width == 0) return;
             TerrainView.Rebuild(region);
             if (Track.HasTrack && brush != TerrainBrush.Grow && brush != TerrainBrush.Trim && TouchesTrack(centre, radius)) trackDirty = true;
+            if (Paths.Lines.Count > 0 && Paths.Covers(centre, radius + 0.04f)) pathsDirty = true;
             if (Streams.Streams.Count > 0 && brush != TerrainBrush.Grow && brush != TerrainBrush.Trim && Streams.DistanceTo(centre, out _) < radius + 0.05f) streamsDirty = true;
             // Land edits move the shore (and its taper) up to a rim width beyond the brush.
             float reach = brush == TerrainBrush.Grow || brush == TerrainBrush.Trim ? radius + TerrainField.RimWidth : radius;
@@ -546,7 +555,41 @@ namespace Wonderland
             if (Terrain.EdgeAt(p.x, p.y) < 0.45f || Terrain.WaterAt(p.x, p.y) > 0.05f || Terrain.LockAt(p.x, p.y) > 0.15f) return false;
             if (Streams != null && Streams.IsWet(p, radius + 0.01f)) return false;
             if (Track.DistanceTo(new Vector3(p.x, 0f, p.y)) < TrackSystem.BedHalfWidth + radius) return false;
+            if (Paths != null && Paths.NearBarrier(p, radius * 0.6f)) return false;
             return !Buildings.Contains(p, radius);
+        }
+
+        /// <summary>
+        /// Where an animal may be: ducks on ponds; everyone else on open grass, and in the same enclosure (fenced pasture,
+        /// or outside all of them) as its home.
+        /// </summary>
+        public bool Habitat(Vector2 p, AnimalKind kind, Vector2 home)
+        {
+            if (kind == AnimalKind.Duck)
+                return Terrain.WaterAt(p.x, p.y) > 0.55f && Terrain.EdgeAt(p.x, p.y) > 0.3f && !Track.Network.Nearest(new Vector3(p.x, 0f, p.y), out _, out _, out _, 0.05f);
+            if (!IsFreeGrass(p, AnimalFactory.Radius(kind) * 0.7f)) return false;
+            return Paths.EnclosureAt(p) == Paths.EnclosureAt(home);
+        }
+
+        /// <summary>The nearest person or moving train within <paramref name="within"/> of a point (deer keep away).</summary>
+        private Vector2? Threat(Vector2 p, float within)
+        {
+            var who = People.NearestPerson(p, within);
+            if (who.HasValue) return who;
+            foreach (var t in Trains.Trains)
+            {
+                if (t.Speed < 0.02f) continue;
+                var loco = Trains.LocoPosition(t);
+                if (new Vector2(loco.x - p.x, loco.z - p.y).magnitude < within * 1.6f) return new Vector2(loco.x, loco.z);
+            }
+            return null;
+        }
+
+        private int TreesNear(Vector2 p, float within)
+        {
+            int n = 0;
+            foreach (var t in Forest.Trees) if (new Vector2(t.x - p.x, t.z - p.y).sqrMagnitude < within * within) n++;
+            return n;
         }
 
         public string PlacePerson(Vector3 local, int style, int seed)
@@ -560,7 +603,9 @@ namespace Wonderland
         public string PlaceAnimal(Vector3 local, AnimalKind kind, int seed)
         {
             var p = new Vector2(local.x, local.z);
-            if (!IsFreeGrass(p, AnimalFactory.Radius(kind))) return "Animals need open grass";
+            if (kind == AnimalKind.Duck) { if (!Habitat(p, kind, p)) return "Ducks need a pond to swim on"; }
+            else if (!IsFreeGrass(p, AnimalFactory.Radius(kind))) return "Animals need open grass";
+            else if (kind == AnimalKind.Deer && TreesNear(p, 0.25f) < 3) return "Deer like to live near the woods";
             Animals.Add(new AnimalInstance { x = p.x, z = p.y, kind = (int)kind, seed = seed });
             return null;
         }
@@ -571,7 +616,8 @@ namespace Wonderland
             for (int i = Animals.Animals.Count - 1; i >= 0; i--)
             {
                 var a = Animals.Animals[i];
-                if (!IsFreeGrass(new Vector2(a.x, a.z), AnimalFactory.Radius((AnimalKind)a.kind) * 0.5f)) Animals.RemoveAt(i);
+                var home = new Vector2(a.x, a.z);
+                if (!Habitat(home, (AnimalKind)a.kind, home)) Animals.RemoveAt(i);
             }
             People.Rehome();
         }
@@ -603,6 +649,7 @@ namespace Wonderland
             if (Terrain.WaterAt(p.x, p.y) > 0.1f || Streams.IsWet(p, footprint * 0.5f + 0.008f)) return false;
             if (Terrain.LockAt(p.x, p.y) > 0.25f) return false;
             if (Track.DistanceTo(new Vector3(p.x, 0f, p.y)) < TrackSystem.BedHalfWidth + footprint * 0.5f + 0.008f) return false;
+            if (Paths.Covers(p, footprint * 0.5f)) return false;
             return !Buildings.Contains(p, footprint * 0.6f);
         }
 
@@ -725,6 +772,7 @@ namespace Wonderland
             Cover.MarkAllDirty();
             if (placeTrains != null) placeTrains(); else Trains.Relocate();
             RebuildStations();
+            Paths.Rebuild();
         }
 
         /// <summary>Where a grip on a piece of track would bend it to (no change yet): an error, and the preview line.</summary>
@@ -860,7 +908,11 @@ namespace Wonderland
             string error = (h.variant == HouseFactory.Station ? ValidateStation(h) : null) ?? Buildings.Validate(h, ignore, p => Track.DistanceTo(new Vector3(p.x, 0f, p.y)));
             if (error == null)
                 foreach (var p in BuildingSystem.FootprintSamples(h))
+                {
                     if (Streams.IsWet(p, 0.01f)) return "That's a stream";
+                    if (Paths.NearBarrier(p, 0.004f)) return "That's a fence";
+                    if (!Catalog.Get(h.variant).Small && Paths.WayDistance(p, out int kind) < -0.004f) return kind == 0 ? "That's the road" : "That's the path";
+                }
             return error;
         }
 
@@ -884,7 +936,55 @@ namespace Wonderland
             People.Rehome();
             Forest.MarkDirtyRegion(new Vector2(h.x, h.z), r + 0.1f);
             Cover.MarkDirtyRegion(new Vector2(h.x, h.z), r + 0.1f);
+            if (checkpoint) MoveIn(Buildings.Houses.Count - 1);
             return null;
+        }
+
+        public const int MaxPeople = 40;
+
+        /// <summary>A new home brings its people: they appear at the door and live there.</summary>
+        private void MoveIn(int index)
+        {
+            var h = Buildings.Houses[index];
+            var bp = Catalog.Get(h.variant);
+            int door = System.Array.FindIndex(bp.Spots, sp => sp.Kind == SpotKind.Door);
+            for (int k = 0; k < bp.Residents && People.People.Count < MaxPeople; k++)
+            {
+                var at = door >= 0 ? Buildings.SpotPosition(index, door, out _) : new Vector3(h.x, 0f, h.z);
+                var rng = new Rng(Mathf.RoundToInt(h.x * 9173f + h.z * 7919f) + k * 31);
+                var spot = new Vector3(at.x + rng.Range(-0.012f, 0.012f), 0f, at.z + rng.Range(-0.006f, 0.006f));
+                PlacePerson(spot, rng.Range(0, PersonFactory.StyleCount), rng.Range(1, 1 << 30));
+            }
+        }
+
+        // ------------------------------------------------------------------ paths, fences and hedges
+
+        /// <summary>Draws a road, lane, path, trail, fence, hedge or wall from a stroke (checkpointed); an error or null.</summary>
+        public string BuildPath(IReadOnlyList<Vector3> drawn, PathKind kind)
+        {
+            var line = Paths.Plan(drawn, (int)kind, out string error);
+            if (line == null) return error;
+            Checkpoint();
+            Paths.Add(line);
+            var region = Paths.Grade(line);
+            if (region.width > 0) { TerrainView.Rebuild(region); Paths.Rebuild(); resitHouses = true; }
+            float hw = PathSystem.HalfWidth((int)kind);
+            Forest.RemoveWhere(t => PathSystem.Distance(line, new Vector2(t.x, t.z)) < hw + TreeFactory.Radius((TreeKind)t.kind) * t.scale * 0.4f);
+            Forest.MarkAllDirty();
+            Cover.MarkAllDirty();
+            People.Rehome();
+            return null;
+        }
+
+        public bool RemovePathAt(Vector3 local)
+        {
+            int i = Paths.Pick(new Vector2(local.x, local.z));
+            if (i < 0) return false;
+            Checkpoint();
+            Paths.Lines.RemoveAt(i);
+            Paths.Rebuild();
+            Cover.MarkAllDirty();
+            return true;
         }
 
         /// <summary>Lifts a house off the map so it can be repositioned (checkpointed: undo puts it back).</summary>
@@ -913,6 +1013,7 @@ namespace Wonderland
             if (train != null) { Checkpoint(); Trains.Remove(train); return "Train removed"; }
             int signal = Track.PickSignal(hit, 0.025f);
             if (signal >= 0) { Checkpoint(); Track.Signals.RemoveAt(signal); Track.SnapSignals(); Track.RebuildFixtures(); return "Signal removed"; }
+            if (Paths.Pick(new Vector2(hit.x, hit.z)) >= 0 && Track.DistanceTo(hit) > 0.03f && RemovePathAt(hit)) return "Path removed";
             if (RemovePieceAt(hit)) return "Track removed";
             return null;
         }
@@ -932,6 +1033,7 @@ namespace Wonderland
             public List<AnimalInstance> animals;
             public List<PersonInstance> people;
             public List<StreamPath> streams;
+            public List<PathLine> paths;
             public TrackNetwork.Data network;          // v3: the railway network
             public List<TrainSystem.TrainData> trains;
             public List<SignalInstance> signals;
@@ -962,7 +1064,7 @@ namespace Wonderland
             gx = Terrain.GX0, gz = Terrain.GZ0, nx = Terrain.Nx, nz = Terrain.Nz, size = Terrain.PatchSize, seed = Seed,
             height = Pack(Terrain.Height), land = Pack(Terrain.Land), locks = Pack(Terrain.Lock), soil = Pack(Terrain.Soil),
             water = Pack(Terrain.Water), waterLevel = Pack(Terrain.WaterLevel),
-            trees = new List<TreeInstance>(Forest.Trees), houses = new List<HouseInstance>(Buildings.Houses), animals = new List<AnimalInstance>(Animals.Animals), people = new List<PersonInstance>(People.People), streams = CopyStreams(Streams.Streams),
+            trees = new List<TreeInstance>(Forest.Trees), houses = new List<HouseInstance>(Buildings.Houses), animals = new List<AnimalInstance>(Animals.Animals), people = new List<PersonInstance>(People.People), streams = CopyStreams(Streams.Streams), paths = PathSystem.Copy(Paths.Lines),
             network = Track.Network.ToData(), trains = Trains.ToData(), signals = new List<SignalInstance>(Track.Signals), switchMode = (int)Trains.Mode,
         });
 
@@ -1002,7 +1104,7 @@ namespace Wonderland
             {
                 Cells = cells, Height = height, Land = Quantise(land), Lock = Quantise(locks), Soil = Quantise(soil),
                 Water = water != null ? Quantise(water) : null, WaterLevel = waterLevel, Trees = (d.trees ?? new List<TreeInstance>()).ToArray(),
-                Houses = (d.houses ?? new List<HouseInstance>()).ToArray(), Animals = (d.animals ?? new List<AnimalInstance>()).ToArray(), People = (d.people ?? new List<PersonInstance>()).ToArray(), Streams = d.streams,
+                Houses = (d.houses ?? new List<HouseInstance>()).ToArray(), Animals = (d.animals ?? new List<AnimalInstance>()).ToArray(), People = (d.people ?? new List<PersonInstance>()).ToArray(), Streams = d.streams, Paths = d.paths,
                 Network = network, TrainList = trains, Signals = d.signals, Mode = (SwitchMode)Mathf.Clamp(d.switchMode, 0, 2),
             });
             Terrain.CopyFrom(height, land, locks, soil, water, waterLevel);   // exact values (snapshots are quantised)

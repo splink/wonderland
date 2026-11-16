@@ -33,7 +33,7 @@ The palette floats above the **left** controller; the **right** controller point
 | Right trigger | use the tool / press palette buttons |
 | Right stick ← → | brush size (Houses: rotate) |
 | Right stick ↑ ↓ | strength (Forest: density) |
-| A | next mode: Raise → Lower → Smooth → Flatten → Grow → Trim · Pond → Stream → Drain · Paint ↔ Erase · next house · Sheep → Cows → Villagers · Track: draw ↔ signals · Trains: start/stop (the one pointed at, or all) |
+| A | next mode: Raise → Lower → Smooth → Flatten → Grow → Trim → Peaks · next path kind · next item · Pond → Stream → Drain · Paint ↔ Erase · next house · Sheep → Cows → Villagers · Track: draw ↔ signals · Trains: start/stop (the one pointed at, or all) |
 | B | undo |
 | Right grip | pick up a house, lift a train, or bend a piece of track |
 | Left Y | hide / show the palette |
@@ -68,14 +68,39 @@ whole network), **Random**, or **Manual**.
 level), **Stream** is drawn like the railway and flows only downhill, carving a channel, and **Drain** takes water
 away (tap a stream to remove it). Reeds and lily pads grow at the water's edge.
 
-**Houses and the station:** houses get a flat pad cut into the slope, so they sit flush on lifted ground. The
-**Station** snaps beside the railway with a platform along the rails, and the train stops there for a few seconds.
+**Build (41 places in 7 categories).** Pick a category chip (Homes, Town, Farm, Fun, Travel, Nature, Small), then an
+item in the row below:
+- **Homes:** cottage, townhouse, thatched, apartments, chalet
+- **Town:** church, town hall, bakery, café, grocer, school, fire station, fountain
+- **Farm:** barn, windmill with turning sails, silo, greenhouse, fields of wheat, sunflowers or lavender, vegetable garden
+- **Fun:** carousel, Ferris wheel, playground, bandstand, castle ruin, lookout tower, campsite
+- **Travel:** station, water tower, signal box, fuel station
+- **Nature:** boulders, crag, log pile
+- **Small:** lamp, bench, flower bed, well, statue, signpost, picnic table, hay bales
 
-**Decor:** sheep and cows (hold and sweep to place a little herd) graze and wander on open grass. **Villagers**
-stroll to their neighbours' doors, wait on the platform, board the train and get off at the next stop, and stop to
-wave whenever the train goes by.
+Houses get a flat pad cut into the slope. The **Station** snaps beside the railway with a platform. Homes bring their
+residents with them.
 
-Palette: **Terrain · Water · Forest · Track · Train · Houses · Decor · Eraser** tools, an options row for the current tool, and
+**Paths.** Roads, country lanes, footpaths and hiking trails, plus fences, hedges and stone walls, all drawn with one
+stroke:
+- Start or end a stroke on another line and they join.
+- Roads and lanes smooth the ground across their width.
+- A fence drawn into a closed loop makes a pasture: animals placed inside stay inside.
+- Where a way crosses the railway, a level crossing appears, with planks and crossbucks. It is the only place villagers
+  cross the rails.
+
+**Life.** Villagers, sheep, cows, horses, pigs, hens, ducks and deer:
+- **Villagers** use what is built around them. They sit at the café's tables and on benches, gather round the
+  fountain and on the church steps, browse the grocer's crates, play in the playground, ride the carousel and the Ferris
+  wheel, climb the lookout tower, and call at their neighbours' doors. They walk along roads and paths, hike the trails,
+  and take the train.
+- **Animals** each keep to their habitat. Grazers stay on grass and in their pasture, hens peck about the yard, ducks
+  paddle on ponds, and deer keep to the woods and bolt when someone comes near.
+
+**Mountains.** The **Peaks** terrain mode raises craggy summits. High ground turns to scree and rock bands, with snow on
+the tops and boulders on the slopes. Ponds get sandy beaches.
+
+Palette: **Terrain · Water · Forest · Paths · Track · Train · Build · Life · Eraser** tools, an options row for the current tool, and
 **Undo · Save · Load · Move · New**. The world saves automatically when the app is paused or closed and is restored
 on the next launch.
 

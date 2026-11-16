@@ -20,5 +20,42 @@ Wonderland asset vertex budget:
   house Townhouse: 14200 verts
   house Thatched: 7075 verts
   house Station: 7455 verts
+  house Apartments: 13728 verts
+  house Chalet: 7533 verts
+  house Church: 8124 verts
+  house Town hall: 11519 verts
+  house Bakery: 7500 verts
+  house Café: 7000 verts
+  house Grocer: 6952 verts
+  house School: 8273 verts
+  house Fire station: 5219 verts
+  house Fountain: 1508 verts
+  house Barn: 1346 verts
+  house Windmill: 1650 verts
+  house Silo: 1088 verts
+  house Greenhouse: 1288 verts
+  house Wheat field: 4228 verts
+  house Garden: 3108 verts
+  house Carousel: 188 verts
+  house Ferris wheel: 226 verts
+  house Playground: 584 verts
+  house Bandstand: 2300 verts
+  house Castle ruin: 5484 verts
+  house Lookout tower: 1678 verts
+  house Campsite: 394 verts
+  house Water tower: 522 verts
+  house Signal box: 2907 verts
+  house Fuel station: 468 verts
+  house Boulders: 738 verts
+  house Crag: 723 verts
+  house Log pile: 500 verts
+  house Street lamp: 196 verts
+  house Bench: 220 verts
+  house Flower bed: 1262 verts
+  house Well: 238 verts
+  house Statue: 636 verts
+  house Signpost: 101 verts
+  house Picnic table: 214 verts
+  house Hay bales: 174 verts
   villager: 642 verts
   sheep: 828 verts, cow: 574 verts

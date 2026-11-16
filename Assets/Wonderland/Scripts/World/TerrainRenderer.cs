@@ -85,6 +85,28 @@ namespace Wonderland
                 RebuildChunk(chunks[cz * chunksX + cx]);
         }
 
+        /// <summary>Sand along pond shores: land within a few centimetres of water, above it but not much higher.</summary>
+        private float Beach(int x, int z)
+        {
+            var water = field.Water;
+            int N = field.Nx, Nz = field.Nz, i = z * N + x;
+            if (water[i] > 0.5f) return 0.6f;   // the shallow bed shows sand through the water
+            float best = 0f;
+            for (int dz = -3; dz <= 3; dz++)
+            for (int dx = -3; dx <= 3; dx++)
+            {
+                int xx = x + dx, zz = z + dz;
+                if (xx < 0 || zz < 0 || xx >= N || zz >= Nz) continue;
+                int j = zz * N + xx;
+                if (water[j] < 0.5f) continue;
+                float near = 1f - Mathf.Sqrt(dx * dx + dz * dz) / 4.2f;
+                float above = field.Surface[i] - field.WaterLevel[j];
+                if (above > 0.03f) continue;
+                best = Mathf.Max(best, near);
+            }
+            return Mathf.Clamp01(best * 1.3f);
+        }
+
         private void RebuildChunk(Chunk c)
         {
             var s = field.Surface;
@@ -101,7 +123,7 @@ namespace Wonderland
                 c.Normals[v] = new Vector3(hl - hr, 2f * cell, hd - hu).normalized;
                 float laplacian = (hl + hr + hd + hu - 4f * h) / (cell * cell);
                 float cavity = Mathf.Clamp01(0.5f - laplacian * 0.05f);
-                c.Colours[v] = new Color32((byte)(Mathf.Clamp01(field.Soil[i]) * 255f), (byte)(field.Edge[i] * 255f), (byte)(cavity * 255f), 255);
+                c.Colours[v] = new Color32((byte)(Mathf.Clamp01(field.Soil[i]) * 255f), (byte)(field.Edge[i] * 255f), (byte)(cavity * 255f), (byte)(255 - Beach(x, z) * 255f));
             }
             triangles.Clear();
             var edge = field.Edge;

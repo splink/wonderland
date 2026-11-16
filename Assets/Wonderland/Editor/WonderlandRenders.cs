@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.IO;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -29,7 +30,7 @@ namespace Wonderland.Editor
             var budget = new System.Text.StringBuilder("Wonderland asset vertex budget:\n");
             for (int k = 0; k < TreeFactory.KindCount; k++)
             for (int v = 0; v < TreeFactory.Variants((TreeKind)k); v++) budget.AppendLine($"  tree {(TreeKind)k} {v}: {TreeFactory.Get((TreeKind)k, v).vertexCount} verts");
-            for (int v = 0; v < HouseFactory.VariantCount; v++) budget.AppendLine($"  house {HouseFactory.Names[v]}: {HouseFactory.Get(v).vertexCount} verts");
+            for (int v = 0; v < HouseFactory.VariantCount; v++) budget.AppendLine($"  house {HouseFactory.Name(v)}: {HouseFactory.Get(v).vertexCount} verts");
             budget.AppendLine($"  villager: {PersonFactory.Body(0).vertexCount + 2 * PersonFactory.Arm(0).vertexCount + 2 * PersonFactory.Leg(0).vertexCount} verts");
             budget.AppendLine($"  sheep: {AnimalFactory.Body(AnimalKind.Sheep).vertexCount + AnimalFactory.Head(AnimalKind.Sheep).vertexCount} verts, cow: {AnimalFactory.Body(AnimalKind.Cow).vertexCount + AnimalFactory.Head(AnimalKind.Cow).vertexCount} verts");
             Debug.Log(budget.ToString());
@@ -80,6 +81,35 @@ namespace Wonderland.Editor
             cam.transform.position = new Vector3(0.18f, 0.09f, -0.12f); cam.transform.LookAt(new Vector3(0.06f, 0.04f, 0f));
             Capture(cam, "editor-train-front.png", 1600, 900);
             Object.DestroyImmediate(root.gameObject);
+
+            // The object library, one picture per category.
+            for (int c = 0; c < Catalog.CategoryNames.Length; c++)
+            {
+                var ids = Catalog.InCategory((PlaceCategory)c);
+                root = new GameObject("Gallery").transform;
+                float x = 0f, spacing = 0.03f;
+                var positions = new List<float>();
+                foreach (int id in ids) { var half = Catalog.Get(id).Half; x += half.x; positions.Add(x); x += half.x + spacing; }
+                float shift = x / 2f;
+                float tallest = 0.05f;
+                for (int k = 0; k < ids.Count; k++)
+                {
+                    var bp = Catalog.Get(ids[k]);
+                    var obj = Place(root, HouseFactory.Get(ids[k], k), lit, new Vector3(positions[k] - shift, 0f, 0f), Quaternion.Euler(0f, 12f, 0f));
+                    var rotor = HouseFactory.Rotor(ids[k]);
+                    if (rotor != null) Place(obj, rotor, lit, bp.RotorPivot, Quaternion.AngleAxis(20f, bp.RotorAxis));
+                    for (int g = 0; g < bp.Gondolas; g++)
+                    {
+                        float a = g / (float)bp.Gondolas * Mathf.PI * 2f + 0.35f;
+                        Place(obj, HouseFactory.Gondola(), lit, bp.RotorPivot + new Vector3(Mathf.Cos(a), Mathf.Sin(a), 0f) * bp.GondolaRadius, Quaternion.identity);
+                    }
+                    tallest = Mathf.Max(tallest, bp.Height);
+                }
+                float dist = Mathf.Max(x * 0.95f, tallest * 2.6f);
+                cam = CreateCamera(new Vector3(0f, tallest * 0.9f + dist * 0.28f, -dist), new Vector3(0f, tallest * 0.35f, 0f), 34f);
+                Capture(cam, $"editor-places-{Catalog.CategoryNames[c].ToLower()}.png", 2000, 1000);
+                Object.DestroyImmediate(root.gameObject);
+            }
 
             // Rolling stock: locomotives in their liveries, coaches, the four goods wagons and railcars.
             root = new GameObject("Gallery").transform;

@@ -21,4 +21,8 @@ PASS  House type chips choose the variant
 PASS  B undoes the last house
 PASS  Eraser tap removes the house under the pointer
 PASS  Palette Undo restores it
+PASS  Category and item chips place a fountain from the Town set (Fountain placed; selected 13)
+PASS  Drawing with the Paths tool lays a footpath (1)
+PASS  ...and a fence
+PASS  The Life tool's chips place a hen
 RESULT: PASS

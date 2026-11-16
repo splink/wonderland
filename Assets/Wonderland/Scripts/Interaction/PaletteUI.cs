@@ -6,7 +6,7 @@ using UnityEngine.Rendering;
 
 namespace Wonderland
 {
-    public enum Tool { Terrain, Water, Forest, Track, Train, Houses, Decor, Eraser }
+    public enum Tool { Terrain, Water, Forest, Paths, Track, Train, Houses, Decor, Eraser }
 
     /// <summary>One pressable element of the palette (tool tile or option chip).</summary>
     public sealed class PaletteButton : MonoBehaviour
@@ -56,17 +56,18 @@ namespace Wonderland
     public sealed class PaletteUI : MonoBehaviour
     {
         public const int UiLayer = 5;
-        public const float Width = 0.33f, Height = 0.17f;
+        public const float Width = 0.33f, Height = 0.195f;
         private readonly Dictionary<Tool, PaletteButton> tools = new();
         private readonly List<PaletteButton> options = new();
+        private readonly List<PaletteButton> items = new();
         private readonly List<PaletteButton> globals = new();
         private TextMeshPro status, hint, title;
         private Material uiMaterial, litMaterial;
-        private Transform optionRow;
+        private Transform optionRow, itemRow;
         public PaletteButton Hovered { get; private set; }
         public event Action<Tool> ToolSelected;
 
-        public static readonly string[] ToolNames = { "Terrain", "Water", "Forest", "Track", "Train", "Houses", "Decor", "Eraser" };
+        public static readonly string[] ToolNames = { "Terrain", "Water", "Forest", "Paths", "Track", "Train", "Build", "Life", "Eraser" };
 
         public void Build(Material ui, Material lit)
         {
@@ -83,7 +84,7 @@ namespace Wonderland
                 var tool = (Tool)i;
                 float pitch = (Width - 0.012f) / ToolNames.Length;
                 float x = -Width / 2 + 0.006f + pitch * (i + 0.5f);
-                var b = Button(ToolNames[i], transform, new Vector3(x, 0.035f, 0f), new Vector2(pitch - 0.0045f, 0.052f), ToolNames[i], true);
+                var b = Button(ToolNames[i], transform, new Vector3(x, 0.046f, 0f), new Vector2(pitch - 0.0045f, 0.052f), ToolNames[i], true);
                 b.Label.transform.localPosition = new Vector3(0f, -0.019f, -0.003f);
                 b.Icon = Icon(tool, b.transform);
                 (b.IconYaw, b.IconPitch) = tool switch { Tool.Train => (115f, -15f), Tool.Track => (20f, -55f), Tool.Terrain => (25f, -30f), _ => (30f, -20f) };
@@ -93,9 +94,12 @@ namespace Wonderland
             }
             optionRow = new GameObject("Options").transform;
             optionRow.SetParent(transform, false);
-            optionRow.localPosition = new Vector3(0f, -0.019f, 0f);
+            optionRow.localPosition = new Vector3(0f, -0.009f, 0f);
+            itemRow = new GameObject("Items").transform;
+            itemRow.SetParent(transform, false);
+            itemRow.localPosition = new Vector3(0f, -0.033f, 0f);
 
-            hint = Text("Hint", transform, "", new Vector3(0f, -0.04f, -0.002f), new Vector2(Width - 0.02f, 0.011f), 0.05f, TextAlignmentOptions.Center);
+            hint = Text("Hint", transform, "", new Vector3(0f, -0.054f, -0.002f), new Vector2(Width - 0.02f, 0.011f), 0.05f, TextAlignmentOptions.Center);
             hint.color = new Color(0.86f, 0.84f, 0.8f);
             status = Text("Status", transform, "", new Vector3(0f, Height / 2 - 0.011f, -0.002f), new Vector2(0.15f, 0.012f), 0.055f, TextAlignmentOptions.Right);
             status.rectTransform.localPosition = new Vector3(Width / 2 - 0.085f, Height / 2 - 0.011f, -0.002f);
@@ -106,7 +110,7 @@ namespace Wonderland
         {
             int i = globals.Count;
             const float w = 0.048f;
-            var b = Button(label, transform, new Vector3(-Width / 2 + 0.03f + i * (w + 0.004f), -0.063f, 0f), new Vector2(w, 0.02f), label, false);
+            var b = Button(label, transform, new Vector3(-Width / 2 + 0.03f + i * (w + 0.004f), -0.078f, 0f), new Vector2(w, 0.02f), label, false);
             b.OnClick = onClick;
             b.ApplyVisuals();
             globals.Add(b);
@@ -125,7 +129,12 @@ namespace Wonderland
         }
 
         /// <summary>Rebuilds the option chips (cheap: a handful of objects, only when the tool or mode changes).</summary>
-        public void SetOptions(IReadOnlyList<Option> list)
+        public void SetOptions(IReadOnlyList<Option> list) => FillRow(options, optionRow, list, 0.02f);
+
+        /// <summary>The second row of chips (the items of a category, for the Build tool); empty hides it.</summary>
+        public void SetItems(IReadOnlyList<Option> list) => FillRow(items, itemRow, list ?? new List<Option>(), 0.018f);
+
+        private void FillRow(List<PaletteButton> options, Transform optionRow, IReadOnlyList<Option> list, float height)
         {
             while (options.Count > list.Count)
             {
@@ -136,14 +145,14 @@ namespace Wonderland
             float total = list.Count * w + (list.Count - 1) * 0.004f;
             for (int i = 0; i < list.Count; i++)
             {
-                if (i >= options.Count) options.Add(Button("Option", optionRow, Vector3.zero, new Vector2(w, 0.02f), "", false));
+                if (i >= options.Count) options.Add(Button("Option", optionRow, Vector3.zero, new Vector2(w, height), "", false));
                 var b = options[i];
                 b.transform.localPosition = new Vector3(-total / 2 + w / 2 + i * (w + 0.004f), 0f, 0f);
                 b.Label.text = list[i].Label;
                 b.Selected = list[i].Selected; b.Enabled = list[i].Enabled;
                 var action = list[i].OnClick;
                 b.OnClick = action;
-                ResizeButton(b, new Vector2(w, 0.02f));
+                ResizeButton(b, new Vector2(w, height));
                 b.ApplyVisuals();
             }
         }
@@ -199,7 +208,8 @@ namespace Wonderland
             if (tile) b.Ring = Ring("Selected", go.transform, size.x + 0.003f, size.y + 0.003f, 0.0016f, new Color(1f, 0.82f, 0.35f, 1f));
             b.Label = Text("Label", go.transform, label, new Vector3(0f, 0f, -0.003f), new Vector2(size.x - 0.004f, tile ? 0.009f : size.y - 0.005f), tile ? 0.045f : 0.05f, TextAlignmentOptions.Center);
             var col = go.AddComponent<BoxCollider>();
-            col.size = new Vector3(size.x, size.y, 0.01f);
+            col.size = new Vector3(size.x, size.y, 0.002f);   // thin (oblique rays must not clip a neighbour), just in front of the panel
+            col.center = new Vector3(0f, 0f, -0.003f);
             return b;
         }
 
@@ -207,7 +217,7 @@ namespace Wonderland
         {
             var mesh = RoundedRect(size.x, size.y, Mathf.Min(size.x, size.y) * 0.28f, Color.white, new Color(0.85f, 0.85f, 0.9f));
             b.Background.GetComponent<MeshFilter>().sharedMesh = mesh;
-            b.GetComponent<BoxCollider>().size = new Vector3(size.x, size.y, 0.01f);
+            b.GetComponent<BoxCollider>().size = new Vector3(size.x, size.y, 0.002f);
             b.Label.rectTransform.sizeDelta = new Vector2(size.x - 0.004f, size.y - 0.005f);
         }
 
@@ -307,8 +317,9 @@ namespace Wonderland
                 Tool.Water => PondIcon(),
                 Tool.Forest => TreeFactory.Get(TreeKind.Oak, 0),
                 Tool.Track => TrackIcon(),
+                Tool.Paths => PathIcon(),
                 Tool.Train => TrainFactory.LocoMesh(),
-                Tool.Houses => HouseFactory.Get(0),
+                Tool.Houses => HouseFactory.Get(Catalog.Church),
                 Tool.Decor => SheepIcon(),
                 _ => EraserIcon(),
             };
@@ -362,6 +373,21 @@ namespace Wonderland
                 if (i % 2 == 0) b.AddCylinder(p + Vector3.up * 0.016f, 0.0022f, 0.0022f, 0.006f, 6, Pal.Hex("#6B4630"), Pal.Hex("#6B4630"), true);
             }
             return b.ToMesh("PondIcon");
+        }
+
+        private static Mesh PathIcon()
+        {
+            var b = new MeshBuilder();
+            b.AddBox(new Vector3(0f, -0.004f, 0f), new Vector3(0.11f, 0.006f, 0.08f), Pal.Hex("#5E9A3E"));
+            for (int i = 0; i < 8; i++)
+            {
+                float t = i / 7f, x = -0.05f + t * 0.1f, z = Mathf.Sin(t * 3f) * 0.018f;
+                b.AddBox(new Vector3(x, 0.0f, z), new Vector3(0.016f, 0.003f, 0.03f), i % 2 == 0 ? Pal.Hex("#C9BBA3") : Pal.Hex("#B5AA98"));
+            }
+            for (float x = -0.05f; x <= 0.051f; x += 0.017f) b.AddBox(new Vector3(x, 0.01f, 0.034f), new Vector3(0.004f, 0.022f, 0.004f), Pal.Hex("#8A5A36"));
+            b.AddBox(new Vector3(0f, 0.012f, 0.034f), new Vector3(0.1f, 0.003f, 0.002f), Pal.Hex("#A8743E"));
+            b.AddBox(new Vector3(0f, 0.004f, 0.034f), new Vector3(0.1f, 0.003f, 0.002f), Pal.Hex("#A8743E"));
+            return b.ToMesh("PathIcon");
         }
 
         private static Mesh TrackIcon()

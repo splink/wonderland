@@ -135,14 +135,14 @@ namespace Wonderland.Editor
             ClickButton(hand, "Start all");
             Check(world.Trains.AnyRunning, "Start all sets them running again");
 
-            // Houses: tile, aim inside the loop, trigger; stick rotates.
-            ClickButton(hand, "Houses");
+            // Build: tile, aim inside the loop, trigger; stick rotates.
+            ClickButton(hand, "Build");
             var spot = world.transform.TransformPoint(new Vector3(-0.05f, world.Terrain.SurfaceAt(-0.05f, -0.1f), -0.1f));
             for (int i = 0; i < 20; i++) Frame(hand, spot, false, stick: new Vector2(1f, 0f));
             Frame(hand, spot, true); Frame(hand, spot, false);
             Check(world.Buildings.Houses.Count == 1, "Trigger places a house where the pointer is");
             Check(world.Buildings.Houses.Count == 1 && Mathf.Abs(world.Buildings.Houses[0].rotation) > 10f, "Stick rotated the house before placing");
-            ClickButton(hand, "Thatched");
+            ClickButton(hand, "Thatch");
             var spot2 = world.transform.TransformPoint(new Vector3(0.18f, world.Terrain.SurfaceAt(0.18f, -0.12f), -0.12f));
             Frame(hand, spot2, true); Frame(hand, spot2, false);
             Check(world.Buildings.Houses.Count == 2 && world.Buildings.Houses[1].variant == 2, "House type chips choose the variant");
@@ -161,14 +161,48 @@ namespace Wonderland.Editor
             // Palette Undo button.
             ClickButton(hand, "Undo");
             Check(world.Buildings.Houses.Count == 1, "Palette Undo restores it");
+
+            // Build categories: Fun shows its items; placing a fountain from Town.
+            ClickButton(hand, "Build");
+            ClickButton(hand, "Town");
+            ClickButton(hand, "Fountain");
+            var free = new Vector2(0.12f, 0.18f);
+            for (int k = 0; k < 60; k++)
+            {
+                var c = new Vector2(Mathf.Cos(k * 2.4f), Mathf.Sin(k * 2.4f)) * (0.02f + k * 0.008f) + new Vector2(-0.05f, 0.05f);
+                if (world.ValidateHouse(new HouseInstance { x = c.x, z = c.y, variant = Catalog.Fountain }) == null) { free = c; break; }
+            }
+            var square = world.transform.TransformPoint(new Vector3(free.x, world.Terrain.SurfaceAt(free.x, free.y), free.y));
+            int housesBefore = world.Buildings.Houses.Count;
+            Frame(hand, square, true); Frame(hand, square, false);
+            Check(world.Buildings.Houses.Count == housesBefore + 1 && world.Buildings.Houses[^1].variant == Catalog.Fountain, $"Category and item chips place a fountain from the Town set ({tools.LastMessage}; selected {tools.HouseVariant})");
+
+            // Paths: draw a footpath; draw a fence.
+            ClickButton(hand, "Paths");
+            ClickButton(hand, "Path");
+            HoldPath(hand, new Vector3(-0.3f, 0f, -0.02f), new Vector3(-0.05f, 0f, 0.05f), 1f);
+            Check(world.Paths.Lines.Count == 1 && world.Paths.Lines[0].kind == (int)PathKind.Footpath, $"Drawing with the Paths tool lays a footpath ({world.Paths.Lines.Count})");
+            ClickButton(hand, "Fence");
+            HoldPath(hand, new Vector3(-0.3f, 0f, -0.2f), new Vector3(-0.1f, 0f, -0.25f), 1f);
+            Check(world.Paths.Lines.Count == 2 && world.Paths.Lines[1].kind == (int)PathKind.Fence, "...and a fence");
+
+            // Life: a hen on the grass.
+            ClickButton(hand, "Life");
+            ClickButton(hand, "Hen");
+            var yard = world.transform.TransformPoint(new Vector3(0.05f, world.Terrain.SurfaceAt(0.05f, 0.05f), 0.05f));
+            int animals = world.Animals.Animals.Count;
+            Frame(hand, yard, true); Frame(hand, yard, false);
+            Check(world.Animals.Animals.Count == animals + 1 && world.Animals.Animals[^1].kind == (int)AnimalKind.Chicken, "The Life tool's chips place a hen");
         }
 
         private static void ClickButton(Vector3 hand, string label)
         {
             var button = Find(label);
             if (button == null) { Check(false, $"Button '{label}' exists"); return; }
+            Physics.SyncTransforms();
             var p = button.transform.position;
             Frame(hand, p, false); Frame(hand, p, true); Frame(hand, p, false);
+            if (palette.Hovered != null && palette.Hovered != button) Debug.Log($"Click on '{label}' hit '{palette.Hovered.Text}' instead");
         }
 
         private static PaletteButton Find(string label)

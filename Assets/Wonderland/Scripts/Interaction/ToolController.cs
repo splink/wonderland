@@ -27,8 +27,11 @@ namespace Wonderland
         public bool PlacingWorld;
         public bool HapticsEnabled = true;
 
-        private readonly float[] radius = { 0.16f, 0.12f, 0.13f, 0.05f, 0.05f, 0.05f, 0.03f, 0.06f };
-        public int DecorKind { get; private set; }   // 0 sheep, 1 cows, 2 villagers
+        private readonly float[] radius = { 0.16f, 0.12f, 0.13f, 0.03f, 0.05f, 0.05f, 0.05f, 0.03f, 0.06f };
+        public const int Villager = AnimalFactory.KindCount;
+        public int DecorKind { get; private set; } = Villager;   // an AnimalKind, or Villager
+        public PathKind PathKind { get; private set; } = PathKind.Road;
+        public PlaceCategory BuildCategory { get; private set; } = PlaceCategory.Homes;
         public bool SignalMode { get; private set; }  // Track tool: placing stop signals instead of drawing
         public TrainKind TrainKind { get; private set; } = TrainKind.Passenger;
         private Train hoveredTrain;
@@ -135,6 +138,7 @@ namespace Wonderland
         private void RefreshOptions()
         {
             var o = new List<PaletteUI.Option>();
+            var items = new List<PaletteUI.Option>();
             switch (Tool)
             {
                 case Tool.Terrain:
@@ -181,23 +185,39 @@ namespace Wonderland
                     }));
                     break;
                 case Tool.Houses:
-                    for (int i = 0; i < HouseFactory.VariantCount; i++)
+                    for (int c = 0; c < Catalog.CategoryNames.Length; c++)
                     {
-                        int v = i;
-                        o.Add(new PaletteUI.Option(HouseFactory.Names[i], HouseVariant == i && !carrying, () => { HouseVariant = v; carrying = false; RefreshOptions(); }));
+                        var cat = (PlaceCategory)c;
+                        o.Add(new PaletteUI.Option(Catalog.CategoryNames[c], BuildCategory == cat, () => SelectCategory(cat)));
+                    }
+                    foreach (int id in Catalog.InCategory(BuildCategory))
+                    {
+                        int v = id;
+                        items.Add(new PaletteUI.Option(Catalog.Get(id).Short, HouseVariant == id && !carrying, () => { HouseVariant = v; carrying = false; houseStyle %= Mathf.Max(1, Catalog.Get(v).Styles); RefreshOptions(); }));
                     }
                     break;
                 case Tool.Decor:
-                    o.Add(new PaletteUI.Option("Sheep", DecorKind == 0, () => { DecorKind = 0; RefreshOptions(); }));
-                    o.Add(new PaletteUI.Option("Cows", DecorKind == 1, () => { DecorKind = 1; RefreshOptions(); }));
-                    o.Add(new PaletteUI.Option("Villagers", DecorKind == 2, () => { DecorKind = 2; RefreshOptions(); }));
+                    o.Add(new PaletteUI.Option("People", DecorKind == Villager, () => { DecorKind = Villager; RefreshOptions(); }));
+                    for (int k = 0; k < AnimalFactory.KindCount; k++)
+                    {
+                        int kind = k;
+                        o.Add(new PaletteUI.Option(AnimalFactory.Names[k], DecorKind == k, () => { DecorKind = kind; RefreshOptions(); }));
+                    }
+                    break;
+                case Tool.Paths:
+                    for (int k = 0; k < PathSystem.Names.Length; k++)
+                    {
+                        var kind = (PathKind)k;
+                        o.Add(new PaletteUI.Option(PathSystem.Names[k], PathKind == kind, () => { PathKind = kind; RefreshOptions(); }));
+                    }
                     break;
                 case Tool.Eraser:
-                    o.Add(new PaletteUI.Option("Tap: house / animal / villager / train / track / signal", false, null));
+                    o.Add(new PaletteUI.Option("Tap: anything you built", false, null));
                     o.Add(new PaletteUI.Option("Hold: trees", false, null));
                     break;
             }
             Palette.SetOptions(o);
+            Palette.SetItems(items);
         }
 
         /// <summary>A: start / stop the train being pointed at, or all trains.</summary>
@@ -221,11 +241,21 @@ namespace Wonderland
             RefreshOptions();
         }
 
+        private void SelectCategory(PlaceCategory c)
+        {
+            BuildCategory = c;
+            var ids = Catalog.InCategory(c);
+            if (!ids.Contains(HouseVariant)) HouseVariant = ids[0];
+            carrying = false;
+            RefreshOptions();
+        }
+
         private string Hint() => Tool switch
         {
             Tool.Terrain => TerrainMode switch
             {
                 TerrainBrush.Grow => "Grow: paint over the floor to extend the land anywhere in the room  ·  A: mode",
+                TerrainBrush.Peaks => "Peaks: raise craggy mountains - high tops get rock and snow  ·  A: mode",
                 TerrainBrush.Trim => "Trim: paint along the shore to take land away  ·  A: mode",
                 _ => $"Hold trigger to {TerrainMode.ToString().ToLower()}  ·  A: mode  ·  stick: size / strength  ·  B: undo",
             },
@@ -238,10 +268,15 @@ namespace Wonderland
             Tool.Train => !World.Track.HasTrack ? "Draw a railway first (Track tool)"
                 : hoveredTrain != null ? "Trigger: stop / go  ·  stick up-down: speed  ·  grip: pick it up  ·  A: stop / go"
                 : "Trigger on the track: add a train  ·  tap a switch or signal to change it  ·  A: start / stop all",
+            Tool.Paths => PathSystem.IsWay((int)PathKind) ? $"Draw a {PathSystem.Names[(int)PathKind].ToLower()} - start or end on another to join them; villagers walk along it  ·  A: next"
+                : $"Draw a {PathSystem.Names[(int)PathKind].ToLower()} - close it into a loop for a pasture that keeps animals in  ·  A: next",
             Tool.Houses => HouseVariant == HouseFactory.Station ? "Point beside the railway: the station snaps to it and the train will stop there"
+                : !carrying && Catalog.Get(HouseVariant).Hint != null ? $"Trigger: place the {Catalog.Get(HouseVariant).Name.ToLower()} - {Catalog.Get(HouseVariant).Hint}  ·  stick: rotate  ·  A: next"
                 : carrying ? "Trigger: put the house down  ·  stick: rotate" : "Trigger: place  ·  stick: rotate  ·  A: next house  ·  grip / trigger on a house: move it",
-            Tool.Decor => DecorKind == 2 ? "Trigger: place a villager - they stroll to the neighbours, take the train and wave  ·  A: switch"
-                : "Trigger: place a " + (DecorKind == 0 ? "sheep" : "cow") + " - hold and sweep for a little herd  ·  A: switch",
+            Tool.Decor => DecorKind == Villager ? "Trigger: place a villager - they visit shops and squares, ride the carousel and the train  ·  A: next"
+                : DecorKind == (int)AnimalKind.Duck ? "Trigger on a pond: ducks paddle about  ·  A: next"
+                : DecorKind == (int)AnimalKind.Deer ? "Trigger near the woods: deer stay among the trees and shy away from people  ·  A: next"
+                : $"Trigger: place a {AnimalFactory.Names[DecorKind].ToLower()} - hold and sweep for a herd; inside a fence they stay in their pasture  ·  A: next",
             _ => "Tap a house, an animal, a villager, a train, a signal or a piece of track to erase  ·  hold over trees to clear them",
         };
 
@@ -313,6 +348,7 @@ namespace Wonderland
                 case Tool.Track: TrackTool(input, hit, local, ref colour); break;
                 case Tool.Train: TrainTool(input, hit, local, localDir, dt, ref colour); break;
                 case Tool.Houses: HouseTool(input, hit, local, localOrigin, localDir, ref colour); break;
+                case Tool.Paths: PathTool(input, hit, local, ref colour); break;
                 case Tool.Decor: DecorTool(input, hit, local, dt, ref colour); break;
                 case Tool.Eraser: EraserTool(input, hit, local, localOrigin, localDir, dt, ref colour); break;
             }
@@ -326,13 +362,19 @@ namespace Wonderland
         {
             switch (Tool)
             {
-                case Tool.Terrain: TerrainMode = (TerrainBrush)(((int)TerrainMode + 1) % 6); Say(TerrainMode.ToString()); break;
+                case Tool.Terrain: TerrainMode = (TerrainBrush)(((int)TerrainMode + 1) % 7); Say(TerrainMode.ToString()); break;
                 case Tool.Forest: ForestErase = !ForestErase; Say(ForestErase ? "Erase trees" : "Paint trees"); break;
                 case Tool.Water:
                     if (!Draining && !StreamMode) StreamMode = true; else if (StreamMode) { StreamMode = false; Draining = true; } else Draining = false;
                     Say(StreamMode ? "Stream" : Draining ? "Drain" : "Pond"); break;
-                case Tool.Decor: DecorKind = (DecorKind + 1) % 3; Say(DecorKind == 0 ? "Sheep" : DecorKind == 1 ? "Cows" : "Villagers"); break;
-                case Tool.Houses: HouseVariant = (HouseVariant + 1) % HouseFactory.VariantCount; Say(HouseFactory.Names[HouseVariant]); break;
+                case Tool.Decor: DecorKind = (DecorKind + 1) % (AnimalFactory.KindCount + 1); Say(DecorKind == Villager ? "People" : AnimalFactory.Names[DecorKind]); break;
+                case Tool.Paths: PathKind = (PathKind)(((int)PathKind + 1) % PathSystem.Names.Length); Say(PathSystem.Names[(int)PathKind]); break;
+                case Tool.Houses:
+                {
+                    var ids = Catalog.InCategory(BuildCategory);
+                    HouseVariant = ids[(ids.IndexOf(HouseVariant) + 1) % ids.Count];
+                    Say(HouseFactory.Name(HouseVariant)); break;
+                }
                 case Tool.Train: ToggleTrain(); break;
                 case Tool.Track: SignalMode = !SignalMode; Say(SignalMode ? "Signals" : "Draw track"); break;
             }
@@ -346,6 +388,7 @@ namespace Wonderland
             TerrainBrush.Lower => new Color(0.45f, 0.75f, 1f),
             TerrainBrush.Smooth => new Color(1f, 1f, 1f),
             TerrainBrush.Grow => new Color(1f, 0.92f, 0.55f),
+            TerrainBrush.Peaks => new Color(0.85f, 0.85f, 0.95f),
             TerrainBrush.Trim => new Color(1f, 0.5f, 0.42f),
             _ => new Color(1f, 0.75f, 0.4f),
         };
@@ -409,17 +452,17 @@ namespace Wonderland
 
         private void DecorTool(PointerInput input, bool hit, Vector3 local, float dt, ref Color colour)
         {
-            bool person = DecorKind == 2;
-            var kind = (AnimalKind)Mathf.Min(DecorKind, 1);
+            bool person = DecorKind == Villager;
+            var kind = (AnimalKind)Mathf.Min(DecorKind, AnimalFactory.KindCount - 1);
             float radius = person ? PeopleSystem.Radius * 2f : AnimalFactory.Radius(kind);
             var p2 = new Vector2(local.x, local.z);
-            bool free = hit && (person ? World.People.Walkable(p2) : World.IsFreeGrass(p2, radius));
+            bool free = hit && (person ? World.People.Walkable(p2) : World.Habitat(p2, kind, p2));
             colour = free ? new Color(1f, 0.95f, 0.75f, 0.85f) : new Color(1f, 0.5f, 0.45f, 0.85f);
             if (hit) World.TerrainView.SetBrush(local, radius * 1.4f, free ? new Color(1f, 0.95f, 0.7f) : new Color(1f, 0.4f, 0.35f), 0.8f);
             else World.TerrainView.HideBrush();
             sinceDrop += dt;
             if (input.TriggerDown && hit) { World.Checkpoint(); stroking = true; lastDrop = new Vector3(1e6f, 0f, 0f); sinceDrop = 1f; }
-            if (stroking && input.Trigger && hit && (local - lastDrop).magnitude > (person ? 0.04f : 0.05f) && sinceDrop > 0.12f)
+            if (stroking && input.Trigger && hit && (local - lastDrop).magnitude > (person ? 0.04f : AnimalFactory.Radius(kind) * 2.8f) && sinceDrop > 0.12f)
             {
                 string error = person ? World.PlacePerson(local, Random.Range(0, PersonFactory.StyleCount), Random.Range(1, 1 << 30))
                     : World.PlaceAnimal(local, kind, Random.Range(1, 1 << 30));
@@ -427,6 +470,31 @@ namespace Wonderland
                 else if (input.TriggerDown) Say(error);
             }
             if (stroking && (input.TriggerUp || !input.Trigger)) stroking = false;
+        }
+
+        /// <summary>Draws roads, lanes, paths, trails, fences, hedges and walls - the same gesture as the railway and streams.</summary>
+        private void PathTool(PointerInput input, bool hit, Vector3 local, ref Color colour)
+        {
+            colour = new Color(0.95f, 0.85f, 0.65f, 0.85f);
+            float width = Mathf.Max(PathSystem.HalfWidth((int)PathKind), 0.008f);
+            if (drawn.Count == 0)
+            {
+                if (hit) World.TerrainView.SetBrush(local, width, new Color(1f, 0.9f, 0.6f), 0.9f); else World.TerrainView.HideBrush();
+            }
+            if (input.TriggerDown && hit) { drawn.Clear(); drawn.Add(local); }
+            if (input.Trigger && drawn.Count > 0 && hit)
+            {
+                var last = drawn[^1];
+                if (new Vector2(local.x - last.x, local.z - last.z).magnitude > 0.01f) { drawn.Add(local); World.Track.ShowPreview(drawn, false, false); }
+            }
+            if ((input.TriggerUp || !input.Trigger) && drawn.Count > 0)
+            {
+                World.Track.HidePreview();
+                string error = World.BuildPath(drawn, PathKind);
+                if (error == null) { Say(PathSystem.Names[(int)PathKind] + " added"); Haptic(0.5f, 0.05f); }
+                else { Say(error); Haptic(0.7f, 0.1f); }
+                drawn.Clear();
+            }
         }
 
         private void ForestTool(PointerInput input, bool hit, Vector3 local, float dt, ref Color colour)
@@ -653,7 +721,8 @@ namespace Wonderland
                     {
                         var h = World.PickUpHouse(hover);
                         HouseVariant = h.variant; houseRotation = h.rotation; houseStyle = h.style; carrying = true; pickedHover = -1;
-                        Say("Moving " + HouseFactory.Names[h.variant]);
+                        BuildCategory = Catalog.Get(h.variant).Category;
+                        Say("Moving " + HouseFactory.Name(h.variant));
                         RefreshOptions();
                     }
                     return;
@@ -685,9 +754,10 @@ namespace Wonderland
                     bool wasCarrying = carrying;
                     World.PlaceHouse(candidate, !carrying);
                     carrying = false;
-                    if (!wasCarrying) houseStyle = (houseStyle + 1 + Random.Range(0, HouseFactory.StyleCount - 1)) % HouseFactory.StyleCount;
+                    int styles = Mathf.Max(1, Catalog.Get(HouseVariant).Styles);
+                    if (!wasCarrying) houseStyle = styles > 1 ? (houseStyle + 1 + Random.Range(0, styles - 1)) % styles : 0;
                     Haptic(0.5f, 0.05f);
-                    Say(HouseFactory.Names[HouseVariant] + " placed");
+                    Say(HouseFactory.Name(HouseVariant) + " placed");
                     RefreshOptions();
                 }
                 else { Say(error); Haptic(0.7f, 0.1f); }
@@ -706,7 +776,7 @@ namespace Wonderland
             colour = new Color(1f, 0.45f, 0.45f, 0.85f);
             int house = World.Buildings.Pick(localOrigin, localDir);
             if (house != pickedHover) { World.Buildings.Highlight(house, new Color(1f, 0.25f, 0.2f, 0.45f)); pickedHover = house; }
-            bool target = house >= 0 || (hit && (World.Trains.Near(local, 0.05f) != null || World.Track.DistanceTo(local) < 0.045f || World.Track.PickSignal(local, 0.025f) >= 0));
+            bool target = house >= 0 || (hit && (World.Trains.Near(local, 0.05f) != null || World.Track.DistanceTo(local) < 0.045f || World.Track.PickSignal(local, 0.025f) >= 0 || World.Paths.Pick(new Vector2(local.x, local.z)) >= 0));
             if (hit) World.TerrainView.SetBrush(local, target ? 0.03f : Radius, new Color(1f, 0.4f, 0.35f), stroking ? 0.9f : 0.6f);
             else World.TerrainView.HideBrush();
             if (input.TriggerDown && (hit || house >= 0))

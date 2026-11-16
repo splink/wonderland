@@ -22,6 +22,8 @@ namespace Wonderland
         public const float MaxSlopeRange = 0.09f;   // houses cut and fill a pad, so moderate slopes are fine
         public readonly List<HouseInstance> Houses = new();
         private readonly List<MeshRenderer> renderers = new();
+        private readonly List<Transform> rotors = new();
+        private readonly List<Transform[]> gondolas = new();
         private TerrainField terrain;
         private Material material;
         private MaterialPropertyBlock block;
@@ -39,15 +41,83 @@ namespace Wonderland
         public void Rebuild()
         {
             foreach (var r in renderers) if (r) DestroyObject(r.gameObject);
-            renderers.Clear();
-            foreach (var h in Houses) renderers.Add(CreateRenderer(h, transform, material));
+            renderers.Clear(); rotors.Clear(); gondolas.Clear();
+            foreach (var h in Houses) AddRenderer(h);
             Resit();
             highlighted = -1;
         }
 
+        private void AddRenderer(HouseInstance h)
+        {
+            var r = CreateRenderer(h, transform, material);
+            renderers.Add(r);
+            var bp = Catalog.Get(h.variant);
+            Transform rotor = null;
+            var rotorMesh = HouseFactory.Rotor(h.variant);
+            if (rotorMesh != null)
+            {
+                rotor = Child(r.transform, rotorMesh, "Rotor");
+                rotor.localPosition = bp.RotorPivot;
+            }
+            rotors.Add(rotor);
+            Transform[] cabins = null;
+            if (bp.Gondolas > 0)
+            {
+                cabins = new Transform[bp.Gondolas];
+                for (int g = 0; g < bp.Gondolas; g++) cabins[g] = Child(r.transform, HouseFactory.Gondola(), "Gondola");
+            }
+            gondolas.Add(cabins);
+            Animate(Time.time, renderers.Count - 1);
+        }
+
+        private Transform Child(Transform parent, Mesh mesh, string name)
+        {
+            var go = new GameObject(name);
+            go.transform.SetParent(parent, false);
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            var mr = go.AddComponent<MeshRenderer>();
+            mr.sharedMaterial = material; mr.shadowCastingMode = ShadowCastingMode.On;
+            return go.transform;
+        }
+
+        private void Update() => Animate(Time.time);
+
+        /// <summary>Turns the carousels, sails and wheels (cabins stay upright).</summary>
+        public void Animate(float time, int only = -1)
+        {
+            for (int i = only < 0 ? 0 : only; i < (only < 0 ? rotors.Count : only + 1); i++)
+            {
+                if (rotors[i] == null) continue;
+                var bp = Catalog.Get(Houses[i].variant);
+                float angle = time * bp.RotorSpeed + i * 37f;
+                rotors[i].localRotation = Quaternion.AngleAxis(angle, bp.RotorAxis);
+                var cabins = gondolas[i];
+                if (cabins == null) continue;
+                for (int g = 0; g < cabins.Length; g++)
+                {
+                    float a = (angle + g * 360f / cabins.Length) * Mathf.Deg2Rad;
+                    cabins[g].localPosition = bp.RotorPivot + new Vector3(-Mathf.Sin(a), Mathf.Cos(a), 0f) * bp.GondolaRadius;
+                }
+            }
+        }
+
+        /// <summary>The turning part of a placed object (carousel riders sit on it), or null.</summary>
+        public Transform RotorOf(int index) => index >= 0 && index < rotors.Count ? rotors[index] : null;
+
+        /// <summary>Where a placed object's activity spot is, in world-root space, and the yaw a person there faces.</summary>
+        public Vector3 SpotPosition(int index, int spot, out float yaw)
+        {
+            var h = Houses[index];
+            var sp = Catalog.Get(h.variant).Spots[spot];
+            var rot = Quaternion.Euler(0f, h.rotation, 0f);
+            var p = rot * new Vector3(sp.At.x, 0f, sp.At.z);
+            yaw = h.rotation + sp.Facing;
+            return new Vector3(h.x + p.x, renderers[index].transform.localPosition.y + sp.At.y, h.z + p.z);
+        }
+
         public static MeshRenderer CreateRenderer(HouseInstance h, Transform parent, Material material)
         {
-            var go = new GameObject("House " + HouseFactory.Names[h.variant]);
+            var go = new GameObject(HouseFactory.Name(h.variant));
             go.transform.SetParent(parent, false);
             go.AddComponent<MeshFilter>().sharedMesh = HouseFactory.Get(h.variant, h.style);
             var r = go.AddComponent<MeshRenderer>();
@@ -105,6 +175,7 @@ namespace Wonderland
         public string Validate(HouseInstance h, int ignore, Func<Vector2, float> trackDistance)
         {
             bool station = h.variant == HouseFactory.Station;   // a station stands beside the rails on purpose
+            var bp = Catalog.Get(h.variant);
             foreach (var p in FootprintSamples(h))
             {
                 if (terrain.EdgeAt(p.x, p.y) < 0.5f) return "Too close to the edge";
@@ -113,13 +184,15 @@ namespace Wonderland
             }
             if (!station && trackDistance(new Vector2(h.x, h.z)) < TrackSystem.BedHalfWidth + 0.03f) return "That's the railway";
             SitHeight(h, out float range);
-            if (range > MaxSlopeRange) return "Too steep here - smooth it a little first";
-            float r = Radius(h.variant) * 0.82f;
+            if (range > (bp.Pad ? MaxSlopeRange : MaxSlopeRange * 1.6f)) return "Too steep here - smooth it a little first";
+            float r = Radius(h.variant) * (bp.Small ? 0.7f : 0.82f);
             for (int i = 0; i < Houses.Count; i++)
             {
                 if (i == ignore) continue;
-                float min = r + Radius(Houses[i].variant) * 0.82f;
-                if (new Vector2(Houses[i].x - h.x, Houses[i].z - h.z).sqrMagnitude < min * min) return "Too close to another house";
+                var other = Catalog.Get(Houses[i].variant);
+                float min = r + Radius(Houses[i].variant) * (other.Small ? 0.7f : 0.82f);
+                if (bp.Small || other.Small) min *= 0.85f;   // details may snuggle up to buildings
+                if (new Vector2(Houses[i].x - h.x, Houses[i].z - h.z).sqrMagnitude < min * min) return bp.Small ? "Something is in the way" : "Too close to another building";
             }
             return null;
         }
@@ -127,7 +200,7 @@ namespace Wonderland
         public void Add(HouseInstance h)
         {
             Houses.Add(h);
-            renderers.Add(CreateRenderer(h, transform, material));
+            AddRenderer(h);
             Resit();
         }
 
@@ -136,7 +209,7 @@ namespace Wonderland
             var h = Houses[index];
             Houses.RemoveAt(index);
             DestroyObject(renderers[index].gameObject);
-            renderers.RemoveAt(index);
+            renderers.RemoveAt(index); rotors.RemoveAt(index); gondolas.RemoveAt(index);
             highlighted = -1;
             return h;
         }
@@ -152,7 +225,8 @@ namespace Wonderland
                 var inv = Quaternion.Inverse(Quaternion.Euler(0f, h.rotation, 0f));
                 var y = renderers[i].transform.localPosition.y;
                 var o = inv * (origin - new Vector3(h.x, y, h.z)); var d = inv * direction;
-                var box = new Bounds(new Vector3(0f, 0.075f, 0f), new Vector3(e.x * 2f, 0.16f, e.y * 2f));
+                float hh = Mathf.Max(0.03f, Catalog.Get(h.variant).Height);
+                var box = new Bounds(new Vector3(0f, hh / 2f, 0f), new Vector3(Mathf.Max(e.x, 0.012f) * 2f, hh, Mathf.Max(e.y, 0.012f) * 2f));
                 if (box.IntersectRay(new Ray(o, d), out float t) && t < bestT) { bestT = t; best = i; }
             }
             return best;

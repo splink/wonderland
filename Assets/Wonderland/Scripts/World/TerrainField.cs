@@ -4,7 +4,7 @@ using UnityEngine;
 
 namespace Wonderland
 {
-    public enum TerrainBrush { Raise, Lower, Smooth, Flatten, Grow, Trim }
+    public enum TerrainBrush { Raise, Lower, Smooth, Flatten, Grow, Trim, Peaks }
 
     /// <summary>
     /// The sculptable landscape as a height grid in the world root's local space (metres; y = 0 is the real floor).
@@ -442,7 +442,7 @@ namespace Wonderland
             if (brush == TerrainBrush.Grow || brush == TerrainBrush.Trim) return PaintLand(brush == TerrainBrush.Grow, centre, radius, strength, dt);
             var r = RegionAround(centre, radius);
             float r2 = radius * radius;
-            if (brush == TerrainBrush.Smooth || brush == TerrainBrush.Raise || brush == TerrainBrush.Lower)
+            if (brush == TerrainBrush.Smooth || brush == TerrainBrush.Raise || brush == TerrainBrush.Lower || brush == TerrainBrush.Peaks)
                 CopyRegion(Height, scratch, Expand(r, 1));
             for (int z = r.yMin; z < r.yMax; z++)
             for (int x = r.xMin; x < r.xMax; x++)
@@ -464,6 +464,16 @@ namespace Wonderland
                         h += RaiseRate * strength * dt * w * (1f - Mathf.Pow(h / MaxHeight, 3f));
                         h += relax * Mathf.Min(1f, 4f * dt) * w * 0.85f;
                         break;
+                    case TerrainBrush.Peaks:
+                    {
+                        // Ridged noise: sharp crests and gullies, so mountains grow craggy summits instead of domes.
+                        float px = LocalX(x), pz = LocalZ(z);
+                        float ridge = 1f - Mathf.Abs(Noise.Fbm2(px * 9f + 31f, pz * 9f - 17f, 3) * 2f - 1f);
+                        ridge = ridge * ridge;
+                        h += RaiseRate * 1.4f * strength * dt * w * (0.25f + 1.5f * ridge) * (1f - Mathf.Pow(h / MaxHeight, 4f));
+                        h += relax * Mathf.Min(1f, 4f * dt) * w * 0.2f;
+                        break;
+                    }
                     case TerrainBrush.Lower:
                         h -= RaiseRate * strength * dt * w;
                         h += relax * Mathf.Min(1f, 4f * dt) * w * 0.6f;
@@ -478,6 +488,7 @@ namespace Wonderland
                 Height[i] = Mathf.Clamp(h, MinHeight, MaxHeight);
             }
             if (brush == TerrainBrush.Raise || brush == TerrainBrush.Lower) Slump(r, 2);
+            if (brush == TerrainBrush.Peaks) Slump(r, 1);
             UpdateSurface(r);
             return r;
         }

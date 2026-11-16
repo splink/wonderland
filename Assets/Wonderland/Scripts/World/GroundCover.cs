@@ -29,7 +29,7 @@ namespace Wonderland
         public void Init(TerrainField field, Material lit, int seed, Func<Vector2, bool> isBlocked)
         {
             terrain = field; material = lit; blocked = isBlocked; this.seed = seed;
-            meshes = new MeshData[14];
+            meshes = new MeshData[16];
             for (int k = 0; k < meshes.Length; k++) meshes[k] = new MeshData(Detail(k));
             Scatter();
             MarkAllDirty();
@@ -127,9 +127,19 @@ namespace Wonderland
                         }
                         if (terrain.EdgeAt(t.x, t.z) < 0.3f || terrain.LockAt(t.x, t.z) > 0.1f || blocked(new Vector2(t.x, t.z))) continue;
                         var normal = terrain.NormalAt(t.x, t.z);
-                        if (normal.y < 0.6f && t.kind < 6) continue;   // no tufts on steep banks
+                        float height = terrain.SurfaceAt(t.x, t.z);
+                        // Mountains: boulders on scree and cliffs, alpine flowers up high, nothing but rocks in the snow.
+                        int kind = t.kind;
+                        bool steep = normal.y < 0.8f, high = height > AlpineHeight;
+                        if (steep || high)
+                        {
+                            if (kind == 6 || kind == 10 || (steep && t.kind % 3 == 0)) kind = 14;
+                            else if (height > SnowHeight && normal.y > 0.72f) continue;
+                            else if (high && kind >= 2 && kind <= 9) kind = 15;
+                        }
+                        if (normal.y < 0.6f && kind < 6) continue;   // no tufts on steep banks
                         var rot = Quaternion.FromToRotation(Vector3.up, Vector3.Lerp(Vector3.up, normal, 0.6f)) * Quaternion.Euler(0f, t.rotation, 0f);
-                        builder.AppendFast(meshes[t.kind], new Vector3(t.x, terrain.SurfaceAt(t.x, t.z) - 0.0008f, t.z), rot, t.scale, new Color(t.tint, t.tint, t.tint));
+                        builder.AppendFast(meshes[kind], new Vector3(t.x, height - (kind == 14 ? 0.002f : 0.0008f), t.z), rot, t.scale, new Color(t.tint, t.tint, t.tint));
                     }
                 if (builder.VertexCount == 0)
                 {
@@ -159,7 +169,10 @@ namespace Wonderland
 
         // ------------------------------------------------------------------ meshes
 
-        /// <summary>0-1 grass, 2-5 flower clumps, 6 pebbles, 7 daisies, 8 tulips, 9 lavender, 10 toadstool ring, 11 reeds, 12-13 lily pads.</summary>
+        /// <summary>Heights (local metres) where the land turns alpine, and where the snow starts (matches the terrain shader).</summary>
+        public const float AlpineHeight = 0.14f, SnowHeight = 0.2f;
+
+        /// <summary>0-1 grass, 2-5 flower clumps, 6 pebbles, 7 daisies, 8 tulips, 9 lavender, 10 toadstool ring, 11 reeds, 12-13 lily pads, 14 boulders, 15 alpine flowers.</summary>
         private static Mesh Detail(int kind)
         {
             var b = new MeshBuilder();
@@ -181,6 +194,25 @@ namespace Wonderland
                 case 11: Flora.Reeds(b, Vector3.zero, ref rng); Flora.Reeds(b, new Vector3(0.005f, 0f, 0.003f), ref rng); break;
                 case 12: Flora.LilyPad(b, Vector3.zero, ref rng, false); Flora.LilyPad(b, new Vector3(0.008f, 0f, 0.004f), ref rng, false); break;
                 case 13: Flora.LilyPad(b, Vector3.zero, ref rng, true); break;
+                case 14:
+                    for (int i = 0; i < 3; i++)
+                    {
+                        float r = rng.Range(0.004f, 0.009f) * (i == 0 ? 1.3f : 1f);
+                        var c = Pal.Jitter(Pal.Hex("#A39E96"), ref rng, 0.25f);
+                        b.AddBlob(new Vector3(rng.Range(-0.008f, 0.008f), r * 0.5f, rng.Range(-0.008f, 0.008f)), new Vector3(r, r * 0.75f, r * 0.9f), 1, 0.3f, i + 7,
+                            (d, q) => d.y > 0.5f && Noise.Value3(q * 600f) > 0.55f ? Pal.Hex("#7E9A4A") : Color.Lerp(Pal.Shade(c, 0.75f), c, d.y * 0.4f + 0.6f), 2.5f);
+                    }
+                    break;
+                case 15:
+                    Flora.GrassTuft(b, Vector3.zero, 0.6f, ref rng, 1);
+                    for (int i = 0; i < 4; i++)
+                    {
+                        var p = new Vector3(rng.Range(-0.005f, 0.005f), 0.0035f, rng.Range(-0.005f, 0.005f));
+                        var c = i % 2 == 0 ? Pal.Hex("#F7F4EA") : Pal.Hex("#7FA8E0");   // edelweiss and gentians
+                        b.AddBlob(p, new Vector3(0.0016f, 0.0006f, 0.0016f), 0, 0.3f, i, (_, __) => c);
+                        b.AddBlob(p + Vector3.up * 0.0004f, Vector3.one * 0.0005f, 0, 0f, i + 9, (_, __) => Pal.FlowerYellow);
+                    }
+                    break;
                 default:
                     for (int i = 0; i < 5; i++)
                     {

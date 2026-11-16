@@ -62,6 +62,41 @@ PASS  The railcar shuttles along its line, reversing at the buffers (14.6 m)
 PASS  An open line with buffers at both ends
 PASS  Head-on on single track: they stop short and one backs away (closest 4.7 cm)
 PASS  Both keep running (2.9 m, 2.8 m)
+PASS  Every one of the 41 library objects builds (largest: Wheat field, 16552 vertices)
+PASS  Library objects stay within the vertex budget
+PASS  A village square goes up (9/9 places)
+PASS  New homes and shops bring their residents (5 moved in)
+PASS  Villagers sit down at the café and on the bench
+PASS  Villagers gather at the fountain and the church
+PASS  Villagers browse the bakery and the grocer's crates
+PASS  Villagers keep to walkable ground while busy
+PASS  A fair: carousel, Ferris wheel and playground
+PASS  The Ferris wheel turns (28 degrees in 2 s)
+PASS  Visitors take rides at the fair
+PASS  Visitors play and watch at the fair
+PASS  A road is drawn across the meadow
+PASS  The road smooths the ground across its width (5.8 -> 0.8 mm side to side)
+PASS  A footpath drawn from the road's end joins it
+PASS  Villagers find a walking route along the road and the path (26 waypoints)
+PASS  Houses are not built on the road ("That's the road")
+PASS  A street lamp may stand at the roadside
+PASS  A hiker sets off along the trail
+PASS  A fence drawn round a meadow closes into a pasture
+PASS  Sheep stay inside their pasture
+PASS  The horse outside never wanders into the pasture
+PASS  Ducks are refused on dry land
+PASS  The duck paddles about on the pond
+PASS  Deer won't settle in the open ("Deer like to live near the woods")
+PASS  A deer makes its home at the edge of the wood
+PASS  The deer bolts when a villager comes close
+PASS  A lane across the railway gets a level crossing (1)
+PASS  Villagers may cross the rails at the level crossing
+PASS  ...but not across the open line
+PASS  The Peaks brush raises a mountain (26 cm high)
+PASS  ...with craggy, uneven slopes (roughness 442)
+PASS  Undo takes the hedge away again
+PASS  Save/load keeps roads, paths and the pasture fence (5)
+PASS  Save/load keeps the ducks and the fair
 PASS  A railway under a big hill becomes a tunnel (hill 29 cm, 30 cm of tunnel, hill kept above it)
 PASS  The train runs into the tunnel (steam off underground)
 PASS  Railway across a pond rises onto a bridge and the water stays
@@ -74,7 +109,7 @@ PASS  Place Thatched
 PASS  Houses sit flush on a graded pad (worst footprint gap 0.0 mm)
 PASS  House on a slope gets a flat pad (ground range 5.3 cm -> 0.0 mm) that brushes leave alone (after brushing: range 0.0 mm, moved 0.0 mm)
 PASS  House on the railway refused ("That's the railway")
-PASS  Overlapping house refused ("Too close to another house")
+PASS  Overlapping house refused ("Too close to another building")
 PASS  Pointer ray picks the house below it
 PASS  House repositioned and rotated
 PASS  Train placed on the railway
@@ -115,7 +150,7 @@ PASS  Save/load keeps the running train
 PASS  Save/load keeps the station and its stop
 PASS  Save/load keeps the animals (5)
 PASS  Save/load keeps the stream
-PASS  Save/load keeps the villagers (5)
+PASS  Save/load keeps the villagers (7)
 PASS  Save/load keeps the sculpted terrain exactly
 PASS  Save/load keeps the grown and trimmed land
 PASS  Save/load keeps the pond
@@ -130,6 +165,6 @@ PASS  Bad room data does not block growth ("room (room scan) sizes the start; la
 PASS  Land still grows with bad room data
 PASS  Trimmed land grows back (1.19 -> 1.04 -> 1.16 m2)
 INFO  terrain: 6 chunk meshes, 17 k triangles, land 3.49 m2 of a 4.8 x 4.8 m grid
-INFO  static budget of this world: 155 mesh renderers (~draw calls per eye pass before batching, excl. shadows/UI), 442 k triangles, ground cover 8073 tufts
-INFO  trees 131, forest chunks 30, houses 3, track 3.40 m, undo depth 9, journey simulated in 20.9 s wall time
+INFO  static budget of this world: 165 mesh renderers (~draw calls per eye pass before batching, excl. shadows/UI), 449 k triangles, ground cover 8073 tufts
+INFO  trees 131, forest chunks 30, houses 3, track 3.40 m, undo depth 9, journey simulated in 33.1 s wall time
 RESULT: PASS

@@ -143,6 +143,7 @@ namespace Wonderland.Editor
             TrackTolerance("Loop ending 25 cm short of the start closes", (t2, l) => Loop(t2, 0.5f, 0.38f, 0.92f, false));
             TrackTolerance("Loop drawn half over bare floor closes and grows land under it", (t2, l) => Loop(t2, 1.05f, 0.6f, 0.97f, false), true);
             NetworkJourney();
+            LivingJourney();
             {
                 // Tunnel: a big hill across the line keeps its top; portals at both mouths; no steam underground.
                 var w = new GameObject("Tunnel").AddComponent<WonderlandWorld>();
@@ -227,7 +228,7 @@ namespace Wonderland.Editor
                     Hold(() => world.TerrainStroke(TerrainBrush.Flatten, spots[v], 0.12f, 1f, Dt, target), 1.2f);
                     error = world.PlaceHouse(h);
                 }
-                Check(error == null, $"Place {HouseFactory.Names[v]}" + (error == null ? "" : $" (\"{error}\")"));
+                Check(error == null, $"Place {HouseFactory.Name(v)}" + (error == null ? "" : $" (\"{error}\")"));
             }
             float worstSit = 0f;
             for (int i = 0; i < world.Buildings.Houses.Count; i++)
@@ -428,7 +429,14 @@ namespace Wonderland.Editor
                 Check(waved, "Villagers wave at the passing train");
                 Check(safe, "Villagers keep off the rails, out of water and out of houses");
                 int villagers = world.People.People.Count, victimIndex = -1;
-                for (int i = 0; i < villagers && victimIndex < 0; i++) if (world.People.StateOf(i) != PeopleSystem.Activity.Riding) victimIndex = i;
+                for (int i = 0; i < villagers && victimIndex < 0; i++)
+                {
+                    var at = world.People.PositionOf(i);
+                    // Someone standing clear of other things the eraser could hit first.
+                    if (world.People.StateOf(i) == PeopleSystem.Activity.Riding || world.Streams.IsWet(at, 0.04f) || world.Animals.Nearest(new Vector3(at.x, 0f, at.y), 0.03f) >= 0
+                        || world.Buildings.Pick(new Vector3(at.x, 1f, at.y), Vector3.down) >= 0 || world.Paths.Pick(at) >= 0) continue;
+                    victimIndex = i;
+                }
                 var who = world.People.PositionOf(victimIndex);
                 string gone = world.EraseAt(new Vector3(who.x, 1f, who.y), Vector3.down, new Vector3(who.x, 0f, who.y));
                 Check(gone == "Villager removed" && world.People.People.Count == villagers - 1, $"Eraser removes a villager (\"{gone}\")");
@@ -643,6 +651,206 @@ namespace Wonderland.Editor
                 if (g > worst) { worst = g; where = new Vector2(t.LocalX(x), t.LocalZ(z)); }
             }
             return worst;
+        }
+
+        // ------------------------------------------------------------------ a richer, living world
+
+        private static List<Vector3> Stroke(TerrainField t, params Vector2[] via) => Line(t, via);
+
+        private static string Put(WonderlandWorld w, int id, float x, float z, float rotation = 0f)
+        {
+            var h = new HouseInstance { x = x, z = z, rotation = rotation, variant = id, style = 0 };
+            return w.PlaceHouse(h);
+        }
+
+        /// <summary>
+        /// The object library, paths and the life in them: every catalogue object builds; a village square and shops get
+        /// residents who sit, gather and browse; the fair gets riders; roads grade the ground, join up and carry walkers;
+        /// trails carry hikers; a fenced pasture keeps its sheep; a level crossing lets villagers over the rails; ducks swim
+        /// on the pond; deer keep to the woods and shy away; the Peaks brush makes craggy mountains; save/load and undo.
+        /// </summary>
+        private static void LivingJourney()
+        {
+            // Every object in the library builds, within a sensible vertex budget.
+            int worst = 0; string worstName = "";
+            bool allBuild = true;
+            for (int id = 0; id < Catalog.Count; id++)
+            {
+                var bp = Catalog.Get(id);
+                for (int st = 0; st < bp.Styles; st++)
+                {
+                    var m = HouseFactory.Get(id, st);
+                    if (m == null || m.vertexCount == 0) allBuild = false;
+                    else if (m.vertexCount > worst) { worst = m.vertexCount; worstName = bp.Name; }
+                }
+                if (bp.RotorSpeed != 0f && HouseFactory.Rotor(id) == null) allBuild = false;
+            }
+            Check(allBuild && Catalog.Count >= 40, $"Every one of the {Catalog.Count} library objects builds (largest: {worstName}, {worst} vertices)");
+            Check(worst < 60000, "Library objects stay within the vertex budget");
+
+            var w = Scratch("Living", 140f);
+            var t = w.Terrain;
+            // A village square: fountain, church, café, bakery, grocer, a bench and homes around.
+            int peopleBefore = w.People.People.Count;
+            var placed = new List<(int id, string error)>
+            {
+                (Catalog.Fountain, Put(w, Catalog.Fountain, 0f, 0f)),
+                (Catalog.Church, Put(w, Catalog.Church, 0f, 0.26f, 180f)),
+                (Catalog.Cafe, Put(w, Catalog.Cafe, -0.24f, 0.04f, 90f)),
+                (Catalog.Bakery, Put(w, Catalog.Bakery, 0.24f, 0.04f, -90f)),
+                (Catalog.Grocer, Put(w, Catalog.Grocer, 0.24f, -0.17f, -90f)),
+                (Catalog.Bench, Put(w, Catalog.Bench, -0.07f, -0.12f, 180f)),
+                (Catalog.Cottage, Put(w, Catalog.Cottage, -0.26f, -0.22f, 60f)),
+                (Catalog.Apartments, Put(w, Catalog.Apartments, 0.0f, -0.3f, 0f)),
+                (Catalog.Lamp, Put(w, Catalog.Lamp, 0.07f, -0.08f)),
+            };
+            foreach (var (id, error) in placed) if (error != null) Check(false, $"Place {Catalog.Get(id).Name} (\"{error}\")");
+            int built = placed.FindAll(p => p.error == null).Count;
+            Check(built == placed.Count, $"A village square goes up ({built}/{placed.Count} places)");
+            int residents = w.People.People.Count - peopleBefore;
+            Check(residents >= 4, $"New homes and shops bring their residents ({residents} moved in)");
+            var seen = new HashSet<PeopleSystem.Activity>();
+            bool safe = true;
+            for (int step = 0; step < 72 * 150; step++)
+            {
+                w.People.Step(Dt);
+                if (step % 12 != 0) continue;
+                for (int i = 0; i < w.People.People.Count; i++)
+                {
+                    var st = w.People.StateOf(i);
+                    seen.Add(st);
+                    if (st == PeopleSystem.Activity.OnRide || st == PeopleSystem.Activity.Sitting) continue;
+                    if (!w.People.Walkable(w.People.PositionOf(i))) safe = false;
+                }
+            }
+            Check(seen.Contains(PeopleSystem.Activity.Sitting), "Villagers sit down at the café and on the bench");
+            Check(seen.Contains(PeopleSystem.Activity.Gathering), "Villagers gather at the fountain and the church");
+            Check(seen.Contains(PeopleSystem.Activity.Browsing), "Villagers browse the bakery and the grocer's crates");
+            Check(safe, "Villagers keep to walkable ground while busy");
+            // A fair on the meadow: carousel, Ferris wheel, playground.
+            string fairError = Put(w, Catalog.Carousel, 0.55f, 0.3f) ?? Put(w, Catalog.FerrisWheel, 0.6f, -0.12f, -90f) ?? Put(w, Catalog.Playground, 0.45f, 0.62f);
+            Check(fairError == null, "A fair: carousel, Ferris wheel and playground" + (fairError == null ? "" : $" (\"{fairError}\")"));
+            int wheel = w.Buildings.Houses.FindIndex(h => h.variant == Catalog.FerrisWheel);
+            var rotor = w.Buildings.RotorOf(wheel);
+            w.Buildings.Animate(0f); var r0 = rotor != null ? rotor.localRotation : Quaternion.identity;
+            w.Buildings.Animate(2f); var r1 = rotor != null ? rotor.localRotation : Quaternion.identity;
+            Check(rotor != null && Quaternion.Angle(r0, r1) > 10f, $"The Ferris wheel turns ({Quaternion.Angle(r0, r1):0} degrees in 2 s)");
+            seen.Clear();
+            for (int step = 0; step < 72 * 150; step++) { w.People.Step(Dt); if (step % 12 == 0) for (int i = 0; i < w.People.People.Count; i++) seen.Add(w.People.StateOf(i)); }
+            Check(seen.Contains(PeopleSystem.Activity.OnRide), "Visitors take rides at the fair");
+            Check(seen.Contains(PeopleSystem.Activity.Playing) || seen.Contains(PeopleSystem.Activity.Watching), "Visitors play and watch at the fair");
+
+            // Roads and paths: a road across the meadow grades the ground smooth across it, and a footpath joins it.
+            Hold(() => w.TerrainStroke(TerrainBrush.Raise, new Vector3(-0.45f, 0f, -0.47f), 0.16f, 0.6f, Dt, 0f), 1f);
+            float crossBefore = Mathf.Abs(t.SurfaceAt(-0.45f, -0.43f) - t.SurfaceAt(-0.45f, -0.47f));
+            string road = w.BuildPath(Stroke(t, new Vector2(-0.7f, -0.45f), new Vector2(-0.3f, -0.45f), new Vector2(-0.05f, -0.42f)), PathKind.Road);
+            float crossAfter = Mathf.Abs(t.SurfaceAt(-0.45f, -0.43f) - t.SurfaceAt(-0.45f, -0.47f));
+            Check(road == null && w.Paths.Lines.Count == 1, "A road is drawn across the meadow" + (road == null ? "" : $" (\"{road}\")"));
+            if (w.Paths.Lines.Count == 0) { UnityEngine.Object.DestroyImmediate(w.gameObject); return; }
+            Check(crossAfter < crossBefore * 0.6f + 0.0005f, $"The road smooths the ground across its width ({crossBefore * 1000f:0.0} -> {crossAfter * 1000f:0.0} mm side to side)");
+            var roadEnd = w.Paths.Lines[0].points[^1];
+            string path = w.BuildPath(Stroke(t, roadEnd + new Vector2(0.02f, 0.01f), new Vector2(-0.05f, -0.2f), new Vector2(-0.08f, -0.1f)), PathKind.Footpath);
+            Check(path == null && w.Paths.Lines.Count == 2 && (w.Paths.Lines[1].points[0] - roadEnd).magnitude < 0.005f, "A footpath drawn from the road's end joins it");
+            var route = w.Paths.Route(new Vector2(-0.68f, -0.45f), new Vector2(-0.08f, -0.11f));
+            Check(route != null && route.Count > 5, $"Villagers find a walking route along the road and the path ({route?.Count ?? 0} waypoints)");
+            string onRoad = w.ValidateHouse(new HouseInstance { x = -0.5f, z = -0.45f, variant = Catalog.Cottage });
+            Check(onRoad == "That's the road", $"Houses are not built on the road (\"{onRoad}\")");
+            string lampError = w.ValidateHouse(new HouseInstance { x = -0.55f, z = -0.415f, variant = Catalog.Lamp });
+            Check(lampError == null, "A street lamp may stand at the roadside" + (lampError == null ? "" : $" (\"{lampError}\")"));
+            // A hiking trail and a hiker.
+            string trail = w.BuildPath(Stroke(t, new Vector2(-0.2f, 0.55f), new Vector2(-0.5f, 0.6f), new Vector2(-0.75f, 0.35f), new Vector2(-0.6f, 0.15f)), PathKind.Trail);
+            w.PlacePerson(t.PointAt(-0.25f, 0.5f), 5, 777);
+            bool hiked = false;
+            for (int step = 0; step < 72 * 200 && !hiked; step++) { w.People.Step(Dt); if (step % 24 == 0) for (int i = 0; i < w.People.People.Count; i++) hiked |= w.People.Hiking(i); }
+            Check(trail == null && hiked, "A hiker sets off along the trail");
+
+            // A fenced pasture keeps its sheep in; sheep outside stay out.
+            var fence = new List<Vector3>();
+            for (int i = 0; i <= 64; i++) { float a = i / 64f * Mathf.PI * 2f; fence.Add(t.PointAt(-0.55f + Mathf.Cos(a) * 0.2f, 0.0f + Mathf.Sin(a) * 0.15f)); }
+            string fenceError = w.BuildPath(fence, PathKind.Fence);
+            int pasture = w.Paths.Lines.Count - 1;
+            Check(fenceError == null && w.Paths.Lines[pasture].closed, "A fence drawn round a meadow closes into a pasture");
+            int sheepBefore = w.Animals.Animals.Count;
+            for (int i = 0; i < 3; i++) w.PlaceAnimal(t.PointAt(-0.6f + i * 0.05f, 0.02f), AnimalKind.Sheep, 50 + i);
+            w.PlaceAnimal(t.PointAt(-0.55f, 0.24f), AnimalKind.Horse, 60);
+            bool kept = true, outside = true;
+            for (int step = 0; step < 72 * 120; step++)
+            {
+                w.Animals.Step(Dt);
+                if (step % 24 != 0) continue;
+                for (int i = sheepBefore; i < sheepBefore + 3; i++) if (w.Paths.EnclosureAt(w.Animals.PositionOf(i)) != pasture) kept = false;
+                if (w.Paths.EnclosureAt(w.Animals.PositionOf(sheepBefore + 3)) == pasture) outside = false;
+            }
+            Check(kept, "Sheep stay inside their pasture");
+            Check(outside, "The horse outside never wanders into the pasture");
+
+            // Ducks on a pond; deer by the woods, shy of people.
+            var pond = new Vector3(0.5f, 0f, -0.6f);
+            float lvl = w.WaterLevelForStroke(pond);
+            Hold(() => w.WaterStroke(pond, 0.13f, 0.9f, Dt, lvl, false), 1.5f);
+            Check(w.PlaceAnimal(t.PointAt(-0.3f, -0.1f), AnimalKind.Duck, 1) != null, "Ducks are refused on dry land");
+            int duck = w.Animals.Animals.Count;
+            string duckError = w.PlaceAnimal(pond, AnimalKind.Duck, 70);
+            bool afloat = duckError == null;
+            for (int step = 0; step < 72 * 60 && afloat; step++) { w.Animals.Step(Dt); if (step % 24 == 0 && t.WaterAt(w.Animals.PositionOf(duck).x, w.Animals.PositionOf(duck).y) < 0.5f) afloat = false; }
+            Check(afloat, "The duck paddles about on the pond" + (duckError == null ? "" : $" (\"{duckError}\")"));
+            string openDeer = w.PlaceAnimal(t.PointAt(0.1f, 0.6f), AnimalKind.Deer, 1);
+            Check(openDeer != null, $"Deer won't settle in the open (\"{openDeer}\")");
+            var wood = new Vector3(-0.7f, 0f, -0.25f);
+            for (int i = 0; i < 8; i++) w.PaintForest(wood + new Vector3(Mathf.Sin(i) * 0.08f, 0f, Mathf.Cos(i * 1.3f) * 0.06f), 0.1f, 0.8f, Dt * 4f);
+            int deer = w.Animals.Animals.Count;
+            string deerError = w.PlaceAnimal(wood + new Vector3(0.11f, 0f, 0.02f), AnimalKind.Deer, 80);
+            if (deerError != null) for (int k = 0; k < 20 && deerError != null; k++) deerError = w.PlaceAnimal(wood + new Vector3(Mathf.Cos(k) * 0.12f, 0f, Mathf.Sin(k) * 0.1f), AnimalKind.Deer, 80 + k);
+            Check(deerError == null, "A deer makes its home at the edge of the wood" + (deerError == null ? "" : $" (\"{deerError}\")"));
+            if (deerError == null)
+            {
+                var d = w.Animals.PositionOf(deer);
+                w.PlacePerson(new Vector3(d.x + 0.05f, 0f, d.y), 1, 99);
+                bool fled = false;
+                for (int step = 0; step < 72 * 10 && !fled; step++) { w.Animals.Step(Dt); fled |= w.Animals.IsFleeing(deer); }
+                Check(fled, "The deer bolts when a villager comes close");
+            }
+
+            // A level crossing: a lane over a railway lets villagers cross the rails there (and only there).
+            var loopPlan = w.BuildTrack(Loop(t, 0.95f, 0.85f, 0.97f, false));
+            var east = w.Track.HasTrack ? w.Track.Network.Edges[0].Layout.Points[0] : new Vector3(0.95f, 0f, 0f);
+            string lane = w.BuildPath(Stroke(t, new Vector2(east.x - 0.18f, east.z + 0.03f), new Vector2(east.x + 0.12f, east.z + 0.05f)), PathKind.Lane);
+            Check(lane == null && w.Paths.LevelCrossings.Count >= 1, $"A lane across the railway gets a level crossing ({w.Paths.LevelCrossings.Count}{(loopPlan.Ok ? "" : ", railway: " + loopPlan.Error)}{(lane == null ? "" : ", lane: " + lane)})");
+            if (w.Paths.LevelCrossings.Count > 0)
+            {
+                var c = w.Paths.LevelCrossings[0].at;
+                Check(w.People.Walkable(new Vector2(c.x, c.z)), "Villagers may cross the rails at the level crossing");
+                var elsewhere = w.Track.Network.Edges[0].Layout.Points[w.Track.Network.Edges[0].Layout.Points.Count / 2];
+                Check(!w.People.Walkable(new Vector2(elsewhere.x, elsewhere.z)), "...but not across the open line");
+            }
+
+            // Peaks: craggy mountains, rougher than a raised hill.
+            var peak = new Vector3(0.0f, 0f, 0.65f);
+            Hold(() => w.TerrainStroke(TerrainBrush.Peaks, peak, 0.2f, 1f, Dt, 0f), 4f);
+            float top = 0f, rough = 0f;
+            for (float x = -0.12f; x <= 0.12f; x += 0.02f)
+            for (float z = -0.12f; z <= 0.12f; z += 0.02f)
+            {
+                float h = t.SurfaceAt(peak.x + x, peak.z + z);
+                top = Mathf.Max(top, h);
+                rough += Mathf.Abs(h - (t.SurfaceAt(peak.x + x + 0.02f, peak.z + z) + t.SurfaceAt(peak.x + x - 0.02f, peak.z + z)) * 0.5f);
+            }
+            Check(top > 0.12f, $"The Peaks brush raises a mountain ({top * 100f:0} cm high)");
+            Check(rough > 0.01f, $"...with craggy, uneven slopes (roughness {rough * 1000f:0})");
+
+            // Undo takes a path back; save/load keeps paths, new animals and places.
+            int linesBefore = w.Paths.Lines.Count;
+            w.BuildPath(Stroke(t, new Vector2(0.3f, 0.3f), new Vector2(0.35f, 0.5f)), PathKind.Hedge);
+            w.Undo();
+            Check(w.Paths.Lines.Count == linesBefore, "Undo takes the hedge away again");
+            string json = w.Serialize();
+            var copy = new GameObject("Living copy").AddComponent<WonderlandWorld>();
+            copy.transform.position = new Vector3(150f, 0f, 0f);
+            copy.Deserialize(json, Materials());
+            Check(copy.Paths.Lines.Count == w.Paths.Lines.Count && copy.Paths.Lines.Exists(l => l.closed), $"Save/load keeps roads, paths and the pasture fence ({copy.Paths.Lines.Count})");
+            Check(copy.Animals.Animals.Exists(a => a.kind == (int)AnimalKind.Duck) && copy.Buildings.Houses.Exists(h => h.variant == Catalog.Carousel), "Save/load keeps the ducks and the fair");
+            UnityEngine.Object.DestroyImmediate(copy.gameObject);
+            UnityEngine.Object.DestroyImmediate(w.gameObject);
         }
 
         // ------------------------------------------------------------------ railway network
@@ -1009,6 +1217,67 @@ namespace Wonderland.Editor
                 var c = w.transform.TransformPoint(hill);
                 cam.transform.position = c + new Vector3(0.05f, 0.25f, -0.55f); cam.transform.LookAt(c + Vector3.up * 0.03f); cam.fieldOfView = 40f;
                 WonderlandRenders.Capture(cam, "editor-world-tunnel.png", 1920, 1200);
+                UnityEngine.Object.DestroyImmediate(w.gameObject);
+            }
+            {
+                // A living village: square, shops, roads and paths, a fair, a pasture, a pond with ducks, a wood with deer,
+                // and a mountain with a trail.
+                var w = Scratch("Village demo", 160f);
+                var t = w.Terrain;
+                var mountain = new Vector3(-0.55f, 0f, 0.5f);
+                Hold(() => w.TerrainStroke(TerrainBrush.Peaks, mountain, 0.32f, 1f, Dt, 0f), 7f);
+                Hold(() => w.TerrainStroke(TerrainBrush.Peaks, mountain + new Vector3(0.12f, 0f, -0.05f), 0.2f, 1f, Dt, 0f), 3f);
+                var pond = new Vector3(0.55f, 0f, -0.45f);
+                float lvl = w.WaterLevelForStroke(pond);
+                Hold(() => w.WaterStroke(pond, 0.15f, 0.9f, Dt, lvl, false), 1.8f);
+                w.BuildPath(Stroke(t, new Vector2(-0.8f, -0.12f), new Vector2(-0.3f, -0.1f), new Vector2(0.1f, -0.12f), new Vector2(0.75f, 0.05f)), PathKind.Road);
+                w.BuildPath(Stroke(t, new Vector2(0.0f, -0.12f), new Vector2(0.02f, 0.2f), new Vector2(0.05f, 0.45f)), PathKind.Footpath);
+                w.BuildPath(Stroke(t, new Vector2(0.05f, 0.45f), new Vector2(-0.25f, 0.42f), new Vector2(-0.45f, 0.3f), new Vector2(-0.55f, 0.5f), new Vector2(-0.6f, 0.62f)), PathKind.Trail);
+                w.BuildPath(Stroke(t, new Vector2(0.3f, -0.1f), new Vector2(0.42f, -0.2f), new Vector2(0.62f, -0.22f)), PathKind.Lane);
+                Put(w, Catalog.Fountain, -0.05f, -0.28f);
+                Put(w, Catalog.Church, -0.05f, -0.55f, 0f);
+                Put(w, Catalog.Cafe, -0.3f, -0.3f, 90f);
+                Put(w, Catalog.Bakery, 0.2f, -0.3f, -90f);
+                Put(w, Catalog.Grocer, 0.18f, 0.05f, 180f);
+                Put(w, Catalog.TownHall, -0.28f, 0.06f, 180f);
+                Put(w, Catalog.Cottage, -0.55f, -0.3f, 70f);
+                Put(w, Catalog.Townhouse, -0.5f, 0.05f, 160f);
+                Put(w, Catalog.Apartments, 0.35f, 0.18f, 200f);
+                Put(w, Catalog.Bench, -0.12f, -0.2f, 200f);
+                Put(w, Catalog.Lamp, 0.05f, -0.2f);
+                Put(w, Catalog.Lamp, -0.18f, -0.06f);
+                Put(w, Catalog.FlowerBed, 0.06f, -0.38f, 0f);
+                Put(w, Catalog.Chalet, -0.3f, 0.32f, 160f);
+                Put(w, Catalog.Lookout, -0.62f, 0.66f);
+                Put(w, Catalog.Carousel, 0.6f, 0.35f);
+                Put(w, Catalog.FerrisWheel, 0.78f, 0.12f, -80f);
+                Put(w, Catalog.Barn, 0.7f, -0.25f, -60f);
+                Put(w, Catalog.Windmill, 0.82f, -0.02f, -100f);
+                Put(w, Catalog.WheatField, 0.25f, -0.65f, 10f);
+                var fence = new List<Vector3>();
+                for (int i = 0; i <= 64; i++) { float a = i / 64f * Mathf.PI * 2f; fence.Add(t.PointAt(-0.4f + Mathf.Cos(a) * 0.14f, -0.56f + Mathf.Sin(a) * 0.09f)); }
+                w.BuildPath(fence, PathKind.Fence);
+                for (int i = 0; i < 4; i++) w.PlaceAnimal(t.PointAt(-0.46f + i * 0.04f, -0.57f + (i % 2) * 0.03f), i == 3 ? AnimalKind.Horse : AnimalKind.Sheep, 200 + i);
+                for (int i = 0; i < 3; i++) w.PlaceAnimal(t.PointAt(0.5f + i * 0.04f, -0.45f + (i % 2) * 0.03f), AnimalKind.Duck, 210 + i);
+                for (int i = 0; i < 4; i++) w.PlaceAnimal(t.PointAt(0.58f + i * 0.02f, -0.18f), AnimalKind.Chicken, 220 + i);
+                var wood = new Vector3(-0.15f, 0f, 0.65f);
+                for (int i = 0; i < 10; i++) w.PaintForest(wood + new Vector3(Mathf.Sin(i) * 0.12f, 0f, Mathf.Cos(i * 1.3f) * 0.08f), 0.1f, 0.8f, Dt * 4f);
+                w.PlaceAnimal(wood + new Vector3(0.14f, 0f, -0.1f), AnimalKind.Deer, 230);
+                for (int i = 0; i < 4; i++) w.PlacePerson(t.PointAt(0.5f + i * 0.03f, 0.25f), i, 240 + i);
+                for (int i = 0; i < 72 * 60; i++) { w.People.Step(Dt); w.Animals.Step(Dt); }
+                w.Buildings.Animate(3f);
+                w.Cover.RebuildDirty(); w.Forest.RebuildDirty(); w.Paths.Rebuild();
+                var c = w.transform.position;
+                cam.transform.position = c + new Vector3(0.15f, 1.15f, -1.45f); cam.transform.LookAt(c + new Vector3(0f, 0.03f, -0.02f)); cam.fieldOfView = 42f;
+                WonderlandRenders.Capture(cam, "editor-village.png", 1920, 1200);
+                cam.transform.position = c + new Vector3(0.1f, 0.2f, -0.62f); cam.transform.LookAt(c + new Vector3(-0.06f, 0.015f, -0.25f)); cam.fieldOfView = 38f;
+                WonderlandRenders.Capture(cam, "editor-village-square.png", 1920, 1200);
+                cam.transform.position = c + new Vector3(0.9f, 0.32f, 0.0f); cam.transform.LookAt(c + new Vector3(0.62f, 0.05f, 0.22f)); cam.fieldOfView = 40f;
+                WonderlandRenders.Capture(cam, "editor-village-fair.png", 1920, 1200);
+                cam.transform.position = c + new Vector3(0.05f, 0.45f, 0.05f); cam.transform.LookAt(c + new Vector3(-0.5f, 0.12f, 0.5f)); cam.fieldOfView = 40f;
+                WonderlandRenders.Capture(cam, "editor-village-mountain.png", 1920, 1200);
+                cam.transform.position = c + new Vector3(-0.2f, 0.22f, -0.85f); cam.transform.LookAt(c + new Vector3(-0.4f, 0.01f, -0.56f)); cam.fieldOfView = 36f;
+                WonderlandRenders.Capture(cam, "editor-village-pasture.png", 1920, 1200);
                 UnityEngine.Object.DestroyImmediate(w.gameObject);
             }
             {

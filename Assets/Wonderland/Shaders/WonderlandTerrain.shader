@@ -1,7 +1,8 @@
 // The miniature landscape's ground. Colour is procedural (no textures): layered grass greens, sunny meadows, slope and
 // height tints, tiny flowers, soil under the railway, and an organic edge that fades into the real floor through
 // passthrough (alpha < 1 lets the camera feed show). Also draws the glowing brush ring.
-// Vertex colour: r = railway soil mask, g = edge factor (0 at the rim), b = cavity (0.5 flat, < 0.5 hollows).
+// Vertex colour: r = railway soil mask, g = edge factor (0 at the rim), b = cavity (0.5 flat, < 0.5 hollows), a = 1 - beach sand.
+// High ground turns alpine: rock bands on cliffs, scree, then snow on the gentler tops.
 Shader "Wonderland/Terrain"
 {
     Properties
@@ -116,13 +117,26 @@ Shader "Wonderland/Terrain"
                 albedo = lerp(albedo, moss, steep * 0.7);
                 half bare = saturate((slope - 0.42) / 0.2) * smoothstep(0.35, 0.65, n2);
                 albedo = lerp(albedo, lerp(earth, rock, n3), bare);
+                // Mountains: above the tree line grass thins to scree and rock; cliffs show layered rock bands; snow caps
+                // the gentler tops. (Heights match GroundCover.AlpineHeight / SnowHeight.)
+                half alpine = smoothstep(0.12, 0.17, height + (n1 - 0.5) * 0.03);
+                half cliff = saturate((slope - 0.3) / 0.25) * smoothstep(0.06, 0.12, height);
+                half strata = 0.82 + 0.18 * sin(height * 260.0 + n2 * 4.0);
+                half3 rockFace = lerp(half3(0.52, 0.49, 0.46), half3(0.68, 0.64, 0.58), n3) * strata;
+                albedo = lerp(albedo, lerp(albedo, rockFace, 0.55 + 0.35 * n2), alpine * 0.75);
+                albedo = lerp(albedo, rockFace, max(cliff, alpine * steep) * 0.85);
+                half snow = smoothstep(0.19, 0.215, height + (n2 - 0.5) * 0.025) * saturate(1.0 - (slope - 0.25) / 0.2);
+                albedo = lerp(albedo, half3(0.95, 0.96, 0.98) * (0.94 + 0.06 * n4), snow);
+                // Beaches: warm sand along the pond shores.
+                half sand = saturate(1.0 - i.color.a) * (1.0 - snow);
+                albedo = lerp(albedo, half3(0.86, 0.77, 0.56) * (0.9 + 0.12 * n4 + 0.06 * n3), smoothstep(0.2, 0.6, sand + (n3 - 0.5) * 0.25));
                 albedo *= lerp(0.72, 1.08, saturate(cavity * 1.6 - 0.3));
 
                 // Tiny flowers in sunny, flat grass.
                 float2 cellP = p * 95.0;
                 float2 cell = floor(cellP);
                 float r = WL_Hash(cell);
-                half density = _FlowerDensity * (0.35 + meadow * 1.6) * (1.0 - steep) * (1.0 - soil) * saturate(edge * 3.0 - 0.6);
+                half density = _FlowerDensity * (0.35 + meadow * 1.6) * (1.0 - steep) * (1.0 - soil) * saturate(edge * 3.0 - 0.6) * (1.0 - alpine * 0.8) * (1.0 - snow) * (1.0 - sand);
                 if (r < density)
                 {
                     float2 centre = float2(WL_Hash(cell + 17.0), WL_Hash(cell + 31.0)) * 0.5 + 0.25;

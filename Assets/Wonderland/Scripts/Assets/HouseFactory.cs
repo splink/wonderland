@@ -9,29 +9,25 @@ namespace Wonderland
     /// climbing roses, stepping stones and shrubs. A final hand-made warp gives every house a gentle lean, twist and
     /// sagging ridge. Pivot at the ground centre; the stone plinth reaches 4 cm below ground for slopes. Front faces -Z.
     /// </summary>
-    public static class HouseFactory
+    public static partial class HouseFactory
     {
-        public const int VariantCount = 4;
+        public static int VariantCount => Catalog.Count;
         public const int Station = 3;
         public const int StyleCount = 4;
-        public static readonly string[] Names = { "Cottage", "Townhouse", "Thatched", "Station" };
-        private static readonly Mesh[] Cache = new Mesh[VariantCount * StyleCount];
+        public static string Name(int variant) => Catalog.Get(variant).Name;
+        private static readonly System.Collections.Generic.Dictionary<int, Mesh> Cache = new();
 
         public static Mesh Get(int variant, int style = 0)
         {
-            int i = variant * StyleCount + Mathf.Abs(style) % StyleCount;
-            if (Cache[i] == null) Cache[i] = Build(variant, Mathf.Abs(style) % StyleCount);
-            return Cache[i];
+            variant = Mathf.Clamp(variant, 0, Catalog.Count - 1);
+            style = Mathf.Abs(style) % Mathf.Max(1, Catalog.Get(variant).Styles);
+            int key = variant * 16 + style;
+            if (!Cache.TryGetValue(key, out var mesh)) Cache[key] = mesh = Build(variant, style);
+            return mesh;
         }
 
         /// <summary>Half extents of the footprint including eaves (x, z).</summary>
-        public static Vector2 HalfExtents(int variant) => variant switch
-        {
-            0 => new Vector2(0.061f, 0.05f),
-            1 => new Vector2(0.05f, 0.047f),
-            2 => new Vector2(0.072f, 0.054f),
-            _ => new Vector2(0.062f, 0.036f),
-        };
+        public static Vector2 HalfExtents(int variant) => Catalog.Get(variant).Half;
 
         private sealed class Style
         {
@@ -42,6 +38,7 @@ namespace Wonderland
 
         private static Style MakeStyle(int variant, int style, ref Rng rng)
         {
+            if (variant > 3) variant = variant % 3;
             var plasters = new[] { Pal.Plaster, Pal.Hex("#F5DC98"), Pal.PlasterPink, Pal.Hex("#DCEAD2") };
             var roofs = variant switch
             {
@@ -74,7 +71,12 @@ namespace Wonderland
                 case 0: height = Cottage(b, ref rng, s); break;
                 case 1: height = Townhouse(b, ref rng, s); break;
                 case 2: height = Thatched(b, ref rng, s); break;
-                default: height = StationHouse(b, ref rng, s); break;
+                case 3: height = StationHouse(b, ref rng, s); break;
+                default:
+                    height = Place(b, ref rng, s, variant, style, out bool warp);
+                    if (!warp) return b.ToMesh($"Place_{Catalog.Get(variant).Name}_{style}");
+                    s.Lean *= 0.6f; s.Twist *= 0.6f;
+                    break;
             }
             // Hand-made irregularity: a gentle curving lean, a twist that grows with height, a sagging ridge.
             float lean = s.Lean, twist = s.Twist * Mathf.Deg2Rad, sag = s.Sag;
@@ -88,7 +90,7 @@ namespace Wonderland
                 q.y -= sag * Mathf.SmoothStep(0.55f, 1f, t) * (1f - Mathf.Clamp01(Mathf.Abs(p.x) / 0.07f));
                 return q;
             });
-            return b.ToMesh($"House_{Names[variant]}_{style}");
+            return b.ToMesh($"House_{Name(variant)}_{style}");
         }
 
         // ---------------------------------------------------------------- houses
