@@ -33,13 +33,18 @@ The palette floats above the **left** controller; the **right** controller point
 
 | Input | Action |
 |---|---|
-| Right trigger | use the tool / press palette buttons |
+| Right trigger | use the tool / press palette buttons · in Select: open the card of what you point at |
 | Right stick ← → | brush size (Build: flick to turn 15°, hold to turn smoothly - on the grid, a flick is a quarter turn; the arrow shows the front) |
 | Right stick ↑ ↓ | strength (Forest: density) |
 | A | next mode: Raise → Lower → Smooth → Flatten → Grow → Trim → Peaks · next path kind · next item · Pond → Stream → Drain · Paint ↔ Erase · next house · Sheep → Cows → Villagers · Track: draw ↔ signals · Trains: start/stop (the one pointed at, or all) |
 | B | undo |
-| Right grip | on a villager or animal (any tool): open their card · pick up a house, lift a train, or bend a piece of track |
+| Right grip | grab and move, in every tool: a building, a train, a villager or an animal follows the pointer until you let go; on the track, grip bends it |
 | Left Y | hide / show the palette |
+
+**One meaning per button.** The trigger does the tool's job (in Select: opens a card), grip grabs and moves, A
+switches the tool's mode, B undoes. You never need to remember which: a **label beside the pointer** names what you
+point at and says what each button does to it right now, for example "Bakery · Trigger: its card · Grip: move it" or
+"End of the line · Trigger: draw on from here". Everything grip does is also on cards, under the trigger.
 
 **Growing the world:** it starts as a small patch of land (about 1 m²) in front of you. In the Terrain tool pick
 **Grow** and paint over the real floor: new land rises out of it with the same soft, organic edge, wherever you like.
@@ -200,10 +205,10 @@ where a trail meets a narrow stream.
   - chatter at a busy café, children at play, the factory at work;
   - barks, meows, kicks and cheers.
 
-  Only the eight most audible nearby sources play, so it stays calm. The **Sound** button at the bottom of the
-  palette cycles On / Quiet / Off, and the setting is remembered.
+  Only the eight most audible nearby sources play, so it stays calm. **Settings ▸ Sound** cycles On / Quiet / Off,
+  and the setting is remembered.
 - **CCTV.** Put up cameras (Build ▸ Small ▸ Camera; a camera looks the way its front faces) and select one with
-  the **Select** tool (or grip in any tool).
+  the **Select** tool.
   - A little monitor above the palette shows it live: the trains, traffic and people as they move.
   - The **‹ › ^ v** buttons round its picture turn and tilt it, and so does the stick. The trigger on the land points
     it there.
@@ -255,11 +260,19 @@ behind: the world is heavy for the headset). It is measured from the real frame 
 car, a boat, a camera - and pull the trigger to see its card.
 - A soft **gold ring** appears under whatever would be selected, the pointer turns gold, and the palette says who or
   what it is.
-- In every other tool **grip** does the same (in the Life tool the trigger too). Build, Track and Train keep grip for
-  their own work on buildings, track and trains.
+- Switches, signals and pieces of track have cards too.
 - Small figures are found by how close the pointer passes to them, so a villager in front of a house is easy to point
   at. Nothing hidden behind a building's walls is selected.
-- The first time you point at a villager, a tip says what grip does.
+- **Cards have buttons** for what can be done with what they show:
+  - villagers and animals: Move, Remove (a villager's card also has Camera);
+  - buildings: Move, New look, Remove;
+  - trains: Stop / Go, Slower / Faster, Longer / Shorter, Move, Remove (and Camera);
+  - a switch: Trains choose / Always left / Always right, and where each way leads (on round the railway, a dead
+    end, or a part trains can't come back from);
+  - a signal: Automatic / Hold at red / Remove;
+  - a piece of track: Bend / Signal here / Remove.
+
+  Move and Bend work like grip, except the trigger puts it down. Remove can be undone with B.
 
 Cards are laid out in sections with fixed text sizes:
 - **a villager:** Now (doing, going to, then), Today (their plan, the part under way highlighted), Home and work, About
@@ -285,7 +298,7 @@ The card's top row says which view it is. Within one situation the camera glides
 The card's **Camera** button turns the camera off (your choice is remembered) or on again. Grip on someone else moves
 the camera to them, and **Close** stops following. The card stays open when you switch tools.
 
-**Stats** and **Help** use the same layout as cards (Headset, Simulation, World; This tool, Everywhere).
+**World stats** and **Help** use the same layout as cards (Headset, Simulation, World; This tool, Everywhere).
 
 **Weather.** Fourteen clouds drift on a slowly turning wind and wrap round the land. Now and then (about one shower in
 ten village hours) they turn grey and it rains: drops fall from the clouds over the land, the light dims, rain can be
@@ -304,6 +317,10 @@ poles. Turning a camera while placing it shows the edges of what it will see.
 
 **Carriages:** in the Train tool, point at a train, then press **+ Carriage** or **- Carriage** on the palette (or push
 the stick left/right while pointing at it).
+
+**Where to join the railway.** With the Track tool, a pale blue ring marks every free end of a line and an orange
+ring every switch. Rings near the pointer, or near the end of the line you're drawing, swell, and the label at the
+pointer says what letting go will build. Grip anywhere on the track bends it (or Select it and press Bend).
 
 **Trains follow the arrows, always.** Every piece of track has a direction, and every train runs that way, engine
 first:
@@ -347,7 +364,7 @@ the studio has an ON AIR light. The **disco** has big multicoloured neon letters
 one, blink, then all shine.
 
 **Tips.** Now and then an amber banner above the palette suggests what to try or explains what just happened - each tip
-at most twice, one at a time. The **Tips** button turns them off (and on again, starting over). Messages appear in a
+at most twice, one at a time. **Settings ▸ Tips** turns them off (and on again, starting over). Messages appear in a
 banner above the palette too, two lines at a readable size.
 
 **Streams between ponds** run downhill at the ponds' own water levels, whichever way you draw them, full width into
@@ -355,10 +372,12 @@ the ponds, without damming them; a stream from a higher pond falls into the lowe
 
 **Help, stats and worlds.**
 - **Help** shows the controls of the tool in hand and the general buttons.
-- **Stats** shows the time, the frame rate, CPU and GPU time where the headset reports them, what the simulation costs
+- **Settings** gathers everything that isn't a tool: Sound, Tips, Labels (the label at the pointer), Grid, World
+  stats, Performance and New world. Each button says its state ("Tips: On") and a tap changes it.
+- **Settings ▸ World stats** shows the time, the frame rate, CPU and GPU time where the headset reports them, what the simulation costs
   system by system, and what the world holds (people, animals, buildings and beds, trains and track, vehicles,
   cameras).
-- **Stats > Performance** shows live numbers: frame rate, and the headset's own GPU and CPU time per frame against the
+- **Settings ▸ Performance** shows live numbers: frame rate, and the headset's own GPU and CPU time per frame against the
   budget, plus the simulation by system. Below them is a switch for each setting. Every switch takes effect at once and
   is remembered:
   - **Terrain:** Full, Light (the default: the same look, the noise read from a texture), or Simple.
@@ -384,8 +403,9 @@ the ponds, without damming them; a stream from a higher pond falls into the lowe
 **Mountains.** The **Peaks** terrain mode raises craggy summits. High ground turns to scree and rock bands, with snow on
 the tops and boulders on the slopes. Ponds get sandy beaches.
 
-Palette: **Terrain · Water · Forest · Roads · Track · Train · Build · Life · Select · Eraser** tools, an options row for the current
-tool, and **Undo · Redo · Save · Load · Move · New · Sound · Help · Stats**. The world saves automatically when the app is paused or closed and is restored
+Palette: the tools in four named groups - **Landscape** (Terrain, Water, Forest) · **Build** (Roads, Track, Build) ·
+**Bring to life** (Train, Life) · **Change** (Select, Eraser) - an options row for the current tool, and
+**Undo · Redo · Save · Load · Move · Help · Settings**. The world saves automatically when the app is paused or closed and is restored
 on the next launch.
 
 ## How it is built

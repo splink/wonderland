@@ -826,6 +826,43 @@ even out of the player's sight; everything else keeps the usual savings.
 - The Cam and Train chips open each camera.
 - The monitor is shown only while something is being watched.
 
+## Making the interface clear
+
+The player, building the app alongside, couldn't find the Select tool or grab track, and didn't know switches could
+be set. The interface hid what it could do and gave buttons different meanings in different tools. Five changes:
+
+- **A. A label at the pointer** (`ToolController.Label.cs`) names what is pointed at and says what each button does
+  to it right now. It appears only over something you can act on, or while something is in hand. It stays the same
+  size to the eye and waits while the palette is in the way. Settings ▸ Labels turns it off.
+- **B. One meaning per button** (`ToolController.Grab.cs`):
+  - Grip grabs and moves in every tool: buildings, trains, villagers and animals. On track, grip bends it.
+  - Letting go where it can't go puts the thing back.
+  - Cards open from Select's trigger only.
+  - The Life tool's trigger only places.
+- **C. Cards with buttons** (`ToolController.Cards.cs`, `PaletteUI.SetCardButtons`):
+  - Everything grip does is also a button, so the side button is never required.
+  - Switches, signals and track pieces have cards too.
+  - A switch's card shows its setting (the old hidden "pinned" state) and where each way leads.
+- **E. Track guides** (`ToolController.TrackGuide.cs`): rings at every free end and switch while the Track tool is
+  in hand.
+  - Rendering them showed that the gold target ring under selected things had always been wound facing down, so it
+    was never visible. It faces up now.
+- **D. The palette:**
+  - The tools are in four named groups.
+  - The bottom row is down from ten buttons to seven: Sound, Tips, Stats, Performance and New moved into a
+    **Settings** panel whose buttons say their state.
+
+`scripts/unity.sh interaction` covers each of these:
+- the label's wording;
+- grip moving a villager, a building (and putting it back), and bending track from Select;
+- Select's cards for villagers, buildings, trains, switches (Always left / Trains choose) and track (Bend);
+- Remove with undo;
+- the Track tool's rings;
+- Settings' Tips and Labels.
+
+Renders: `docs/renders/editor-label-building.png`, `editor-label-villager.png`, `editor-track-marks.png`, and
+`editor-cards-*.png`.
+
 ## Known defects and risks
 
 - **Station, water, bridges, tunnels, animals and villagers are untested on the device.** They are covered by the
