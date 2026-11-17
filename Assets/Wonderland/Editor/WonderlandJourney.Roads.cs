@@ -312,6 +312,21 @@ namespace Wonderland.Editor
                     }
                 }
                 int reversals = 0; foreach (var tr in trains) reversals += tr.Reversals;
+                // Every switch trains came to facing: which way they went, and why.
+                for (int ji = 0; ji < net.Joints.Count; ji++)
+                {
+                    var j = net.Joints[ji];
+                    if (j == null || j.Ends.Count != 3) continue;
+                    var sb = new System.Text.StringBuilder();
+                    foreach (var kv in w.Trains.SwitchLog) if (kv.Key.joint == ji) sb.Append($" {kv.Value}x branch {kv.Key.branch} ({kv.Key.why});");
+                    string Info(int k)
+                    {
+                        var b = j.Branch(k);
+                        return $"branch {k}: {(net.Through(b.Edge) ? "through" : "dead end/spur")}, circuit {net.CircuitOf(b.Edge)}";
+                    }
+                    report.AppendLine($"  switch {ji}{(j.Pinned ? " PINNED" : "")} at ({j.Position.x:0.00}, {j.Position.z:0.00}): trunk circuit {net.CircuitOf(j.Trunk.Edge)}; {Info(0)}; {Info(1)};{(sb.Length > 0 ? sb.ToString() : " no train came facing")}");
+                }
+                report.AppendLine($"  switch mode {w.Trains.Mode}");
                 report.AppendLine($"--- {System.IO.Path.GetFileName(save)}: {net.Edges.Count} pieces, {net.Joints.Count} switches, {trains.Count} trains; parts that can't run one way everywhere: {net.TwoWayParts}, traps {net.Traps}");
                 for (int i = 0; i < trains.Count; i++) report.AppendLine($"  {w.Trains.Describe(trains[i]),-60} {trains[i].Odometer,6:0.0} m, longest wait {longest[i],5:0} s");
                 bool ok = reversals == 0 && !against;

@@ -718,14 +718,19 @@ namespace Wonderland
         private void PrepareSwitch(int ji, Train t)
         {
             var j = Net.Joints[ji];
-            if (Mode == SwitchMode.Manual || j.Pinned) return;
             var last = t.Claim[^1];
             var heading = new EdgeEnd(last.Edge, last.Dir > 0 ? 1 : 0);
             if (heading != j.Trunk) return;                                                       // trailing: nothing to choose
-            for (int i = 0; i < Trains.Count; i++) if (TouchesJoint(held[i], ji)) return;        // in use: leave it
+            if (Mode == SwitchMode.Manual || j.Pinned) { Note(ji, j.Setting, "kept: pinned or Manual"); return; }
+            for (int i = 0; i < Trains.Count; i++) if (TouchesJoint(held[i], ji)) { Note(ji, j.Setting, "kept: still in use by a train"); return; }   // in use: leave it
             int setting = Mode == SwitchMode.Random ? random.Next(2) : (Net.Directed(j.Trunk.Edge) ? Spread(ji) : j.Setting);
+            Note(ji, setting, "chosen");
             if (setting != j.Setting) { j.Setting = setting; SwitchesChanged = true; }
         }
+
+        /// <summary>Diagnostics: every facing switch a train came to - which branch it got and why.</summary>
+        public readonly Dictionary<(int joint, int branch, string why), int> SwitchLog = new();
+        private void Note(int ji, int branch, string why) { SwitchLog.TryGetValue((ji, branch, why), out int n); SwitchLog[(ji, branch, why)] = n + 1; }
 
         // ------------------------------------------------------------------ spreading out
 
