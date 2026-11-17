@@ -249,15 +249,39 @@ where a trail meets a narrow stream.
 (full frame rate, room to build more), **orange** (frames starting to run late, close to the limit), **red** (falling
 behind: the world is heavy for the headset). It is measured from the real frame time, not estimated.
 
-**Who is that?** Point at anyone (or any building or boat) with any tool and the palette says who or what it is;
-**grip** opens the card - in the Life tool the trigger does too. Cards are laid out in sections with fixed text sizes:
+**Who is that?** Point at anyone - a villager, an animal, a building, a train, a car or a boat - with any tool:
+- A soft **gold ring** appears under it, the pointer turns gold, and the palette says who or what it is.
+- **Grip** opens its card. In the Life tool the trigger does too. Build, Track and Train keep grip for their own work on
+  buildings, track and trains.
+- Small figures are found by how close the pointer passes to them, so a villager in front of a house is easy to point
+  at. Nothing hidden behind a building's walls is selected.
+- The first time you point at a villager, a tip says what grip does.
+
+Cards are laid out in sections with fixed text sizes:
 - **a villager:** Now (doing, going to, then), Today (their plan, the part under way highlighted), Home and work, About
   (character, when they get up and go to bed, friends); a marker follows them, a line shows their way;
 - **a building:** open or closed (and its hours), visitors now and who they are, its staff and goods, visits today and
   yesterday and when it is busiest; for a home who lives there and the beds; for a station the trains calling next.
 
-Switching tools closes the card. **Stats** and **Help** use the same layout (Headset, Simulation, World; This tool,
-Everywhere).
+- **a train:** what it is doing, its length; **Camera** rides along at the front of the engine;
+- **a car or lorry:** what it is doing, and who is driving.
+
+**Follow someone's day.** Selecting a villager turns on **their camera**. It's shown on the monitor over the palette and
+stays there whatever tool you use, so you can keep building while you watch. It goes where they go:
+
+| Where they are | What the camera shows |
+|---|---|
+| On foot (walking, sitting, chatting, working outside) | From just over their shoulder, at eye level |
+| On a train | Out of their carriage window |
+| Out in the household's car | Out of the passenger window |
+| Inside a building, or asleep at home | A steady view of the building from outside |
+
+The card's top row says which view it is. Within one situation the camera glides; from one to the next it cuts.
+
+The card's **Camera** button turns the camera off (your choice is remembered) or on again. Grip on someone else moves
+the camera to them, and **Close** stops following. The card stays open when you switch tools.
+
+**Stats** and **Help** use the same layout as cards (Headset, Simulation, World; This tool, Everywhere).
 
 **Weather.** Fourteen clouds drift on a slowly turning wind and wrap round the land. Now and then (about one shower in
 ten village hours) they turn grey and it rains: drops fall from the clouds over the land, the light dims, rain can be

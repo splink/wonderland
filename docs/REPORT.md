@@ -741,6 +741,53 @@ Known: the "Clouds drift on the breeze" check failed once and passed on rerun; i
 **Not yet re-measured on the headset with all of this in place.** Run Measure in Stats > Performance, or the
 benchmark ("bench" file), to see the new numbers.
 
+## Selecting anything, and following a villager's day
+
+**Selection:** one gesture everywhere. Grip on whatever the gold ring is under opens its card, in any tool.
+- **Targeting** (`RayPick`) scores how close the pointer passes to each figure's upright axis, with a tolerance that grows
+  with distance (5 mm plus about 1 degree). That makes 3 cm villagers easy to hit, and a villager in front of a building
+  wins over the building.
+- **Hiding** comes from the land and the lower 55% of a building's box (its walls; roofs taper), with 3 cm of grace for
+  someone at a door.
+- **Trains and cars** are now selectable too, with simple cards.
+- **The ring** under the target and the gold pointer show what grip would select.
+- **Tips** appear the first time you point at a villager or a building, train or car.
+- **Construction:** Build, Track and Train keep grip for their own actions, and nothing is picked while drawing or
+  carrying.
+
+**The villager's camera** reuses the CCTV system: the same hidden camera, the 320×240 viewer texture at 15 Hz, and the
+monitor over the palette. Following takes precedence over the Watch tool's selection, and choosing a camera in the
+Watch tool hands the viewer back to it.
+- **On foot:** over the shoulder at eye level (16 mm behind and 6 mm above the head). Inside the eyes, someone standing
+  and talking filled the picture.
+- **On a train:** outside the first carriage's window, looking out and slightly ahead.
+- **In a car:** the front passenger window.
+- **Indoors:** a building view from the front, a little above. If that spot is inside another building it moves round
+  in 45° steps until it isn't.
+- **Smoothing:** glides within a view, and cuts between views.
+
+**Cars:** villagers didn't ride in cars before. When a household car sets off, a resident who is at home indoors
+becomes its driver, and the camera rides along. The simulation is not changed: if they come out before the car is
+back, the link drops (checked once a second). An earlier version kept the driver indoors for the trip, which emptied the
+restaurant at supper; the town test caught it.
+
+**Performance:** only one feed is filmed. Figures within a metre of the follow camera are drawn and kept moving smoothly
+even out of the player's sight; everything else keeps the usual savings.
+
+**Validation:**
+- `scripts/unity.sh followrender` on Worlds 1 and 4 finds villagers on foot, indoors, on trains and driving, follows
+  each, checks the camera (near their eyes on foot, above ground, never inside another building) and records the views
+  they pass through. For example: outside the cottage, then over their shoulder, then outside the cottage again; and
+  from the car, then over their shoulder. 7 checks pass.
+- Pictures: `editor-follow-{shoulder,window,car,outside}.png`.
+- New controller checks:
+  - selecting a villager turns on their camera and the monitor;
+  - the Camera button turns it off;
+  - the gold ring is under the target;
+  - grip on another villager moves the camera to them;
+  - grip on a train opens its card, and its camera rides along;
+  - Close puts the camera away.
+
 ## Known defects and risks
 
 - **Station, water, bridges, tunnels, animals and villagers are untested on the device.** They are covered by the

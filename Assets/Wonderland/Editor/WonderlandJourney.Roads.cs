@@ -150,6 +150,97 @@ namespace Wonderland.Editor
             if (Application.isBatchMode) EditorApplication.Exit(0);
         }
 
+        /// <summary>
+        /// Following villagers on saved worlds (Logs/follow-results.txt, docs/renders/editor-follow-*.png): someone on
+        /// foot, someone indoors, someone on a train, someone driving - each followed for a while, the camera checked
+        /// (at their eyes on foot, never under the ground, never inside another building) and its view saved.
+        /// </summary>
+        public static void FollowRenders()
+        {
+            ShaderUtil.allowAsyncCompilation = false;
+            UnityEditor.SceneManagement.EditorSceneManager.NewScene(UnityEditor.SceneManagement.NewSceneSetup.EmptyScene, UnityEditor.SceneManagement.NewSceneMode.Single);
+            WonderlandLighting.CreateKeyLight();
+            System.IO.Directory.CreateDirectory(WonderlandRenders.Output);
+            var report = new System.Text.StringBuilder();
+            int failures = 0;
+            void Expect(bool ok, string what) { report.AppendLine((ok ? "PASS  " : "FAIL  ") + what); if (!ok) failures++; }
+            var saves = (System.Environment.GetEnvironmentVariable("WL_SAVES") ?? "Tests/Saves/headset-wonderland-world.json").Split(';');
+            var seen = new System.Collections.Generic.HashSet<string>();
+            foreach (var save in saves)
+            {
+                var w = new GameObject("Follow").AddComponent<WonderlandWorld>();
+                w.Deserialize(System.IO.File.ReadAllText(save), Materials());
+                w.Sky.Shown = false;
+                w.People.Grid.Complete();
+                w.Clock.Hour = 9f;
+                void Step(float seconds)
+                {
+                    for (float s2 = 0f; s2 < seconds; s2 += 1f / 30f)
+                    {
+                        float dt = 1f / 30f;
+                        w.Clock.Tick(dt); w.People.Step(dt); w.Animals.Step(dt); w.Trains.Step(dt); w.Traffic.Step(dt); w.Boats.Step(dt); w.Cctv.Step(dt);
+                    }
+                }
+                Step(20f);
+                report.AppendLine($"--- {System.IO.Path.GetFileName(save)}: {w.People.People.Count} people, {w.Trains.Trains.Count} trains, {w.Traffic.Vehicles.Count} vehicles");
+                // Find someone in each situation (simulating a little while until they turn up), follow them, check, picture.
+                var wants = new (string view, System.Func<int, bool> who)[]
+                {
+                    ("over their shoulder", i => !w.People.IsHidden(i) && w.People.StateOf(i) == PeopleSystem.Activity.Walking),
+                    ("outside", i => w.People.IsHidden(i) && w.People.StateOf(i) == PeopleSystem.Activity.Inside),
+                    ("from the train window", i => w.People.StateOf(i) == PeopleSystem.Activity.Riding),
+                    ("from the car", i => w.Traffic.DrivenBy(w.People.People[i].seed) is { State: TrafficSystem.Mode.Driving }),
+                };
+                foreach (var (view, who) in wants)
+                {
+                    int found = -1;
+                    for (int tries = 0; tries < 80 && found < 0; tries++)
+                    {
+                        for (int i = 0; i < w.People.People.Count; i++) if (who(i)) { found = i; break; }
+                        if (found < 0) Step(15f);
+                    }
+                    if (found < 0) { report.AppendLine($"INFO  nobody {view} within 20 minutes"); continue; }
+                    w.Cctv.FollowSeed = w.People.People[found].seed;
+                    float worstGround = float.MaxValue, worstEyes = 0f; bool inside = false; var views = new System.Collections.Generic.List<string>();
+                    for (int k = 0; k < 90; k++)
+                    {
+                        Step(1f / 3f);
+                        var e = w.Cctv.FollowEye;
+                        if (w.Cctv.FollowView == null) break;
+                        if (views.Count == 0 || views[^1] != w.Cctv.FollowView) views.Add(w.Cctv.FollowView);
+                        if (!(w.Cctv.FollowView == "from the train window" && w.Terrain.SurfaceAt(e.x, e.z) > e.y)) worstGround = Mathf.Min(worstGround, e.y - w.Terrain.SurfaceAt(e.x, e.z));
+                        int idx = w.People.IndexOfSeed(w.Cctv.FollowSeed);
+                        if (idx >= 0 && w.Cctv.FollowView == "over their shoulder")
+                        {
+                            var head = w.People.PovOf(idx).Eye;
+                            worstEyes = Mathf.Max(worstEyes, (e - head).magnitude);
+                        }
+                        if (w.Cctv.FollowView.StartsWith("outside")) for (int j = 0; j < w.Buildings.Houses.Count; j++)
+                        {
+                            var h = w.Buildings.Houses[j]; var bp = Catalog.Get(h.variant);
+                            var q = Quaternion.Inverse(Quaternion.Euler(0f, h.rotation, 0f)) * new Vector3(e.x - h.x, 0f, e.z - h.z);
+                            if (Mathf.Abs(q.x) < bp.Half.x && Mathf.Abs(q.z) < bp.Half.y && e.y < w.Terrain.SurfaceAt(h.x, h.z) + bp.Height * 0.9f) inside = true;
+                        }
+                        if (k == 30 && seen.Add(view))
+                        {
+                            w.Cctv.FilmNow();   // (the viewer picture: the followed villager's)
+                            var tex = w.Cctv.Snapshot();
+                            System.IO.File.WriteAllBytes(System.IO.Path.Combine(WonderlandRenders.Output, $"editor-follow-{view.Split(' ')[^1].Replace("eyes", "shoulder")}.png"), tex.EncodeToPNG());
+                        }
+                    }
+                    string name = w.People.NameOf(found);
+                    Expect(views.Count > 0 && worstGround > 0.002f && worstEyes < 0.025f && !inside,
+                        $"Following {name} ({view}): views {string.Join(" > ", views)}; lowest {worstGround * 1000f:0} mm above ground, camera within {worstEyes * 1000f:0.0} mm of their eyes, inside a building {inside}");
+                }
+                w.Cctv.FollowSeed = 0;
+                Object.DestroyImmediate(w.gameObject);
+            }
+            report.AppendLine(failures == 0 ? "RESULT: PASS" : $"RESULT: FAIL ({failures})");
+            System.IO.File.WriteAllText("Logs/follow-results.txt", report.ToString());
+            Debug.Log(report.ToString());
+            if (Application.isBatchMode) EditorApplication.Exit(0);
+        }
+
         /// <summary>The player's world in each terrain shading mode (Full, Light, Simple), from where they would stand.</summary>
         public static void TerrainModeRenders()
         {

@@ -277,6 +277,69 @@ namespace Wonderland
         public bool Hiking(int i) => agents[i].Hiking && agents[i].State == Activity.Walking;
         public bool IsHidden(int i) => agents[i].Hidden;
 
+        /// <summary>The villager the pointer ray is on (local space, unit direction), nearer than <paramref name="maxT"/>; -1 if none.</summary>
+        public int PickRay(Vector3 o, Vector3 d, float maxT, out float t)
+        {
+            int best = -1; float bestScore = 1f; t = float.MaxValue;
+            for (int i = 0; i < agents.Count; i++)
+            {
+                var a = agents[i];
+                if (a.Hidden) continue;
+                var feet = new Vector3(a.Position.x, a.Height, a.Position.y);
+                float score = RayPick.Score(o, d, feet + Vector3.up * 0.004f, feet + Vector3.up * (a.Child ? 0.022f : 0.03f), maxT, out float ti);
+                if (score < bestScore) { bestScore = score; best = i; t = ti; }
+            }
+            return best;
+        }
+
+        public int IndexOfSeed(int seed) { for (int i = 0; i < agents.Count; i++) if (agents[i].Seed == seed) return i; return -1; }
+
+        /// <summary>Whether a villager (by seed) is indoors, out of sight (a driver who has come out is no longer driving).</summary>
+        public bool Indoors(int seed) { int i = IndexOfSeed(seed); return i >= 0 && agents[i].Hidden; }
+
+        /// <summary>What a villager's camera needs to know: where their eyes are and which way they face, what they are doing.</summary>
+        public struct Pov
+        {
+            public Vector3 Eye;         // local, between the eyes
+            public float Heading;
+            public bool Hidden, Child, Aboard;
+            public Activity State;
+            public Train Train;         // the train they ride
+            public int House;           // the building they are in (or at), -1
+            public Vector2 Where;       // where they are (or went in)
+        }
+
+        public Pov PovOf(int i)
+        {
+            var a = agents[i];
+            float scale = a.Child ? 0.72f : 1f;
+            int house = a.SpotHouse >= 0 && a.SpotHouse < world.Buildings.Houses.Count ? a.SpotHouse : -1;
+            if (house < 0 && a.Hidden) house = world.Buildings.Nearest(a.Approach, 0.12f);
+            return new Pov
+            {
+                Eye = new Vector3(a.Position.x, a.Height + 0.0272f * scale, a.Position.y), Heading = a.Heading,
+                Hidden = a.Hidden, Child = a.Child, Aboard = a.Aboard, State = a.State,
+                Train = a.State == Activity.Riding ? a.Riding : null, House = house, Where = a.Hidden ? a.Approach : a.Position,
+            };
+        }
+
+        /// <summary>
+        /// A household's car is setting off from <paramref name="home"/>: someone at home (indoors, with at least
+        /// <paramref name="seconds"/> of their stay left) drives it - their camera rides along. Nothing about their day
+        /// changes: if they come out before the car is back, they simply aren't in it any more. Their seed, or 0.
+        /// </summary>
+        public int TakeDriver(Vector2 home, float seconds)
+        {
+            var houses = world.Buildings.Houses;
+            foreach (var a in agents)
+            {
+                if (!a.Hidden || a.State != Activity.Inside || a.Child || a.HomeHouse < 0 || a.HomeHouse >= houses.Count) continue;
+                if ((DoorStep(houses[a.HomeHouse]) - home).magnitude > 0.12f || a.Timer < seconds) continue;
+                return a.Seed;
+            }
+            return 0;
+        }
+
         /// <summary>The nearest visible person within <paramref name="within"/> (wild animals keep their distance).</summary>
         public Vector2? NearestPerson(Vector2 p, float within)
         {
@@ -437,7 +500,7 @@ namespace Wonderland
                 return;
             }
             drawnTogether = true;
-            batch.Begin(material, world.Cctv != null && world.Cctv.Watching);
+            batch.Begin(material, world.Cctv != null && world.Cctv.Watching, p => world.Cctv != null && world.Cctv.Filming(transform.InverseTransformPoint(p)));
             foreach (var a in agents)
             {
                 if (a.Hidden || !a.Root.gameObject.activeSelf || !batch.Visible(a.Root.position)) continue;
@@ -461,7 +524,7 @@ namespace Wonderland
             decisionsThisStep = 0;
             tick++;
             bool smart = PerfSettings.SmartVillagers;
-            bool watched = world.Cctv != null && world.Cctv.Watching;   // (a CCTV feed sees far and behind: everyone moves smoothly)
+            var cctv = world.Cctv;   // (on a CCTV feed - out of the player's sight or not - they move smoothly)
             FindLocos();
             var eye = Camera.main != null ? (Vector3?)transform.InverseTransformPoint(Camera.main.transform.position) : null;
             var viewDir = Camera.main != null ? transform.InverseTransformDirection(Camera.main.transform.forward) : Vector3.forward;
@@ -482,7 +545,7 @@ namespace Wonderland
                 // Coarse (Smart): behind the player or beyond drawing distance, a villager thinks every fourth frame,
                 // catching up the time in between - nothing goes slower, it just goes in bigger steps nobody sees.
                 float dtA = dt, hoursA = hours;
-                if (smart && eye.HasValue && !watched)
+                if (smart && eye.HasValue && !(cctv != null && cctv.Filming(new Vector3(a.Position.x, a.Height, a.Position.y))))
                 {
                     var rel = new Vector3(a.Position.x, a.Height, a.Position.y) - eye.Value;
                     bool coarse = rel.sqrMagnitude > drawn * drawn || Vector3.Dot(rel, viewDir) < -0.05f;
@@ -565,7 +628,7 @@ namespace Wonderland
                 a.Height = Mathf.MoveTowards(a.Height, a.Ground + (a.State == Activity.Watching ? a.SpotLift : 0f), (a.SpotLift > 0f ? 0.4f : 0.12f) * dtA);
                 if (eye.HasValue && (beat & 7) == 0) Detail(a, (new Vector3(a.Position.x, a.Height, a.Position.y) - eye.Value).magnitude * transform.lossyScale.x);
                 // Beyond the distance figures are drawn at, nobody sees them move: posed only now and then.
-                if (smart && eye.HasValue && !watched && (beat & 7) != 0 && (new Vector3(a.Position.x, a.Height, a.Position.y) - eye.Value).sqrMagnitude > drawn * drawn) continue;
+                if (smart && eye.HasValue && (beat & 7) != 0 && !(cctv != null && cctv.Filming(new Vector3(a.Position.x, a.Height, a.Position.y))) && (new Vector3(a.Position.x, a.Height, a.Position.y) - eye.Value).sqrMagnitude > drawn * drawn) continue;
                 Pose(a);
             }
             double stepMs = (System.Diagnostics.Stopwatch.GetTimestamp() - t1) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;

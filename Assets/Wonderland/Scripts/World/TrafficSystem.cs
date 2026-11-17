@@ -38,6 +38,7 @@ namespace Wonderland
             public string Owner;
             public bool Roams;                 // put on the road by the player: drives about the town for good
             public bool AtLight;               // held by a traffic light (that wait doesn't make it edge on)
+            public int Driver;                 // the villager (seed) out in their household's car, 0: nobody we know
             public int Queue;                  // how many vehicles ahead of it lead to one held at a light (0: none)
             public readonly int Id = ++made;   // (who goes first when two are in each other's way)
             private static int made;
@@ -74,7 +75,11 @@ namespace Wonderland
         public void Step(float dt)
         {
             checkTimer -= dt;
-            if (checkTimer <= 0f) { checkTimer = 1f; Refresh(); }
+            if (checkTimer <= 0f)
+            {
+                checkTimer = 1f; Refresh();
+                foreach (var v in Vehicles) if (v.Driver != 0 && (StillIn == null || !StillIn(v.Driver))) v.Driver = 0;   // (they came out: not in the car)
+            }
             blink += dt;
             DrawLights(dt);
             foreach (var v in Vehicles) Drive(v, dt);
@@ -307,7 +312,7 @@ namespace Wonderland
             var dir = Direction(n);
             var side = new Vector2(dir.y, -dir.x);
             if (Vector2.Dot(v.Home - p, side) < 0f) side = -side;   // the kerb on the home's side
-            v.State = Mode.Parked; v.Path.Clear(); v.Siren = false; v.Speed = 0f; v.ToHome = false;
+            v.State = Mode.Parked; v.Path.Clear(); v.Siren = false; v.Speed = 0f; v.ToHome = false; v.Driver = 0;   // (home: the driver goes in)
             Place(v, p + side * 0.022f, Mathf.Atan2(dir.x, dir.y) * Mathf.Rad2Deg);
         }
 
@@ -385,7 +390,7 @@ namespace Wonderland
                 var door = PeopleSystem.DoorStep(h);
                 float d = (door - v.Home).magnitude;
                 if (d < 0.25f || d > max) continue;
-                if (DriveTo(v, door, false)) return;
+                if (DriveTo(v, door, false)) { v.Driver = TakeDriver != null ? TakeDriver(v.Home, 0f) : 0; return; }
             }
         }
 
@@ -673,6 +678,35 @@ namespace Wonderland
             if (v == null || !v.Roams) return false;
             Destroy(v); Vehicles.Remove(v);
             return true;
+        }
+
+        /// <summary>Set by the world: someone at home to drive the household's car (their seed, 0: nobody), see PeopleSystem.TakeDriver.</summary>
+        public System.Func<Vector2, float, int> TakeDriver;
+        /// <summary>Set by the world: whether a villager (by seed) is still indoors, out of sight.</summary>
+        public System.Func<int, bool> StillIn;
+
+        /// <summary>The car a villager (by seed) is out in, or null.</summary>
+        public Vehicle DrivenBy(int seed)
+        {
+            if (seed == 0) return null;
+            foreach (var v in Vehicles) if (v.Driver == seed) return v;
+            return null;
+        }
+
+        /// <summary>The vehicle the pointer ray is on (local space, unit direction), nearer than <paramref name="maxT"/>; null if none.</summary>
+        public Vehicle PickRay(Vector3 o, Vector3 d, float maxT, out float t)
+        {
+            Vehicle best = null; float bestScore = 1f; t = float.MaxValue;
+            foreach (var v in Vehicles)
+            {
+                if (!v.Root.gameObject.activeInHierarchy) continue;
+                var fwd = new Vector3(Mathf.Sin(v.Heading * Mathf.Deg2Rad), 0f, Mathf.Cos(v.Heading * Mathf.Deg2Rad));
+                var mid = new Vector3(v.Position.x, v.Height + 0.012f, v.Position.y);
+                float half = VehicleFactory.Length(v.Kind) * 0.4f;
+                float score = RayPick.Score(o, d, mid - fwd * half, mid + fwd * half, maxT, out float ti);
+                if (score < bestScore) { bestScore = score; best = v; t = ti; }
+            }
+            return best;
         }
 
         /// <summary>The vehicle nearest a point within <paramref name="within"/>, or null.</summary>

@@ -208,12 +208,11 @@ namespace Wonderland
             if (stroking) EndStroke();
             if (carrying) DropCarried();
             if (carriedTrain != null) { carriedTrain = null; World.Undo(false); }
-            if (tool != Tool) CloseCard();
-            Tool = tool;
+            Tool = tool;   // (an open card - and the camera following someone - stays open: keep building while watching)
             Palette.SetTool(tool);
             World.Cctv.Watching = tool == Tool.Watch;
             if (infoMode == 2) ShowHelp();
-            Palette.SetViewer(tool == Tool.Watch ? World.Cctv.ViewerMaterial : null);
+            SyncViewer();
             drawn.Clear(); World.Track.HidePreview();
             RefreshOptions();
             Haptic(0.25f, 0.03f);
@@ -524,19 +523,35 @@ namespace Wonderland
             if (input.PrimaryDown) CycleMode();
 
             if (hit) { rayLength = Vector3.Distance(ray.origin, wt.TransformPoint(local)); }
-            // Whoever is being pointed at, in any tool: grip opens their card.
-            peekPerson = hit && !stroking ? World.People.Nearest(local, 0.015f) : -1;
-            peekAnimal = hit && !stroking && peekPerson < 0 ? World.Animals.Nearest(local, 0.02f) : -1;
-            if (input.GripDown && (peekPerson >= 0 || peekAnimal >= 0) && carriedTrain == null && !carrying) { Inspect(peekPerson, peekAnimal); DrawPointer(ray, rayLength, new Color(1f, 0.85f, 0.3f, 0.9f), true); return; }
+            // What is being pointed at, in any tool: grip opens its card (a ring under it shows what grip would select).
+            // Small things are found by how close the ray passes to them - a villager in front of a house is found
+            // before the house - but nothing behind a building or the land is.
+            bool looking = !stroking && carriedTrain == null && !carrying && drawn.Count == 0;
+            var dirN = localDir.normalized;
+            int houseHit = World.Buildings.Pick(localOrigin, dirN);
+            // What hides things: the land, and buildings' walls (not the air under a sloping roof). Someone at a door
+            // stands a little inside its box (eaves): a few centimetres' grace - anyone behind it is further.
+            bool walled = World.Buildings.Pick(localOrigin, dirN, out float wallT, true) >= 0;
+            float reach = Mathf.Min(hit ? (local - localOrigin).magnitude + 0.012f : 3f, walled ? wallT + 0.03f : 3f);
+            peekPerson = looking ? World.People.PickRay(localOrigin, dirN, reach, out _) : -1;
+            peekAnimal = looking && peekPerson < 0 ? World.Animals.PickRay(localOrigin, dirN, reach, out _) : -1;
+            peekVehicle = looking && peekPerson < 0 && peekAnimal < 0 ? World.Traffic.PickRay(localOrigin, dirN, reach, out _) : null;
+            peekTrain = looking && peekPerson < 0 && peekAnimal < 0 && peekVehicle == null && Tool != Tool.Train ? World.Trains.PickRay(localOrigin, dirN, reach, out _) : null;
+            bool small = peekPerson >= 0 || peekAnimal >= 0 || peekVehicle != null || peekTrain != null;
+            peekBoat = hit && looking && !small ? World.Boats.Nearest(local, 0.015f) : -1;
             // ...and a building: grip (trigger in the Life tool) opens its card - not in Build or Eraser, where these pick up or remove.
-            peekBoat = hit && !stroking && peekPerson < 0 && peekAnimal < 0 ? World.Boats.Nearest(local, 0.015f) : -1;
-            peekHouse = !stroking && peekPerson < 0 && peekAnimal < 0 && peekBoat < 0 && Tool != Tool.Houses && Tool != Tool.Eraser ? World.Buildings.Pick(localOrigin, localDir) : -1;
-            if (peekHouse >= 0 && carriedTrain == null && !carrying && (input.GripDown || Tool == Tool.Decor && input.TriggerDown))
+            peekHouse = looking && !small && peekBoat < 0 && Tool != Tool.Houses && Tool != Tool.Eraser ? houseHit : -1;
+            ShowTarget();
+            if (input.GripDown && looking && (small || peekHouse >= 0 && Tool != Tool.Track) || peekHouse >= 0 && Tool == Tool.Decor && input.TriggerDown && looking)
             {
-                InspectHouse(peekHouse);
+                if (peekPerson >= 0 || peekAnimal >= 0) Inspect(peekPerson, peekAnimal);
+                else if (peekVehicle != null) InspectVehicle(peekVehicle);
+                else if (peekTrain != null) InspectTrain(peekTrain);
+                else InspectHouse(peekHouse);
                 DrawPointer(ray, rayLength, new Color(1f, 0.85f, 0.3f, 0.9f), true);
                 return;
             }
+            bool meeting = small || peekHouse >= 0;
             switch (Tool)
             {
                 case Tool.Terrain: TerrainTool(input, hit, local, dt, ref colour); break;
@@ -556,6 +571,7 @@ namespace Wonderland
             if (Tool != Tool.Track || drawn.Count == 0) HideEntryArrows();
             if (Tool != Tool.Train) { hoveredTrain = null; if (World.Trains.Highlighted != null) World.Trains.Highlighted = null; }
             floorRing.gameObject.SetActive(LandMode && hit);
+            if (meeting && !stroking) colour = new Color(1f, 0.85f, 0.3f, 0.85f);   // (the pointer turns gold over something to meet)
             DrawPointer(ray, rayLength, colour, hit);
         }
 
@@ -686,8 +702,8 @@ namespace Wonderland
             var kind = (AnimalKind)Mathf.Min(DecorKind, AnimalFactory.KindCount - 1);
             float radius = person ? PeopleSystem.Radius * 2f : AnimalFactory.Radius(kind);
             var p2 = new Vector2(local.x, local.z);
-            hoverPerson = hit ? World.People.Nearest(local, 0.015f) : -1;
-            hoverAnimal = hit && hoverPerson < 0 ? World.Animals.Nearest(local, 0.02f) : -1;
+            hoverPerson = peekPerson;   // (the same pointing as everywhere: the ray passing near them)
+            hoverAnimal = hoverPerson < 0 ? peekAnimal : -1;
             hoverVehicle = hit && hoverPerson < 0 && hoverAnimal < 0 ? World.Traffic.Nearest(p2, 0.03f) : null;
             // Trigger on someone who is already there: their card (and follow them), not another one.
             if (input.TriggerDown && hit && (hoverPerson >= 0 || hoverAnimal >= 0)) { Inspect(hoverPerson, hoverAnimal); return; }

@@ -18,13 +18,15 @@ namespace Wonderland
         private Vector3 eye, forward;
         private float reach;
         private bool cull;
+        private System.Func<Vector3, bool> filming;   // (world position: on a camera feed)
 
         /// <summary>Whether figures are drawn together (the Figures setting).</summary>
         public static bool Together => PerfSettings.Figures.Value == 0;
 
         /// <summary>Starts a frame: what will be seen is worked out from the main camera.</summary>
-        public void Begin(Material source, bool watched)
+        public void Begin(Material source, bool watched, System.Func<Vector3, bool> onFeed = null)
         {
+            filming = onFeed;
             if (material == null || material.shader != source.shader) material = new Material(source) { name = source.name + " (figures)", enableInstancing = true };
             foreach (var l in casting.Values) l.Clear();
             foreach (var l in plain.Values) l.Clear();
@@ -36,7 +38,7 @@ namespace Wonderland
         /// <summary>Whether a figure at <paramref name="position"/> (world) could be seen: in front of the player, within drawing distance.</summary>
         public bool Visible(Vector3 position)
         {
-            if (!cull) return true;
+            if (!cull || filming != null && filming(position)) return true;
             var d = position - eye;
             float dist = d.magnitude;
             return dist < reach && (dist < 0.3f || Vector3.Dot(d, forward) > dist * 0.2f);   // (about 78 degrees either side: more than the headset sees)

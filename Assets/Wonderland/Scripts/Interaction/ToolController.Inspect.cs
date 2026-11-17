@@ -16,6 +16,9 @@ namespace Wonderland
     public sealed partial class ToolController
     {
         private int hoverAnimal = -1, peekPerson = -1, peekAnimal = -1, peekHouse = -1, peekBoat = -1;
+        private TrafficSystem.Vehicle peekVehicle, followVehicle;
+        private Train peekTrain, followTrain;
+        private bool trainCamera;                   // the followed train's card shows its camera
 
         /// <summary>"Emma, baker - grip: their card", when pointing at someone with any tool but Life (which says more).</summary>
         private string peekText; private int peekKey = -2; private float peekUntil;
@@ -23,7 +26,8 @@ namespace Wonderland
         private string Peek()
         {
             if (Tool == Tool.Decor && peekHouse < 0 && peekBoat < 0) return null;
-            int key = peekPerson >= 0 ? peekPerson : peekAnimal >= 0 ? 100000 + peekAnimal : peekBoat >= 0 ? 300000 + peekBoat : peekHouse >= 0 ? 200000 + peekHouse : -1;
+            int key = peekPerson >= 0 ? peekPerson : peekAnimal >= 0 ? 100000 + peekAnimal : peekVehicle != null ? 400000 + peekVehicle.Id
+                : peekTrain != null ? 500000 + World.Trains.Trains.IndexOf(peekTrain) : peekBoat >= 0 ? 300000 + peekBoat : peekHouse >= 0 ? 200000 + peekHouse : -1;
             if (key == peekKey && Time.time < peekUntil) return peekText;   // (worked out a few times a second, not every frame)
             peekKey = key; peekUntil = Time.time + 0.3f;
             return peekText = PeekNow();
@@ -37,6 +41,8 @@ namespace Wonderland
                 return $"{c.Name}, {c.Role.ToLower()} - {c.Now.ToLower()}  ·  grip: their card";
             }
             if (peekAnimal >= 0 && peekAnimal < World.Animals.Animals.Count) return AnimalLine(peekAnimal) + "  ·  grip: its card";
+            if (peekVehicle != null) return World.Traffic.Describe(peekVehicle) + "  ·  grip: its card";
+            if (peekTrain != null) return World.Trains.Describe(peekTrain) + "  ·  grip: its card";
             if (peekBoat >= 0 && peekBoat < World.Boats.Boats.Count) return World.Boats.Describe(peekBoat);
             if (peekHouse >= 0 && peekHouse < World.Buildings.Houses.Count)
             {
@@ -47,7 +53,7 @@ namespace Wonderland
             }
             return null;
         }
-        private int followSeed, followKind;          // kind: 0 nobody, 1 a villager, 2 an animal, 3 a building
+        private int followSeed, followKind;          // kind: 0 nobody, 1 a villager, 2 an animal, 3 a building, 4 a train, 5 a vehicle
         private Vector2 followHouse;                 // the building's position (buildings are kept by where they stand)
         private float cardTimer, infoTimer;
         private int infoMode;                        // 0 closed, 1 stats, 2 help, 3 performance
@@ -58,6 +64,11 @@ namespace Wonderland
         public PerfLog Perf;
         public bool Following => followKind != 0;
         public int HoverPerson => hoverPerson;
+        /// <summary>What grip would select now (tests): a villager, or a building.</summary>
+        public int PeekPerson => peekPerson;
+        public int PeekHouse => peekHouse;
+        /// <summary>Closes the card (as its Close button does): stops following, and the camera.</summary>
+        public void CloseCards() => CloseCard();
 
         private string AnimalLine(int i)
         {
@@ -67,13 +78,63 @@ namespace Wonderland
 
         private string PersonName(int i) => i >= 0 && i < World.People.People.Count ? World.People.NameOf(i) : null;
 
-        /// <summary>Opens the card of a villager (or animal) and follows them.</summary>
+        /// <summary>Whether selecting a villager turns their camera on (on by default; the card's Camera button remembers).</summary>
+        public static bool FollowCamera
+        {
+            get => PlayerPrefs.GetInt("wonderland.followcam", 1) == 1;
+            set { PlayerPrefs.SetInt("wonderland.followcam", value ? 1 : 0); PlayerPrefs.Save(); }
+        }
+
+        /// <summary>Opens the card of a villager (or animal) and follows them - with their camera, for a villager.</summary>
         private void Inspect(int person, int animal)
         {
-            if (person >= 0) { followKind = 1; followSeed = World.People.People[person].seed; }
+            StopCameras();
+            if (person >= 0)
+            {
+                followKind = 1; followSeed = World.People.People[person].seed;
+                if (FollowCamera) World.Cctv.FollowSeed = followSeed;
+            }
             else { followKind = 2; followSeed = World.Animals.Animals[animal].seed; }
             cardTimer = 0f;
             Haptic(0.4f, 0.03f);
+        }
+
+        private void InspectVehicle(TrafficSystem.Vehicle v) { StopCameras(); followKind = 5; followVehicle = v; cardTimer = 0f; Haptic(0.4f, 0.03f); }
+
+        private void InspectTrain(Train t) { StopCameras(); followKind = 4; followTrain = t; cardTimer = 0f; Haptic(0.4f, 0.03f); }
+
+        /// <summary>The card's Camera button: a villager's camera (or a train's) on or off.</summary>
+        private void ToggleCamera()
+        {
+            if (followKind == 1)
+            {
+                bool on = World.Cctv.FollowSeed != followSeed;
+                FollowCamera = on;
+                World.Cctv.FollowSeed = on ? followSeed : 0;
+                Say(on ? "Following them with their camera - it goes where they go" : "Camera off - their card stays open");
+            }
+            else if (followKind == 4)
+            {
+                trainCamera = !trainCamera;
+                if (trainCamera) World.Cctv.Selected = World.Cctv.Count + World.Trains.Trains.IndexOf(followTrain);
+                Say(trainCamera ? "Riding along at the front of the engine" : "Camera off");
+            }
+            cardTimer = 0f;
+            SyncViewer();
+        }
+
+        private void StopCameras() { World.Cctv.FollowSeed = 0; trainCamera = false; SyncViewer(); }
+
+        private bool viewerShown;
+
+        /// <summary>The monitor over the palette: shown for the Watch tool, a followed villager's camera or a train's.</summary>
+        private void SyncViewer()
+        {
+            bool show = Tool == Tool.Watch || World.Cctv.FollowSeed != 0 || trainCamera;
+            World.Cctv.Watching = Tool == Tool.Watch || trainCamera;
+            if (show == viewerShown && Palette != null) return;
+            viewerShown = show;
+            Palette.SetViewer(show ? World.Cctv.ViewerMaterial : null);
         }
 
         /// <summary>Opens the card of a building (visitors, hours, staff, goods; residents for a home).</summary>
@@ -87,7 +148,9 @@ namespace Wonderland
 
         private void CloseCard()
         {
-            followKind = 0;
+            followKind = 0; followVehicle = null; followTrain = null;
+            StopCameras();
+            Palette.SetCardAction(null, false, null);
             Palette.HideCard();
             if (followMarker) { followMarker.gameObject.SetActive(false); homePin.gameObject.SetActive(false); workPin.gameObject.SetActive(false); routeLine.enabled = false; }
         }
@@ -97,12 +160,15 @@ namespace Wonderland
             if (followKind == 1) { var list = World.People.People; for (int i = 0; i < list.Count; i++) if (list[i].seed == followSeed) return i; }
             else if (followKind == 2) { var list = World.Animals.Animals; for (int i = 0; i < list.Count; i++) if (list[i].seed == followSeed) return i; }
             else if (followKind == 3) { var list = World.Buildings.Houses; for (int i = 0; i < list.Count; i++) if (Mathf.Abs(list[i].x - followHouse.x) < 1e-4f && Mathf.Abs(list[i].z - followHouse.y) < 1e-4f) return i; }
+            else if (followKind == 4) return World.Trains.Trains.IndexOf(followTrain);
+            else if (followKind == 5) return World.Traffic.Vehicles.IndexOf(followVehicle);
             return -1;
         }
 
         private void UpdateInspection(float dt)
         {
             if (infoMode != 0) { infoTimer -= dt; if (infoTimer <= 0f) { infoTimer = 0.5f; if (infoMode == 1) ShowStats(); else if (infoMode == 3) ShowPerf(); } }
+            SyncViewer();
             if (followKind == 0) return;
             int i = Followed();
             if (i < 0) { Say(followKind == 1 ? "They have left the world" : followKind == 3 ? "It was taken down" : "It has gone"); CloseCard(); return; }
@@ -120,8 +186,18 @@ namespace Wonderland
                 if (refresh)
                 {
                     var c = people.CardOf(i);
+                    // Out in the household's car: driving somewhere, or parked up at a place they went to.
+                    if (people.IsHidden(i) && World.Traffic.DrivenBy(followSeed) is { } car)
+                    {
+                        int at = World.Buildings.Nearest(car.Path.Count > 0 ? car.Path[^1] : car.Position, 0.15f);
+                        string place = at >= 0 ? "the " + Catalog.Get(World.Buildings.Houses[at].variant).Name.ToLower() : "town";
+                        c.Now = car.State == TrafficSystem.Mode.Driving ? (car.ToHome ? "driving home" : $"driving to {place}") : $"at {place} (came by car)";
+                    }
                     PersonModel(c.Style, c.Child);
-                    Palette.ShowCard(c.Name, $"{c.Role} · {c.Stage}", PersonBody(c), model, CloseCard);
+                    string body = PersonBody(c);
+                    if (World.Cctv.FollowSeed == followSeed && World.Cctv.FollowView != null) body = new CardText().Row("Camera", World.Cctv.FollowView) + body;
+                    Palette.ShowCard(c.Name, $"{c.Role} · {c.Stage}", body, model, CloseCard);
+                    Palette.SetCardAction(World.Cctv.FollowSeed == followSeed ? "Camera on" : "Camera", World.Cctv.FollowSeed == followSeed, ToggleCamera);
                     home = c.HomeAt; work = c.WorkAt;
                     Pin(homePin, home); Pin(workPin, work);
                     people.RouteOf(i, route);
@@ -140,6 +216,42 @@ namespace Wonderland
                     model.Clear();
                     model.Add((HouseFactory.Get(h.variant, h.style), Matrix4x4.Rotate(Quaternion.Euler(0f, 180f, 0f))));
                     Palette.ShowCard(c.Name, c.Status != null ? $"{c.Kind} · {CardText.Tint(c.Status, c.StatusColour)}" : c.Kind, PlaceBody(c, i), model, CloseCard);
+                    Palette.SetCardAction(null, false, null);
+                    Pin(homePin, null); Pin(workPin, null);
+                    routeLine.enabled = false;
+                }
+            }
+            else if (followKind == 4)
+            {
+                var t = followTrain;
+                head = World.Trains.CentrePosition(t) + Vector3.up * 0.07f;
+                if (refresh)
+                {
+                    var said = World.Trains.Describe(t).Split(" - ");
+                    model.Clear();
+                    if (t.Cars.Length > 0 && t.Cars[0].Body.TryGetComponent<MeshFilter>(out var mf)) model.Add((mf.sharedMesh, Matrix4x4.Rotate(Quaternion.Euler(0f, 150f, 0f))));
+                    var body = new CardText().Section("Now").Row("Doing", said.Length > 1 ? said[1] : said[0]).Row("Train", said[0]).Row("Length", $"{TrainSystem.CarsOf(t)} {TrainSystem.CarWord(t.Kind, TrainSystem.CarsOf(t))}");
+                    if (trainCamera) body.Row("Camera", "from the front of the engine");
+                    Palette.ShowCard(said[0], t.Running ? "running" : "standing", body.ToString(), model, CloseCard);
+                    Palette.SetCardAction(trainCamera ? "Camera on" : "Camera", trainCamera, ToggleCamera);
+                    Pin(homePin, null); Pin(workPin, null);
+                    routeLine.enabled = false;
+                }
+            }
+            else if (followKind == 5)
+            {
+                var v = followVehicle;
+                head = new Vector3(v.Position.x, v.Height + 0.04f, v.Position.y);
+                if (refresh)
+                {
+                    model.Clear();
+                    if (v.Root.TryGetComponent<MeshFilter>(out var mf)) model.Add((mf.sharedMesh, Matrix4x4.Rotate(Quaternion.Euler(0f, 150f, 0f))));
+                    var said = World.Traffic.Describe(v).Split(" - ");
+                    var body = new CardText().Section("Now").Row("Doing", said.Length > 1 ? said[1] : "-");
+                    int who = World.People.IndexOfSeed(v.Driver);
+                    if (who >= 0) body.Row("Driver", World.People.NameOf(who));
+                    Palette.ShowCard(said[0], v.Roams ? "drives about the town" : v.Base >= 0 ? "on call" : "a household's", body.ToString(), model, CloseCard);
+                    Palette.SetCardAction(null, false, null);
                     Pin(homePin, null); Pin(workPin, null);
                     routeLine.enabled = false;
                 }
@@ -156,6 +268,7 @@ namespace Wonderland
                     model.Add((AnimalFactory.Body(c.Kind), Matrix4x4.identity));
                     model.Add((AnimalFactory.Head(c.Kind), Matrix4x4.Translate(AnimalFactory.NeckOffset(c.Kind))));
                     Palette.ShowCard(c.Name ?? c.Species, c.Name != null ? c.Species : "wild - no name", body.ToString(), model, CloseCard);
+                    Palette.SetCardAction(null, false, null);
                     Pin(homePin, null); Pin(workPin, null);
                     routeLine.positionCount = 2;
                     routeLine.SetPosition(0, root.TransformPoint(c.Position + Vector3.up * 0.004f));
@@ -166,6 +279,42 @@ namespace Wonderland
             followMarker.gameObject.SetActive(true);
             followMarker.position = root.TransformPoint(head + Vector3.up * (Mathf.Sin(Time.time * 3f) * 0.003f));
             followMarker.rotation = root.rotation * Quaternion.Euler(0f, Time.time * 90f, 0f);
+        }
+
+        private Transform targetRing;
+
+        /// <summary>A soft gold ring on the ground under whatever grip would select now (none: hidden).</summary>
+        private void ShowTarget()
+        {
+            Vector3? at = null; float r = 0.01f;
+            if (peekPerson >= 0) { var p = World.People.PovOf(peekPerson); at = new Vector3(p.Eye.x, p.Eye.y - 0.027f, p.Eye.z); r = 0.009f; }
+            else if (peekAnimal >= 0) { var q = World.Animals.PositionOf(peekAnimal); at = new Vector3(q.x, World.Terrain.SurfaceAt(q.x, q.y), q.y); r = 0.016f; }
+            else if (peekVehicle != null) { at = new Vector3(peekVehicle.Position.x, peekVehicle.Height, peekVehicle.Position.y); r = VehicleFactory.Length(peekVehicle.Kind) * 0.62f; }
+            else if (peekTrain != null) { var c = World.Trains.LocoPosition(peekTrain); at = c; r = 0.04f; }
+            else if (peekHouse >= 0) { var h = World.Buildings.Houses[peekHouse]; var e = Catalog.Get(h.variant).Half; at = new Vector3(h.x, World.Terrain.SurfaceAt(h.x, h.z), h.z); r = Mathf.Max(e.x, e.y) + 0.01f; }
+            if (targetRing == null)
+            {
+                var b = new MeshBuilder();
+                var glow = Pal.Glow(new Color(1f, 0.85f, 0.3f));
+                const int seg = 32;
+                for (int k = 0; k < seg; k++)
+                {
+                    float a0 = k * Mathf.PI * 2f / seg, a1 = (k + 1) * Mathf.PI * 2f / seg;
+                    Vector3 P(float a, float rr) => new(Mathf.Cos(a) * rr, 0f, Mathf.Sin(a) * rr);
+                    b.AddQuad(P(a0, 0.86f), P(a0, 1f), P(a1, 1f), P(a1, 0.86f), glow);
+                }
+                var go = new GameObject("Target ring");
+                go.AddComponent<MeshFilter>().sharedMesh = b.ToMesh("Target ring");
+                var mr = go.AddComponent<MeshRenderer>();
+                mr.sharedMaterial = World.Materials.Lit; mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                targetRing = go.transform;
+            }
+            targetRing.gameObject.SetActive(at.HasValue);
+            if (!at.HasValue) return;
+            var wt = World.transform;
+            float pulse = 1f + Mathf.Sin(Time.time * 6f) * 0.06f;
+            targetRing.SetPositionAndRotation(wt.TransformPoint(at.Value + Vector3.up * 0.0015f), wt.rotation);
+            targetRing.localScale = Vector3.one * r * pulse * wt.lossyScale.x;
         }
 
         private void Pin(Transform pin, Vector3? at)

@@ -281,6 +281,38 @@ namespace Wonderland
         }
 
         public Vector3 LocoPosition(Train t) => t.Cars[0].Body.localPosition;
+
+        /// <summary>The train the pointer ray is on (local space, unit direction), nearer than <paramref name="maxT"/>; null if none.</summary>
+        public Train PickRay(Vector3 o, Vector3 d, float maxT, out float t)
+        {
+            Train best = null; float bestScore = 1f; t = float.MaxValue;
+            foreach (var train in Trains)
+            {
+                if (train.Cars == null) continue;
+                foreach (var car in train.Cars)
+                {
+                    if (car?.Body == null || !car.Body.gameObject.activeInHierarchy) continue;
+                    var fwd = car.Body.localRotation * Vector3.forward;
+                    var mid = car.Body.localPosition + car.Body.localRotation * Vector3.up * 0.02f;
+                    float score = RayPick.Score(o, d, mid + fwd * car.Layout.Rear * 0.8f, mid + fwd * car.Layout.Front * 0.8f, maxT, out float ti);
+                    if (score < bestScore) { bestScore = score; best = train; t = ti; }
+                }
+            }
+            return best;
+        }
+
+        /// <summary>
+        /// A passenger's view: just outside a window of the first carriage behind the engine (the engine's cab for a
+        /// railcar or a lone engine), looking out sideways and a little ahead - the countryside going by.
+        /// </summary>
+        public void WindowView(Train t, out Vector3 eye, out Quaternion look)
+        {
+            var car = t.Cars.Length > 1 ? t.Cars[1] : t.Cars[0];
+            var rot = car.Body.localRotation;
+            float half = car.Body.TryGetComponent<MeshFilter>(out var f) && f.sharedMesh != null ? f.sharedMesh.bounds.extents.x : 0.013f;
+            eye = car.Body.localPosition + rot * new Vector3(half + 0.0025f, 0.024f, 0f);
+            look = rot * Quaternion.Euler(6f, 62f, 0f);
+        }
         public Quaternion LocoRotation(Train t) => t.Cars[0].Body.localRotation;
         public Vector3 CentrePosition(Train t) => PointAt(t.Path, t.Length * 0.5f, out _);
 

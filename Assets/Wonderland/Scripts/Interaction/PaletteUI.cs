@@ -199,7 +199,7 @@ namespace Wonderland
             var header = Quad("Header", p.Root, width - 0.008f, band, 0.012f, new Color(0.26f, 0.22f, 0.3f, 0.95f), new Color(0.2f, 0.17f, 0.24f, 0.95f), -0.001f, 2992);
             header.transform.localPosition = new Vector3(0f, top - 0.004f - band / 2, -0.001f);
             float textLeft = portrait ? 0.044f : 0.008f;
-            float textWidth = width - textLeft - 0.036f;
+            float textWidth = width - textLeft - (portrait ? 0.084f : 0.036f);   // (the card has a second button in its header)
             p.Title = Text("Title", p.Root, "", new Vector3(-width / 2 + textLeft + textWidth / 2, top - 0.019f, -0.002f), new Vector2(textWidth, 0.016f), 0.085f, TextAlignmentOptions.Left);
             p.Title.color = new Color(1f, 0.88f, 0.6f); p.Title.fontStyle = FontStyles.Bold; p.Title.fontSizeMin = 0.06f;
             p.Subtitle = Text("Subtitle", p.Root, "", new Vector3(-width / 2 + textLeft + textWidth / 2, top - 0.037f, -0.002f), new Vector2(textWidth, 0.013f), 0.05f, TextAlignmentOptions.Left);
@@ -269,6 +269,23 @@ namespace Wonderland
         private Vector3 portraitCentre;
 
         public void HideCard() { if (card != null) card.Root.gameObject.SetActive(false); }
+
+        private PaletteButton cardAction;
+
+        /// <summary>A button in the card's header, beside Close (a villager's "Camera"); null label removes it.</summary>
+        public void SetCardAction(string label, bool selected, Action click)
+        {
+            if (card == null) return;
+            if (label == null) { if (cardAction) cardAction.gameObject.SetActive(false); return; }
+            if (cardAction == null)
+            {
+                float top = PanelHeight / 2;
+                cardAction = Button("Card action", card.Root, new Vector3(CardWidth / 2 - 0.019f - 0.037f, top - 0.019f, 0f), new Vector2(0.044f, 0.018f), label, false);
+            }
+            cardAction.gameObject.SetActive(true);
+            cardAction.Label.text = label; cardAction.Selected = selected; cardAction.OnClick = click;
+            cardAction.ApplyVisuals();
+        }
         public bool CardShown => card != null && card.Root.gameObject.activeSelf;
         public string CardTitle => card != null ? card.Title.text : null;
 

@@ -200,8 +200,8 @@ namespace Wonderland
             set
             {
                 Refresh();
-                if (value >= 0 && value < cameras.Count) { selected = Pos(value); selectedTrain = null; viewerTimer = 0f; }
-                else if (value >= cameras.Count && value < Feeds) { selectedTrain = world.Trains.Trains[value - cameras.Count]; viewerTimer = 0f; }
+                if (value >= 0 && value < cameras.Count) { selected = Pos(value); selectedTrain = null; viewerTimer = 0f; FollowSeed = 0; }
+                else if (value >= cameras.Count && value < Feeds) { selectedTrain = world.Trains.Trains[value - cameras.Count]; viewerTimer = 0f; FollowSeed = 0; }
             }
         }
 
@@ -296,9 +296,11 @@ namespace Wonderland
             Refresh();
             viewerTimer -= dt; wallTimer -= dt;
             MountCab();
+            bool following = FollowSeed != 0 && FollowVillager(dt);
+            if (following && viewerTimer <= 0f) { viewerTimer += 1f / ViewerHz; if (viewerTimer < 0f) viewerTimer = 0f; FilmFrom(povPos, povRot, viewer); FilmedForViewer++; return; }
             int feeds = Feeds;
             if (feeds == 0) return;
-            if (Watching && viewerTimer <= 0f) { viewerTimer += 1f / ViewerHz; if (viewerTimer < 0f) viewerTimer = 0f; Film(Selected, viewer); FilmedForViewer++; return; }
+            if (Watching && !following && viewerTimer <= 0f) { viewerTimer += 1f / ViewerHz; if (viewerTimer < 0f) viewerTimer = 0f; Film(Selected, viewer); FilmedForViewer++; return; }
             if (studios.Count > 0 && wallTimer <= 0f && StudioInView())
             {
                 wallTimer = WallSeconds;
@@ -319,18 +321,20 @@ namespace Wonderland
             if (TrainOf(k) is { } train)
             {
                 TrainEye(train, out var eye, out var look);
-                film.transform.position = transform.TransformPoint(eye + look * new Vector3(0f, 0f, 0.004f));
-                film.transform.rotation = transform.rotation * look;
+                FilmFrom(eye + look * new Vector3(0f, 0f, 0.004f), look, into);
             }
-            else if (k < 0 || k >= cameras.Count) return;
-            else
-            {
-                film.transform.position = transform.TransformPoint(Eye(k) + Look(k) * new Vector3(0f, 0f, 0.008f));
-                film.transform.rotation = transform.rotation * Look(k);
-            }
+            else if (k >= 0 && k < cameras.Count) FilmFrom(Eye(k) + Look(k) * new Vector3(0f, 0f, 0.008f), Look(k), into);
+            if (k >= 0) LastFilmed = k;
+        }
+
+        /// <summary>Films from a point of the world (local) looking one way, into a picture.</summary>
+        private void FilmFrom(Vector3 eye, Quaternion look, RenderTexture into)
+        {
+            film.transform.position = transform.TransformPoint(eye);
+            film.transform.rotation = transform.rotation * look;
             float scale = transform.lossyScale.x;
             film.nearClipPlane = 0.004f * scale; film.farClipPlane = 6f * scale;
-            Filmed++; LastFilmed = k;
+            Filmed++;
             if (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Null) return;   // batch tests: nothing to draw with
             var request = new RenderPipeline.StandardRequest { destination = into };
             if (RenderPipeline.SupportsRenderRequest(film, request)) RenderPipeline.SubmitRenderRequest(film, request);
@@ -338,7 +342,7 @@ namespace Wonderland
         }
 
         /// <summary>Films the watched camera into the viewer right now (renders, tests).</summary>
-        public void FilmNow() { Refresh(); if (Feeds > 0) Film(Selected, viewer); }
+        public void FilmNow() { Refresh(); if (FollowSeed != 0) FilmFrom(povPos, povRot, viewer); else if (Feeds > 0) Film(Selected, viewer); }
 
         /// <summary>Copies the viewer picture into a texture (the renders save it as an image).</summary>
         public Texture2D Snapshot()
@@ -350,6 +354,124 @@ namespace Wonderland
             tex.Apply();
             RenderTexture.active = keep;
             return tex;
+        }
+
+        // ------------------------------------------------------------------ following a villager
+
+        /// <summary>The villager (seed) whose day the viewer follows (0: nobody) - see <see cref="FollowVillager"/>.</summary>
+        public int FollowSeed;
+        /// <summary>Where the followed villager's camera is: "through their eyes", "from the train window", "outside the bakery"...</summary>
+        public string FollowView { get; private set; }
+        /// <summary>Something is being filmed for the viewer.</summary>
+        public bool Live => Watching || FollowSeed != 0;
+
+        /// <summary>
+        /// Whether figures at a local point may be on the viewer: anywhere for the Watch tool's cameras (they can look
+        /// anywhere), within a metre of the followed villager's camera when following. Those are drawn and kept moving
+        /// smoothly even out of the player's sight.
+        /// </summary>
+        public bool Filming(Vector3 local) => Watching || FollowSeed != 0 && (local - povPos).sqrMagnitude < 1f;
+
+        private Vector3 povPos;
+        private Quaternion povRot = Quaternion.identity;
+        /// <summary>Where the followed villager's camera is and which way it looks (local; tests and renders).</summary>
+        public Vector3 FollowEye => povPos;
+        public Quaternion FollowLook => povRot;
+        private string povMode;
+
+        /// <summary>
+        /// Keeps the camera with the followed villager, whatever they are doing: through their eyes on foot (and sitting,
+        /// on a boat or a carousel), out of their carriage window on a train, out of the passenger window when they are
+        /// out in the household's car, and - when they have gone indoors, where nothing is modelled - a steady view of
+        /// the building from outside. Within one view it glides (smoothed position and turn); from one view to the next
+        /// it cuts, as a film would. False when they are no longer in the world (following stops).
+        /// </summary>
+        private bool FollowVillager(float dt)
+        {
+            int i = world.People.IndexOfSeed(FollowSeed);
+            if (i < 0) { FollowSeed = 0; FollowView = null; povMode = null; return false; }
+            var p = world.People.PovOf(i);
+            Vector3 eye; Quaternion look; string mode;
+            var car = p.Hidden ? world.Traffic.DrivenBy(FollowSeed) : null;
+            if (p.Train != null && world.Trains.Trains.Contains(p.Train))
+            {
+                world.Trains.WindowView(p.Train, out eye, out look);
+                mode = "train " + world.Trains.Trains.IndexOf(p.Train); FollowView = "from the train window";
+            }
+            else if (car != null && car.State == TrafficSystem.Mode.Driving)
+            {
+                // The front passenger window of the car.
+                var rot = car.Root.localRotation;
+                eye = car.Root.localPosition + rot * new Vector3(0.0125f, 0.016f, 0.004f);
+                look = rot * Quaternion.Euler(5f, 48f, 0f);
+                mode = "car"; FollowView = "from the car";
+            }
+            else if (p.Hidden)
+            {
+                // Indoors (or parked up at a place): the building, from outside.
+                int house = car != null ? world.Buildings.Nearest(car.Position, 0.15f) : p.House;
+                if (house >= 0) { BuildingView(house, out eye, out look); FollowView = "outside the " + Catalog.Get(world.Buildings.Houses[house].variant).Name.ToLower(); }
+                else
+                {
+                    var at = new Vector3(p.Where.x, world.Terrain.SurfaceAt(p.Where.x, p.Where.y), p.Where.y);
+                    eye = at + new Vector3(0f, 0.09f, -0.12f); look = Quaternion.LookRotation(at - eye, Vector3.up);
+                    FollowView = "where they went in";
+                }
+                mode = "house " + house;
+            }
+            else
+            {
+                // With them, at eye level: just over their shoulder (their hat at the bottom of the picture), looking where
+                // they look - someone they stand talking to stays in the picture instead of filling it.
+                var turn = Quaternion.Euler(0f, p.Heading, 0f);
+                float s = p.Child ? 0.72f : 1f;
+                eye = p.Eye + turn * new Vector3(0.004f * s, 0.006f * s, -0.016f * s);
+                look = turn * Quaternion.Euler(11f, 0f, 0f);
+                mode = "eyes"; FollowView = "over their shoulder";
+            }
+            if (mode != povMode) { povMode = mode; povPos = eye; povRot = look; viewerTimer = 0f; return true; }   // a cut
+            float glide = 1f - Mathf.Exp(-dt * (mode == "eyes" ? 7f : 10f)), turnRate = 1f - Mathf.Exp(-dt * (mode == "eyes" ? 4f : 8f));
+            povPos = Vector3.Lerp(povPos, eye, glide);
+            povRot = Quaternion.Slerp(povRot, look, turnRate);
+            return true;
+        }
+
+        /// <summary>
+        /// A steady view of a building from outside: in front of it, a little above, looking at its door - or from
+        /// another side when the front is crowded (inside another building, or under the ground).
+        /// </summary>
+        private void BuildingView(int house, out Vector3 eye, out Quaternion look)
+        {
+            var h = world.Buildings.Houses[house];
+            var bp = Catalog.Get(h.variant);
+            var centre = new Vector3(h.x, world.Terrain.SurfaceAt(h.x, h.z), h.z);
+            var target = centre + Vector3.up * Mathf.Max(0.02f, bp.Height * 0.4f);
+            float away = Mathf.Max(bp.Half.x, bp.Half.y) + 0.1f, up = Mathf.Max(0.05f, bp.Height * 0.6f);
+            eye = target; look = Quaternion.identity;
+            for (int k = 0; k < 8; k++)
+            {
+                float yaw = h.rotation + 180f + (k % 2 == 0 ? 1 : -1) * ((k + 1) / 2) * 45f;   // the front first, then round
+                var dir = Quaternion.Euler(0f, yaw, 0f) * Vector3.forward;
+                var at = centre + dir * away + Vector3.up * up;
+                at.y = Mathf.Max(at.y, world.Terrain.SurfaceAt(at.x, at.z) + 0.03f);
+                eye = at;
+                if (!InsideBuilding(at, house)) break;
+            }
+            look = Quaternion.LookRotation(target - eye, Vector3.up);
+        }
+
+        private bool InsideBuilding(Vector3 p, int except)
+        {
+            var houses = world.Buildings.Houses;
+            for (int j = 0; j < houses.Count; j++)
+            {
+                if (j == except) continue;
+                var h = houses[j];
+                var bp = Catalog.Get(h.variant);
+                var q = Quaternion.Inverse(Quaternion.Euler(0f, h.rotation, 0f)) * new Vector3(p.x - h.x, 0f, p.z - h.z);
+                if (Mathf.Abs(q.x) < bp.Half.x + 0.012f && Mathf.Abs(q.z) < bp.Half.y + 0.012f && p.y < world.Terrain.SurfaceAt(h.x, h.z) + bp.Height + 0.01f) return true;
+            }
+            return false;
         }
 
         // ------------------------------------------------------------------ saving

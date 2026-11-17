@@ -87,7 +87,7 @@ namespace Wonderland
             WaterView.Init(Terrain, materials.Water);
             Animals = Child<AnimalSystem>("Animals");
             Animals.Init(Terrain, materials.Lit, Habitat, (a, b) => Paths.CrossesBarrier(a, b), Threat);
-            Animals.Watched = () => Cctv != null && Cctv.Watching;
+            Animals.Watched = p => Cctv != null && Cctv.Filming(p);
             Animals.Resting = () => Clock.Hour >= 22.5f || Clock.Hour < 5.5f;
             People = Child<PeopleSystem>("Villagers");
             People.Init(this, materials.Lit);
@@ -101,6 +101,8 @@ namespace Wonderland
             Paths.Bridges = Bridges;
             Traffic = Child<TrafficSystem>("Traffic");
             Traffic.Init(this, materials.Lit);
+            Traffic.TakeDriver = (home, seconds) => People.TakeDriver(home, seconds);
+            Traffic.StillIn = seed => People.Indoors(seed);
             Sounds = Child<SoundSystem>("Sound");
             Sounds.Init(this);
             Cctv = Child<CctvSystem>("CCTV");

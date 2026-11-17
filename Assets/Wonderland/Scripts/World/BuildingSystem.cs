@@ -326,9 +326,16 @@ namespace Wonderland
         }
 
         /// <summary>Nearest house whose footprint (plus height) the local ray passes through.</summary>
-        public int Pick(Vector3 origin, Vector3 direction)
+        public int Pick(Vector3 origin, Vector3 direction) => Pick(origin, direction, out _);
+
+        /// <summary>
+        /// The building the ray hits first, and how far along the ray (<paramref name="bestT"/>, in units of the
+        /// direction's length). <paramref name="walls"/>: only the lower part of each box (its walls; a roof slopes away,
+        /// so the top of the box is mostly air) - for whether a building hides what is behind it.
+        /// </summary>
+        public int Pick(Vector3 origin, Vector3 direction, out float bestT, bool walls = false)
         {
-            int best = -1; float bestT = float.MaxValue;
+            int best = -1; bestT = float.MaxValue;
             for (int i = 0; i < Houses.Count; i++)
             {
                 var h = Houses[i];
@@ -336,7 +343,7 @@ namespace Wonderland
                 var inv = Quaternion.Inverse(Quaternion.Euler(0f, h.rotation, 0f));
                 var y = renderers[i].transform.localPosition.y;
                 var o = inv * (origin - new Vector3(h.x, y, h.z)); var d = inv * direction;
-                float hh = Mathf.Max(0.03f, Catalog.Get(h.variant).Height);
+                float hh = Mathf.Max(0.03f, Catalog.Get(h.variant).Height) * (walls ? 0.55f : 1f);
                 var box = new Bounds(new Vector3(0f, hh / 2f, 0f), new Vector3(Mathf.Max(e.x, 0.012f) * 2f, hh, Mathf.Max(e.y, 0.012f) * 2f));
                 if (box.IntersectRay(new Ray(o, d), out float t) && t < bestT) { bestT = t; best = i; }
             }

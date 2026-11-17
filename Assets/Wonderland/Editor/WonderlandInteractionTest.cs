@@ -366,22 +366,49 @@ namespace Wonderland.Editor
             // The card: trigger on a villager with the Life tool opens theirs, and follows them.
             ClickButton(hand, "Life");
             if (world.People.People.Count == 0) world.PlacePerson(new Vector3(0.1f, 0f, 0.1f), 0, 77);
-            int pick = 0;
-            for (int i = 0; i < world.People.People.Count; i++) if (!world.People.IsHidden(i)) { pick = i; break; }
+            // (someone in plain sight from the hand - the pointer can't see through walls): a villager on open ground
+            var lo = world.transform.InverseTransformPoint(hand);
+            for (float gz = -0.2f; gz <= 0.3f && world.People.People.Count < 100; gz += 0.05f)
+            {
+                bool placed = false;
+                for (float gx = -0.3f; gx <= 0.3f; gx += 0.05f)
+                {
+                    var open = new Vector3(gx, world.Terrain.SurfaceAt(gx, gz) + 0.015f, gz);
+                    var to = open - lo;
+                    bool walled = world.Buildings.Pick(lo, to.normalized, out float wallT, true) >= 0 && wallT < to.magnitude;
+                    if (walled || !world.People.Walkable(new Vector2(gx, gz)) || world.People.Nearest(open, 0.04f) >= 0) continue;
+                    if (world.PlacePerson(new Vector3(gx, 0f, gz), 0, 4242) == null) { placed = true; break; }
+                }
+                if (placed) break;
+            }
+            int pick = world.People.People.Count - 1;
             world.Clock.Mode = ClockMode.Paused;
             var who = world.People.PositionOf(pick);
-            var atWho = world.transform.TransformPoint(new Vector3(who.x, world.Terrain.SurfaceAt(who.x, who.y), who.y));
+            var atWho = world.transform.TransformPoint(new Vector3(who.x, world.Terrain.SurfaceAt(who.x, who.y) + 0.015f, who.y));   // (at their middle)
             int count = world.People.People.Count;
+            tools.CloseCards();
             Frame(hand, atWho, true); Frame(hand, atWho, false);
             var cardPanel = palette.transform.Find("Card");
             Check(palette.CardShown && world.People.People.Count == count && cardPanel != null, $"Trigger on a villager opens their card instead of placing another ({world.People.NameOf(pick)})" + (palette.CardShown ? "" : $" [following {tools.Following}, hover {tools.HoverPerson}, tool {tools.Tool}, people {count}->{world.People.People.Count}, hidden {world.People.IsHidden(pick)}]"));
+            // Their camera: on as they are selected, on the monitor over the palette, filmed through their eyes; the
+            // card's Camera button turns it off.
+            ToolController.FollowCamera = true;
+            var viewer = palette.transform.Find("Viewer");
+            int seedOf = world.People.People[pick].seed, filmedBefore = world.Cctv.FilmedForViewer;
+            for (int k = 0; k < 6; k++) world.Cctv.Step(0.1f);
+            Check(world.Cctv.FollowSeed == seedOf && viewer != null && viewer.gameObject.activeSelf && world.Cctv.FilmedForViewer > filmedBefore && world.Cctv.FollowView != null,
+                $"Selecting a villager turns on their camera: the monitor over the palette shows them {world.Cctv.FollowView} ({world.Cctv.FilmedForViewer - filmedBefore} pictures)");
+            ClickButton(hand, "Camera on");
+            Check(world.Cctv.FollowSeed == 0 && !viewer.gameObject.activeSelf && palette.CardShown, "The card's Camera button turns it off (the card stays)");
+            ToolController.FollowCamera = true;
             // Any tool: pointing at someone names them; grip opens their card.
-            palette.HideCard();
+            tools.CloseCards();
             ClickButton(hand, "Build");
             Frame(hand, atWho, false);
             string named = palette.HintText;
+            string peeked = $"peek person {tools.PeekPerson}, house {tools.PeekHouse}";
             Frame(hand, atWho, false, grip: true); Frame(hand, atWho, false);
-            Check(palette.CardShown && named.Contains(world.People.NameOf(pick)) && tools.Tool == Tool.Houses, $"With any tool, pointing at a villager names them and grip opens their card (\"{named}\")");
+            Check(palette.CardShown && named.Contains(world.People.NameOf(pick)) && tools.Tool == Tool.Houses, $"With any tool, pointing at a villager names them and grip opens their card (\"{named}\") [{peeked}]");
             // A building's card: grip on it (here with the Build tool's neighbour, the Paths tool).
             ClickButton(hand, "Roads");
             int someHouse = world.Buildings.Houses.Count - 1;
@@ -391,6 +418,43 @@ namespace Wonderland.Editor
                 var roof = world.transform.TransformPoint(new Vector3(hh.x, world.Buildings.TopOf(someHouse) - 0.01f, hh.z));
                 Frame(hand, roof, false); Frame(hand, roof, false, grip: true); Frame(hand, roof, false);
                 Check(palette.CardShown && palette.CardTitle == Catalog.Get(hh.variant).Name, $"Grip on a building opens its card (\"{palette.CardTitle}\")");
+            }
+            // Pointing at someone puts a gold ring under them; grip on another villager moves the camera to them.
+            tools.CloseCards();
+            Frame(hand, atWho, false); Frame(hand, atWho, false);
+            var ring = GameObject.Find("Target ring");
+            bool ringed = ring != null && ring.activeSelf && (new Vector2(ring.transform.position.x, ring.transform.position.z) - new Vector2(atWho.x, atWho.z)).magnitude < 0.03f;
+            Frame(hand, atWho, false, grip: true); Frame(hand, atWho, false);
+            int firstSeed = world.Cctv.FollowSeed;
+            int second = -1;
+            for (float gx = -0.3f; gx <= 0.3f && second < 0; gx += 0.05f)
+            {
+                var open = new Vector3(gx, world.Terrain.SurfaceAt(gx, 0.25f) + 0.015f, 0.25f);
+                var to = open - world.transform.InverseTransformPoint(hand);
+                if (world.Buildings.Pick(world.transform.InverseTransformPoint(hand), to.normalized, out float wt2, true) >= 0 && wt2 < to.magnitude) continue;
+                if (!world.People.Walkable(new Vector2(gx, 0.25f)) || world.People.Nearest(open, 0.04f) >= 0) continue;
+                if (world.PlacePerson(new Vector3(gx, 0f, 0.25f), 1, 4343) == null) second = world.People.People.Count - 1;
+            }
+            if (second >= 0)
+            {
+                var p2 = world.People.PositionOf(second);
+                var atSecond = world.transform.TransformPoint(new Vector3(p2.x, world.Terrain.SurfaceAt(p2.x, p2.y) + 0.015f, p2.y));
+                Frame(hand, atSecond, false); Frame(hand, atSecond, false, grip: true); Frame(hand, atSecond, false);
+            }
+            Check(ringed && firstSeed != 0 && second >= 0 && world.Cctv.FollowSeed == world.People.People[second].seed && palette.CardTitle == world.People.NameOf(second),
+                $"A gold ring marks who grip would select; grip on another villager moves the camera to them ({palette.CardTitle})");
+            // Grip on a train: its card, with its camera.
+            if (world.Trains.Trains.Count > 0)
+            {
+                var t = world.Trains.Trains[0];
+                var at = world.transform.TransformPoint(world.Trains.LocoPosition(t) + Vector3.up * 0.02f);
+                tools.CloseCards();
+                Frame(hand, at, false); Frame(hand, at, false, grip: true); Frame(hand, at, false);
+                Check(palette.CardShown && Find("Camera") != null && Find("Camera").gameObject.activeInHierarchy, $"Grip on a train opens its card, with its camera (\"{palette.CardTitle}\")");
+                ClickButton(hand, "Camera");
+                Check(world.Cctv.Watching && palette.transform.Find("Viewer").gameObject.activeSelf, "...which rides along on the monitor");
+                tools.CloseCards();
+                Check(!world.Cctv.Watching && !palette.transform.Find("Viewer").gameObject.activeSelf, "Close puts the camera away");
             }
             world.Clock.Mode = ClockMode.Normal;
             // The clock and the performance light are always on the palette.

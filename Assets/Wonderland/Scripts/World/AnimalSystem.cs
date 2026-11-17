@@ -145,6 +145,23 @@ namespace Wonderland
         }
 
         public Vector2 PositionOf(int i) => agents[i].Position;
+
+        /// <summary>The animal the pointer ray is on (local space, unit direction), nearer than <paramref name="maxT"/>; -1 if none.</summary>
+        public int PickRay(Vector3 o, Vector3 d, float maxT, out float t)
+        {
+            int best = -1; float bestScore = 1f; t = float.MaxValue;
+            for (int i = 0; i < agents.Count; i++)
+            {
+                var a = agents[i];
+                if (!a.Body.gameObject.activeSelf) continue;
+                var p = a.Body.localPosition;
+                var fwd = new Vector3(Mathf.Sin(a.Heading * Mathf.Deg2Rad), 0f, Mathf.Cos(a.Heading * Mathf.Deg2Rad));
+                var half = AnimalFactory.Body(a.Kind).bounds.extents;
+                float score = RayPick.Score(o, d, p + Vector3.up * half.y - fwd * half.z * 0.6f, p + Vector3.up * half.y + fwd * half.z * 0.6f, maxT, out float ti);
+                if (score < bestScore) { bestScore = score; best = i; t = ti; }
+            }
+            return best;
+        }
         public bool IsFleeing(int i) => agents[i].Fleeing;
 
         private bool Suits(Agent a, Vector2 p) => suits == null || suits(p, a.Kind, a.Home);
@@ -170,7 +187,7 @@ namespace Wonderland
         private readonly FigureBatch batch = new();
         private bool drawnTogether;
         /// <summary>Set by the world: a CCTV feed is being watched (far animals are drawn too).</summary>
-        public System.Func<bool> Watched;
+        public System.Func<Vector3, bool> Watched;   // (local position: on a camera feed)
 
         /// <summary>All the animals drawn together, a draw per body and head mesh (see <see cref="FigureBatch"/>).</summary>
         private void LateUpdate()
@@ -183,7 +200,7 @@ namespace Wonderland
                 return;
             }
             drawnTogether = true;
-            batch.Begin(material, Watched != null && Watched());
+            batch.Begin(material, false, p => Watched != null && Watched(transform.InverseTransformPoint(p)));
             foreach (var a in agents)
             {
                 if (!a.Body.gameObject.activeSelf || !batch.Visible(a.Body.position)) continue;
@@ -202,7 +219,7 @@ namespace Wonderland
         public void Step(float dt)
         {
             tick++;
-            bool smart = PerfSettings.SmartVillagers && !(Watched != null && Watched());   // (a CCTV feed sees far and behind)
+            bool smart = PerfSettings.SmartVillagers;
             var eye = Camera.main != null ? (Vector3?)transform.InverseTransformPoint(Camera.main.transform.position) : null;
             var viewDir = Camera.main != null ? transform.InverseTransformDirection(Camera.main.transform.forward) : Vector3.forward;
             float drawn = WonderlandWorld.MiniatureCullDistance / Mathf.Max(transform.lossyScale.x, 1e-3f) + 0.1f;
@@ -215,7 +232,8 @@ namespace Wonderland
                 // Coarse (Smart): behind the player or beyond drawing distance, it moves every fourth frame, catching up the
                 // time in between.
                 float dtA = dt;
-                if (smart && eye.HasValue)
+                bool onFeed = Watched != null && Watched(new Vector3(a.Position.x, a.Ground, a.Position.y));   // (a camera feed sees it: it moves smoothly)
+                if (smart && eye.HasValue && !onFeed)
                 {
                     var rel = new Vector3(a.Position.x, a.Ground, a.Position.y) - eye.Value;
                     a.Pending += dt;
@@ -225,7 +243,7 @@ namespace Wonderland
                 a.Timer -= dtA;
                 if (eye.HasValue && (beat & 7) == 0) Detail(a, (new Vector3(a.Position.x, a.Ground, a.Position.y) - eye.Value).magnitude * transform.lossyScale.x);
                 // Beyond the distance figures are drawn at, nobody sees them: posed only now and then.
-                bool unseen = smart && eye.HasValue && (beat & 7) != 0 && (new Vector3(a.Position.x, a.Ground, a.Position.y) - eye.Value).sqrMagnitude > drawn * drawn;
+                bool unseen = smart && eye.HasValue && !onFeed && (beat & 7) != 0 && (new Vector3(a.Position.x, a.Ground, a.Position.y) - eye.Value).sqrMagnitude > drawn * drawn;
                 if (a.Kind == AnimalKind.Dog) { StepDog(a, dtA); if (!unseen) Pose(a); continue; }
                 if (a.Kind == AnimalKind.Cat) { StepCat(a, dtA); if (!unseen) Pose(a); continue; }
                 // Deer: something close? Bolt away from it.
