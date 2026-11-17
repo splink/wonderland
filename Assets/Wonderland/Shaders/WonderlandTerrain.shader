@@ -38,6 +38,9 @@ Shader "Wonderland/Terrain"
             #pragma fragment frag
             #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE _MAIN_LIGHT_SHADOWS_SCREEN
             #pragma multi_compile_fragment _ _SHADOWS_SOFT _SHADOWS_SOFT_LOW _SHADOWS_SOFT_MEDIUM _SHADOWS_SOFT_HIGH
+            #pragma multi_compile_fragment _ _WL_TERRAIN_LIGHT _WL_TERRAIN_SIMPLE
+
+            TEXTURE2D(_WLNoiseTex); SAMPLER(sampler_WLNoiseTex);
             #pragma multi_compile_instancing
 
             struct Attributes
@@ -95,11 +98,24 @@ Shader "Wonderland/Terrain"
                 half edge = i.color.g;
                 half cavity = i.color.b;
 
+                // The noise: computed per pixel (Full), read from a texture (Light: same look, a fraction of the
+                // cost), or none at all (Simple).
+            #if defined(_WL_TERRAIN_LIGHT)
+                half4 coarse = SAMPLE_TEXTURE2D(_WLNoiseTex, sampler_WLNoiseTex, p * 0.5);
+                half fine = SAMPLE_TEXTURE2D(_WLNoiseTex, sampler_WLNoiseTex, p * 4.0).a;
+                half finer = SAMPLE_TEXTURE2D(_WLNoiseTex, sampler_WLNoiseTex, p * 13.3 + 0.37).a;
+                float n1 = coarse.g, n2 = coarse.b, n3 = fine, n4 = finer;
+                float meadow = smoothstep(0.5, 0.78, coarse.r * 0.75 + n2 * 0.25);
+            #elif defined(_WL_TERRAIN_SIMPLE)
+                float n1 = 0.5, n2 = 0.5, n3 = 0.5, n4 = 0.5;
+                float meadow = 0.0;
+            #else
                 float n1 = WL_Noise(p * 5.0);
                 float n2 = WL_Noise(p * 14.0 + 7.3);
                 float n3 = WL_Noise(p * 48.0 + 3.1);
                 float n4 = WL_Noise(p * 160.0 + 1.7);
                 float meadow = smoothstep(0.5, 0.78, WL_Noise(p * 2.6 + 11.0) * 0.75 + n2 * 0.25);
+            #endif
 
                 half3 grassDeep = half3(0.25, 0.45, 0.16);
                 half3 grassMid = half3(0.40, 0.59, 0.22);
@@ -137,6 +153,7 @@ Shader "Wonderland/Terrain"
                 float2 cell = floor(cellP);
                 float r = WL_Hash(cell);
                 half density = _FlowerDensity * (0.35 + meadow * 1.6) * (1.0 - steep) * (1.0 - soil) * saturate(edge * 3.0 - 0.6) * (1.0 - alpine * 0.8) * (1.0 - snow) * (1.0 - sand);
+            #if !defined(_WL_TERRAIN_SIMPLE)
                 if (r < density)
                 {
                     float2 centre = float2(WL_Hash(cell + 17.0), WL_Hash(cell + 31.0)) * 0.5 + 0.25;
@@ -148,6 +165,8 @@ Shader "Wonderland/Terrain"
                 }
 
                 // Railway: trodden soil and ballast spill.
+            #endif
+
                 half soilMask = smoothstep(0.15, 0.85, soil + (n3 - 0.5) * 0.35);
                 albedo = lerp(albedo, path * (0.85 + 0.3 * n4), soilMask);
 

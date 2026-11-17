@@ -108,13 +108,13 @@ namespace Wonderland
             var all = new List<Renderer>(); foreach (var r in world.GetComponentsInChildren<Renderer>(false)) if (r.enabled) all.Add(r);
             int msaa = urp != null ? urp.msaaSampleCount : 4;
             var shadows = sun != null ? sun.shadows : LightShadows.None;
-            int terrainMode = PerfSettings.Terrain.Value, detail = PerfSettings.Detail.Value;
+            int terrainMode = PerfSettings.Terrain.Value;
             var variants = new List<Variant>
             {
                 new() { Name = "baseline" },
                 new() { Name = "shadows", On = () => { if (sun != null) sun.shadows = LightShadows.None; }, Off = () => { if (sun != null) sun.shadows = shadows; } },
                 new() { Name = "edges (MSAA)", On = () => { if (urp != null) urp.msaaSampleCount = 1; }, Off = () => { if (urp != null) urp.msaaSampleCount = msaa; } },
-                new() { Name = "terrain shading", On = () => Shader.SetGlobalFloat("_WLTerrainMode", 2), Off = () => Shader.SetGlobalFloat("_WLTerrainMode", terrainMode) },
+                new() { Name = "terrain shading (simple instead)", On = () => TerrainNoise.SetMode(2), Off = () => TerrainNoise.SetMode(terrainMode) },
                 new() { Name = "terrain", On = () => Show(Of("terrain", world.TerrainView), false), Off = () => Show(Of("terrain", world.TerrainView), true) },
                 new() { Name = "grass", On = () => Show(Of("cover", world.Cover), false), Off = () => Show(Of("cover", world.Cover), true) },
                 new() { Name = "trees", On = () => Show(Of("trees", world.Forest), false), Off = () => Show(Of("trees", world.Forest), true) },

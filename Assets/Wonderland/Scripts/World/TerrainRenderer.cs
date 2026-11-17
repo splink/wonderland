@@ -34,6 +34,7 @@ namespace Wonderland
 
         public void Init(TerrainField terrain, Material sharedMaterial)
         {
+            TerrainNoise.Ensure();
             field = terrain;
             material ??= new Material(sharedMaterial) { name = "Terrain (instance)" };
             Reinit();

@@ -95,6 +95,41 @@ namespace Wonderland.Editor
             Object.DestroyImmediate(w.gameObject);
         }
 
+        /// <summary>The player's world in each terrain shading mode (Full, Light, Simple), from where they would stand.</summary>
+        public static void TerrainModeRenders()
+        {
+            ShaderUtil.allowAsyncCompilation = false;
+            UnityEditor.SceneManagement.EditorSceneManager.NewScene(UnityEditor.SceneManagement.NewSceneSetup.EmptyScene, UnityEditor.SceneManagement.NewSceneMode.Single);
+            WonderlandLighting.CreateKeyLight();
+            System.IO.Directory.CreateDirectory(WonderlandRenders.Output);
+            WonderlandRenders.CreateFloor(8f);
+            var cam = WonderlandRenders.CreateCamera(new Vector3(0f, 0.8f, -1.1f), Vector3.zero, 50f);
+            WonderlandRenders.Capture(cam, "warmup.png", 64, 64);
+            System.IO.File.Delete(System.IO.Path.Combine(WonderlandRenders.Output, "warmup.png"));
+            var w = new GameObject("Terrain modes").AddComponent<WonderlandWorld>();
+            w.Deserialize(System.IO.File.ReadAllText(System.Environment.GetEnvironmentVariable("WL_SAVE") ?? "Tests/Saves/headset-wonderland-world.json"), Materials());
+            w.Sky.Shown = false;
+            w.Forest.RebuildDirty(); w.Cover.RebuildDirty();
+            var land = w.Terrain.LandBounds();
+            var c = new Vector3(land.center.x, 0.05f, land.center.y);
+            cam.transform.position = c + new Vector3(0.1f, 0.75f, -0.95f); cam.transform.LookAt(c + new Vector3(0f, 0f, 0.15f));
+            string[] names = { "full", "light", "simple" };
+            for (int m = 0; m < 3; m++)
+            {
+                TerrainNoise.SetMode(m);
+                WonderlandRenders.Capture(cam, $"editor-terrain-{names[m]}.png", 1600, 1000);
+            }
+            cam.transform.position = c + new Vector3(0.25f, 0.18f, -0.3f); cam.transform.LookAt(c + new Vector3(0.1f, 0f, 0.05f));
+            for (int m = 0; m < 3; m++)
+            {
+                TerrainNoise.SetMode(m);
+                WonderlandRenders.Capture(cam, $"editor-terrain-{names[m]}-close.png", 1600, 1000);
+            }
+            TerrainNoise.SetMode(0);
+            Object.DestroyImmediate(w.gameObject);
+            if (Application.isBatchMode) EditorApplication.Exit(0);
+        }
+
         /// <summary>Renders of the roads: a crossroads with its lights and traffic, a highway, the vehicles close up.</summary>
         public static void RoadRenders()
         {

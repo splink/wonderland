@@ -39,7 +39,7 @@ namespace Wonderland
         /// <summary>Raised when any setting changes (after it is stored).</summary>
         public static event Action<Setting> Changed;
 
-        public static readonly Setting Terrain = Make("Terrain", "terrain", 0, "how the land is shaded: full detail, the same look from a noise texture, or plain colours", "Full", "Light", "Simple");
+        public static readonly Setting Terrain = Make("Terrain", "terrain", 1, "how the land is shaded: full detail, the same look from a noise texture, or plain colours", "Full", "Light", "Simple");
         public static readonly Setting Msaa = Make("Edges", "msaa", 0, "anti-aliasing: smooth edges cost GPU time on every pixel", "MSAA 4x", "MSAA 2x", "Off");
         public static readonly Setting Shadows = Make("Shadows", "shadows", 0, "the sun's shadows", "On", "Off");
         public static readonly Setting Grass = Make("Grass", "grass", 0, "the tufts, flowers and pebbles on the meadows", "Full", "Half", "Off");
@@ -58,7 +58,7 @@ namespace Wonderland
         public static void Apply(Light sun)
         {
             if (sun != null) sun.shadows = Shadows.Value == 0 ? LightShadows.Soft : LightShadows.None;
-            Shader.SetGlobalFloat("_WLTerrainMode", Terrain.Value);
+            TerrainNoise.SetMode(Terrain.Value);
             if (Application.isEditor) return;   // (in the editor these would be written into the project's assets)
             var urp = UniversalRenderPipeline.asset;
             if (urp != null)
