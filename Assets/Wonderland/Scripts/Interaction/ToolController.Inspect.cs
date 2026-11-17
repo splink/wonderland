@@ -25,7 +25,6 @@ namespace Wonderland
 
         private string Peek()
         {
-            if (Tool == Tool.Decor && peekHouse < 0 && peekBoat < 0) return null;
             int key = peekPerson >= 0 ? peekPerson : peekAnimal >= 0 ? 100000 + peekAnimal : peekVehicle != null ? 400000 + peekVehicle.Id
                 : peekTrain != null ? 500000 + World.Trains.Trains.IndexOf(peekTrain) : peekBoat >= 0 ? 300000 + peekBoat : peekHouse >= 0 ? 200000 + peekHouse : -1;
             if (key == peekKey && Time.time < peekUntil) return peekText;   // (worked out a few times a second, not every frame)
@@ -38,21 +37,25 @@ namespace Wonderland
             if (peekPerson >= 0 && peekPerson < World.People.People.Count)
             {
                 var c = World.People.CardOf(peekPerson);
-                return $"{c.Name}, {c.Role.ToLower()} - {c.Now.ToLower()}  ·  grip: their card";
+                return $"{c.Name}, {c.Role.ToLower()} - {c.Now.ToLower()}" + PeekDo(true, "their card");
             }
-            if (peekAnimal >= 0 && peekAnimal < World.Animals.Animals.Count) return AnimalLine(peekAnimal) + "  ·  grip: its card";
-            if (peekVehicle != null) return World.Traffic.Describe(peekVehicle) + "  ·  grip: its card";
-            if (peekTrain != null) return World.Trains.Describe(peekTrain) + "  ·  grip: its card";
+            if (peekAnimal >= 0 && peekAnimal < World.Animals.Animals.Count) return AnimalLine(peekAnimal) + PeekDo(true);
+            if (peekVehicle != null) return World.Traffic.Describe(peekVehicle) + PeekDo(false);
+            if (peekTrain != null) return World.Trains.Describe(peekTrain) + PeekDo(true);
             if (peekBoat >= 0 && peekBoat < World.Boats.Boats.Count) return World.Boats.Describe(peekBoat);
             if (peekHouse >= 0 && peekHouse < World.Buildings.Houses.Count)
             {
                 var c = World.People.PlaceCardOf(peekHouse);
                 string state = c.Home ? (c.Living > 0 ? $"{c.Living} live here" : "nobody lives here yet") : c.Status != null ? c.Status.ToLower() : null;
                 string crowd = !c.Home && c.Visitors > 0 ? $"{c.Visitors} here" : null;
-                return string.Join(" · ", new[] { c.Name, state, crowd, "grip: its card" }.Where(x => x != null));
+                return string.Join(" · ", new[] { c.Name, state, crowd }.Where(x => x != null)) + PeekDo(true);
             }
             return null;
         }
+        /// <summary>What the buttons do to what is pointed at, for the palette's hint line.</summary>
+        private string PeekDo(bool movable, string card = "its card") =>
+            Tool == Tool.Select ? $"  ·  trigger: {card}" + (movable ? "  ·  grip: move it" : "") : movable ? "  ·  grip: move it  ·  Select: " + card : "  ·  Select: " + card;
+
         private int followSeed, followKind;          // kind: 0 nobody, 1 a villager, 2 an animal, 3 a building, 4 a train, 5 a vehicle
         private Vector2 followHouse;                 // the building's position (buildings are kept by where they stand)
         private float cardTimer, infoTimer;
@@ -662,10 +665,10 @@ namespace Wonderland
                 Tool.Train => "Trigger on the track: a train - pick it on the second row (Steam, Express, Tank engine, Goods, Railcar); it runs the way the arrows point\nPointing at a train: trigger stop / go · stick up/down: speed · grip: pick it up and put it elsewhere\nCarriages: point at a train, then + Carriage / - Carriage (trains always run engine first, the way the arrows point)\nThe hint says what it is doing and why it waits (a red signal, the train ahead, the buffers)\nSwitches: Spread (trains take the way with fewer trains ahead, so they cover the whole railway), Random, Manual (tap a switch) · A: start / stop all",
                 Tool.Houses => "Pick a category, then a building. Trigger: place it · stick: a flick turns it 15°, hold to turn smoothly (the arrow is its front) · A: next\nTrigger (or grip) on a building: pick it up and move it · pointing at one says who is there\nTravel: a landing stage at a pond's edge, and boats on the water",
                 Tool.Decor => "Trigger: place people or animals (hold and sweep for a herd)\nTrigger on a villager or animal: their card - a marker follows them, a line shows where they are going, pins mark home and work\nChips: days pass / fast / stop time, Fête, Emergency, Clouds · A: next kind",
-                Tool.Select => "Trigger on anything with a gold ring under it: its card (in every other tool, grip does the same)\nA villager's card follows them with their camera; a train's card rides along at the front\nA camera (Build, Small, Camera): its picture on the monitor - the buttons round it or the stick turn and tilt it, the trigger on the land points it there\nCam 1, 2... and Train 1, 2...: open a camera · A: next camera",
+                Tool.Select => "Trigger on anything with a gold ring under it - a villager, a building, a train, a switch, the track: its card, with buttons for what you can do with it\nA villager's card follows them with their camera; a train's card rides along at the front\nA camera (Build, Small, Camera): its picture on the monitor - the buttons round it or the stick turn and tilt it, the trigger on the land points it there\nCam 1, 2... and Train 1, 2...: open a camera · A: next camera",
                 _ => "Trigger on anything you built: take it away · hold over trees: clear them",
             };
-            return here + "\n\nEverywhere: Grip on a villager, animal or building: its card · B undo (Redo below) · point at the palette and pull the trigger to choose\nSave / Load: Worlds 1-6 · Move: place the world elsewhere · New: start again (press twice) · Sound: on / quiet / muted · Stats: frame rate and the world's numbers";
+            return here + "\n\nEverywhere: the label at the pointer says what each button does to what you point at · Grip: pick it up and move it (track bends) · B undo (Redo below) · point at the palette and pull the trigger to choose\nSave / Load: Worlds 1-6 · Move: place the world elsewhere · New: start again (press twice) · Sound: on / quiet / muted · Stats: frame rate and the world's numbers";
         }
     }
 }

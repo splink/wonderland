@@ -12,7 +12,7 @@ PASS  Track tool selected
 PASS  Drawing a loop with the trigger lays a closed railway (2.83 m)
 PASS  Drawing from the track outwards branches off with a switch (1 switch, 2 pieces; "Joined one way: trains can go across but not back yet - draw a second link the other way (follow the arrows) so they can return")
 PASS  Tapping the switch throws it (and pins it)
-PASS  Grip on the track and drag bends it to where you let go (now 0.2 cm from there; "Track reshaped", while dragging "Move the pointer and let go of grip - the track bends like a rope (red: it can't go there, the banner says why)")
+PASS  Grip on the track and drag bends it to where you let go (now 0.2 cm from there; "Track reshaped", while dragging "Move the pointer and let go of grip - the track bends like a rope (red: it can't go there)")
 PASS  Trigger on the railway puts a running train on it
 PASS  Train moves (0.27 m)
 PASS  Point at a train, then + / - Carriage couple and uncouple a carriage (2 -> 3 -> 2)
@@ -39,17 +39,20 @@ PASS  The Life tool's Clouds chip hides and shows the clouds
 PASS  The stick turns and tilts the selected camera (yaw -36° -> 34°, tilt 5° -> 25°)
 PASS  Select: trigger on a camera - its card and its live picture over the palette, with buttons round it that turn it; the trigger on the land points it there [first hidden True, selected True, buttons True, turned True, aimed True]
 PASS  Close puts the picture away
+PASS  Grip on the track bends it in any tool (label: "<b><color=#FFE3A8>Railway · trains run the way the arrows point</color></b> / <color=#FFD27A><b>Trigger</b></color>  its card / <color=#FFD27A><b>Grip</b></color>  bend it") - Track reshaped
+PASS  Pointing at a switch, the label says what it is and what the trigger does ("<b><color=#FFE3A8>Switch · set: trains always go the way it points</color></b> / <color=#FFD27A><b>Trigger</b></color>  its card - choose which way trains go")
 PASS  Save and Load keep several worlds: saved as World 2 and World 3, and World 2 loads back as it was (4 buildings)
 PASS  Stats opens the performance panel; Grass cycles to Off (no tufts) and Defaults brings them back (5538 tufts)
 PASS  Help and Stats open beside the palette (with the world's own numbers) and close again
 PASS  No blocky stand-ins anywhere: further away the same buildings and trees are drawn with less detail (44 simpler levels)
-PASS  Trigger on a villager opens their card instead of placing another (Pia)
+PASS  Select: the trigger on a villager opens their card (Pia)
 PASS  Selecting a villager turns on their camera: the monitor over the palette shows them over their shoulder (6 pictures)
 PASS  The card's Camera button turns it off (the card stays)
-PASS  With any tool, pointing at a villager names them and grip opens their card ("Pia, between jobs - looking about - no home yet  ·  grip: their card") [peek person 1, house -1]
-PASS  Grip on a building opens its card ("Camera 1 - by the cottage")
-PASS  A gold ring marks who grip would select; grip on another villager moves the camera to them (Rosa)
-PASS  Grip on a train opens its card, with its camera ("Steam train, 2 carriages")
+PASS  With any tool, pointing at a villager names them (label: "<b><color=#FFE3A8>Pia, between jobs</color></b> / <color=#FFD27A><b>Grip</b></color>  move them"); grip picks them up and letting go sets them down there [peek person 1, house -1, lifted True, set True]
+PASS  Grip picks a building up in any tool; let go where it can't go and it goes back [picked True, back True]
+PASS  Select: the trigger on a building opens its card ("Camera 1 - by the cottage")
+PASS  A gold ring marks who the trigger would select; selecting another villager moves the camera to them (Rosa)
+PASS  Select: the trigger on a train opens its card, with its camera ("Steam train, 2 carriages")
 PASS  ...which rides along on the monitor
 PASS  Close puts the camera away
 PASS  The village clock is always shown (15:00)

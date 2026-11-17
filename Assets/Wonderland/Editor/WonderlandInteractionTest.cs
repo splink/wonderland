@@ -333,6 +333,35 @@ namespace Wonderland.Editor
             Check(!world.Cctv.Watching && !feed.gameObject.activeSelf, "Close puts the picture away");
             ClickButton(hand, "Life");
 
+            // Grip on the track in any tool (here Select) bends it; the label says so first. Over a switch it names it.
+            if (world.Track.HasTrack)
+            {
+                ClickButton(hand, "Select");
+                tools.CloseCards();
+                var rail = world.Track.Network;
+                int e0 = 0; float bestLen = 0f;
+                for (int e = 0; e < rail.Edges.Count; e++) if (rail.Edges[e].Layout.Length > bestLen) { bestLen = rail.Edges[e].Layout.Length; e0 = e; }
+                var mid = rail.Edges[e0].Layout.Evaluate(bestLen * 0.5f, out var tan);
+                var midW = world.transform.TransformPoint(mid);
+                Frame(hand, midW, false); Frame(hand, midW, false);
+                string trackLabel = tools.PointerLabel ?? "";
+                var side = Vector3.Cross(Vector3.up, tan.normalized) * 0.03f;
+                
+                Frame(hand, midW, false, grip: true);
+                bool bending = tools.Holding;
+                var toW = world.transform.TransformPoint(mid + side);
+                for (int i = 0; i < 4; i++) Frame(hand, toW, false, grip: true);
+                Frame(hand, toW, false);
+                Check(trackLabel.Contains("Grip") && bending && !tools.Holding, $"Grip on the track bends it in any tool (label: \"{trackLabel.Replace("\n", " / ")}\") - {tools.LastMessage}");
+                if (rail.Joints.Count > 0)
+                {
+                    var jw = world.transform.TransformPoint(world.Track.Network.Joints[0].Position);
+                    Frame(hand, jw, false); Frame(hand, jw, false);
+                    Check((tools.PointerLabel ?? "").Contains("Switch"), $"Pointing at a switch, the label says what it is and what the trigger does (\"{(tools.PointerLabel ?? "").Replace("\n", " / ")}\")");
+                }
+                world.Undo();
+            }
+
             // Several worlds: save this one as World 2, change it, save that as World 3, and load World 2 back.
             int houses = world.Buildings.Houses.Count;
             ClickButton(hand, "Save"); ClickButton(hand, "World 2");
@@ -375,8 +404,8 @@ namespace Wonderland.Editor
             }
             Check(!standIns && levels > 0, $"No blocky stand-ins anywhere: further away the same buildings and trees are drawn with less detail ({levels} simpler levels)");
 
-            // The card: trigger on a villager with the Life tool opens theirs, and follows them.
-            ClickButton(hand, "Life");
+            // The card: trigger on a villager with the Select tool opens theirs, and follows them.
+            ClickButton(hand, "Select");
             if (world.People.People.Count == 0) world.PlacePerson(new Vector3(0.1f, 0f, 0.1f), 0, 77);
             // (someone in plain sight from the hand - the pointer can't see through walls): a villager on open ground
             var lo = world.transform.InverseTransformPoint(hand);
@@ -401,7 +430,7 @@ namespace Wonderland.Editor
             tools.CloseCards();
             Frame(hand, atWho, true); Frame(hand, atWho, false);
             var cardPanel = palette.transform.Find("Card");
-            Check(palette.CardShown && world.People.People.Count == count && cardPanel != null, $"Trigger on a villager opens their card instead of placing another ({world.People.NameOf(pick)})" + (palette.CardShown ? "" : $" [following {tools.Following}, hover {tools.HoverPerson}, tool {tools.Tool}, people {count}->{world.People.People.Count}, hidden {world.People.IsHidden(pick)}]"));
+            Check(palette.CardShown && world.People.People.Count == count && cardPanel != null, $"Select: the trigger on a villager opens their card ({world.People.NameOf(pick)})" + (palette.CardShown ? "" : $" [following {tools.Following}, hover {tools.HoverPerson}, tool {tools.Tool}, people {count}->{world.People.People.Count}, hidden {world.People.IsHidden(pick)}]"));
             // Their camera: on as they are selected, on the monitor over the palette, filmed through their eyes; the
             // card's Camera button turns it off.
             ToolController.FollowCamera = true;
@@ -413,31 +442,55 @@ namespace Wonderland.Editor
             ClickButton(hand, "Camera on");
             Check(world.Cctv.FollowSeed == 0 && !viewer.gameObject.activeSelf && palette.CardShown, "The card's Camera button turns it off (the card stays)");
             ToolController.FollowCamera = true;
-            // Any tool: pointing at someone names them; grip opens their card.
+            // Any tool: pointing at someone names them, and the label at the pointer says what the buttons do; grip picks
+            // them up, and letting go sets them down where the pointer is.
             tools.CloseCards();
             ClickButton(hand, "Build");
-            Frame(hand, atWho, false);
-            string named = palette.HintText;
+            Frame(hand, atWho, false); Frame(hand, atWho, false);
+            string named = palette.HintText, labelled = tools.PointerLabel ?? "";
             string peeked = $"peek person {tools.PeekPerson}, house {tools.PeekHouse}";
-            Frame(hand, atWho, false, grip: true); Frame(hand, atWho, false);
-            Check(palette.CardShown && named.Contains(world.People.NameOf(pick)) && tools.Tool == Tool.Houses, $"With any tool, pointing at a villager names them and grip opens their card (\"{named}\") [{peeked}]");
-            // A building's card: grip on it (here with the Build tool's neighbour, the Paths tool).
+            int seedPick = world.People.People[pick].seed;
+            Frame(hand, atWho, false, grip: true);
+            bool lifted = tools.Holding && world.People.People.Count == count - 1;
+            var setDown = world.transform.TransformPoint(new Vector3(who.x + 0.04f, world.Terrain.SurfaceAt(who.x + 0.04f, who.y), who.y));
+            Frame(hand, setDown, false, grip: true); Frame(hand, setDown, false);
+            int moved = -1;
+            for (int i = 0; i < world.People.People.Count; i++) if (world.People.People[i].seed == seedPick) moved = i;
+            bool setOk = !tools.Holding && moved >= 0 && world.People.People.Count == count && Mathf.Abs(world.People.People[moved].x - (who.x + 0.04f)) < 0.01f;
+            Check(named.Contains(world.People.NameOf(moved >= 0 ? moved : pick)) && labelled.Contains("Grip") && lifted && setOk && tools.Tool == Tool.Houses,
+                $"With any tool, pointing at a villager names them (label: \"{labelled.Replace("\n", " / ")}\"); grip picks them up and letting go sets them down there [{peeked}, lifted {lifted}, set {setOk}]");
+            if (moved >= 0) { pick = moved; who = world.People.PositionOf(pick); atWho = world.transform.TransformPoint(new Vector3(who.x, world.Terrain.SurfaceAt(who.x, who.y) + 0.015f, who.y)); }
+            // A building: grip picks it up in any tool (here Roads); letting go where it can't go puts it back. Select's
+            // trigger opens its card.
             ClickButton(hand, "Roads");
             int someHouse = world.Buildings.Houses.Count - 1;
             if (someHouse >= 0)
             {
                 var hh = world.Buildings.Houses[someHouse];
+                int liftFrom = world.Buildings.Houses.Count;
                 var roof = world.transform.TransformPoint(new Vector3(hh.x, world.Buildings.TopOf(someHouse) - 0.01f, hh.z));
-                Frame(hand, roof, false); Frame(hand, roof, false, grip: true); Frame(hand, roof, false);
-                bool titled = palette.CardTitle == Catalog.Get(hh.variant).Name || hh.variant == Catalog.Camera && palette.CardTitle.StartsWith("Camera");
-                Check(palette.CardShown && titled, $"Grip on a building opens its card (\"{palette.CardTitle}\")");
+                Frame(hand, roof, false); Frame(hand, roof, false, grip: true);
+                bool picked = tools.Holding && world.Buildings.Houses.Count == liftFrom - 1;
+                var water = world.transform.TransformPoint(new Vector3(5f, 0f, 5f));   // (off the land: it can't go there)
+                Frame(hand, water, false, grip: true); Frame(hand, water, false);
+                bool wentBack = !tools.Holding && world.Buildings.Houses.Count == liftFrom;
+                Check(picked && wentBack, $"Grip picks a building up in any tool; let go where it can't go and it goes back [picked {picked}, back {wentBack}]");
+                ClickButton(hand, "Select");
+                int sh = world.Buildings.Houses.Count - 1;
+                hh = world.Buildings.Houses[sh];
+                roof = world.transform.TransformPoint(new Vector3(hh.x, world.Buildings.TopOf(sh) - 0.01f, hh.z));
+                tools.CloseCards();
+                Frame(hand, roof, false); Frame(hand, roof, true); Frame(hand, roof, false);
+                bool titled = palette.CardTitle == Catalog.Get(hh.variant).Name || hh.variant == Catalog.Camera && palette.CardTitle.StartsWith("Camera") || palette.CardTitle == world.People.PlaceCardOf(sh).Name;
+                Check(palette.CardShown && titled, $"Select: the trigger on a building opens its card (\"{palette.CardTitle}\")");
             }
-            // Pointing at someone puts a gold ring under them; grip on another villager moves the camera to them.
+            // Pointing at someone puts a gold ring under them; selecting another villager moves the camera to them.
+            ClickButton(hand, "Select");
             tools.CloseCards();
             Frame(hand, atWho, false); Frame(hand, atWho, false);
             var ring = GameObject.Find("Target ring");
             bool ringed = ring != null && ring.activeSelf && (new Vector2(ring.transform.position.x, ring.transform.position.z) - new Vector2(atWho.x, atWho.z)).magnitude < 0.03f;
-            Frame(hand, atWho, false, grip: true); Frame(hand, atWho, false);
+            Frame(hand, atWho, true); Frame(hand, atWho, false);
             int firstSeed = world.Cctv.FollowSeed;
             int second = -1;
             for (float gx = -0.3f; gx <= 0.3f && second < 0; gx += 0.05f)
@@ -452,18 +505,18 @@ namespace Wonderland.Editor
             {
                 var p2 = world.People.PositionOf(second);
                 var atSecond = world.transform.TransformPoint(new Vector3(p2.x, world.Terrain.SurfaceAt(p2.x, p2.y) + 0.015f, p2.y));
-                Frame(hand, atSecond, false); Frame(hand, atSecond, false, grip: true); Frame(hand, atSecond, false);
+                Frame(hand, atSecond, false); Frame(hand, atSecond, true); Frame(hand, atSecond, false);
             }
             Check(ringed && firstSeed != 0 && second >= 0 && world.Cctv.FollowSeed == world.People.People[second].seed && palette.CardTitle == world.People.NameOf(second),
-                $"A gold ring marks who grip would select; grip on another villager moves the camera to them ({palette.CardTitle})");
-            // Grip on a train: its card, with its camera.
+                $"A gold ring marks who the trigger would select; selecting another villager moves the camera to them ({palette.CardTitle})");
+            // Select on a train: its card, with its camera.
             if (world.Trains.Trains.Count > 0)
             {
                 var t = world.Trains.Trains[0];
                 var at = world.transform.TransformPoint(world.Trains.LocoPosition(t) + Vector3.up * 0.02f);
                 tools.CloseCards();
-                Frame(hand, at, false); Frame(hand, at, false, grip: true); Frame(hand, at, false);
-                Check(palette.CardShown && Find("Camera") != null && Find("Camera").gameObject.activeInHierarchy, $"Grip on a train opens its card, with its camera (\"{palette.CardTitle}\")");
+                Frame(hand, at, false); Frame(hand, at, true); Frame(hand, at, false);
+                Check(palette.CardShown && Find("Camera") != null && Find("Camera").gameObject.activeInHierarchy, $"Select: the trigger on a train opens its card, with its camera (\"{palette.CardTitle}\")");
                 ClickButton(hand, "Camera");
                 Check(world.Cctv.Watching && palette.transform.Find("Viewer").gameObject.activeSelf, "...which rides along on the monitor");
                 tools.CloseCards();
@@ -568,7 +621,8 @@ namespace Wonderland.Editor
             world.Clock.Mode = ClockMode.Paused;
             var who = world.People.PositionOf(pick);
             var at = world.transform.TransformPoint(new Vector3(who.x, t.SurfaceAt(who.x, who.y), who.y));
-            Frame(hand, at, false); Frame(hand, at, false, grip: true); Frame(hand, at, false); Frame(hand, at, false);
+            tools.SelectTool(Tool.Select);
+            Frame(hand, at, false); Frame(hand, at, true); Frame(hand, at, false); Frame(hand, at, false);
             tools.ToggleStats();
             var cam = new GameObject("Camera").AddComponent<Camera>();
             cam.clearFlags = CameraClearFlags.SolidColor; cam.backgroundColor = new Color(0.32f, 0.3f, 0.28f);
@@ -580,9 +634,24 @@ namespace Wonderland.Editor
             int bakery = world.Buildings.Houses.FindIndex(h => h.variant == Catalog.Bakery);
             var b = world.Buildings.Houses[bakery];
             var top = world.transform.TransformPoint(new Vector3(b.x, world.Buildings.TopOf(bakery) - 0.01f, b.z));
-            Frame(hand, top, false); Frame(hand, top, false, grip: true); Frame(hand, top, false); Frame(hand, top, false);
+            Frame(hand, top, false); Frame(hand, top, true); Frame(hand, top, false); Frame(hand, top, false);
             tools.ToggleHelp();
             WonderlandRenders.Capture(cam, "editor-cards-building-help.png", 2400, 1000);
+            // The label at the pointer, seen from beside the hand: over the bakery in Select, and over a villager in Build.
+            tools.CloseCards(); tools.ToggleHelp();
+            cam.tag = "MainCamera";
+            cam.fieldOfView = 60f;
+            world.Sky.Shown = false;
+            cam.transform.position = Vector3.Lerp(hand, top, 0.55f) + new Vector3(-0.03f, 0.05f, 0f);
+            cam.transform.rotation = Quaternion.LookRotation(top + new Vector3(0.03f, 0.02f, 0f) - cam.transform.position);
+            Frame(hand, top, false); Frame(hand, top, false);
+            WonderlandRenders.Capture(cam, "editor-label-building.png", 1600, 1000);
+            tools.SelectTool(Tool.Houses);
+            Frame(hand, at, false); Frame(hand, at, false);
+            cam.transform.position = Vector3.Lerp(hand, at, 0.55f) + new Vector3(-0.03f, 0.05f, 0f);
+            cam.transform.rotation = Quaternion.LookRotation(at + new Vector3(0.03f, 0.02f, 0f) - cam.transform.position);
+            Frame(hand, at, false); Frame(hand, at, false);
+            WonderlandRenders.Capture(cam, "editor-label-villager.png", 1600, 1000);
             Debug.Log("Card renders written");
             if (Application.isBatchMode) EditorApplication.Exit(0);
         }

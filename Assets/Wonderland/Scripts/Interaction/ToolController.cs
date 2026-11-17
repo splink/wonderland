@@ -197,8 +197,7 @@ namespace Wonderland
         public void SelectTool(Tool tool)
         {
             if (stroking) EndStroke();
-            if (carrying) DropCarried();
-            if (carriedTrain != null) { carriedTrain = null; World.Undo(false); }
+            PutBack();
             Tool = tool;   // (an open card - and the camera following someone - stays open: keep building while watching)
             Palette.SetTool(tool);
             World.Cctv.Watching = tool == Tool.Select;
@@ -460,6 +459,7 @@ namespace Wonderland
             var ray = input.Ray;
             float rayLength = 2.5f;
             var colour = new Color(1f, 1f, 1f, 0.7f);
+            pointerOnPalette = false;
 
             // 1. The palette takes the ray first (unless a stroke is in progress).
             if (!stroking && drawn.Count == 0 && Palette.gameObject.activeInHierarchy)
@@ -470,6 +470,7 @@ namespace Wonderland
                     World.TerrainView.HideBrush();
                     ghost.gameObject.SetActive(false);
                     if (button != null && input.TriggerDown && button.Enabled && button.OnClick != null) { button.OnClick(); Haptic(0.4f, 0.02f); }
+                    pointerOnPalette = true;
                     DrawPointer(ray, uiDistance, new Color(1f, 0.9f, 0.6f, 0.9f), true);
                     return;
                 }
@@ -485,11 +486,12 @@ namespace Wonderland
             bool hit = World.Terrain.Raycast(localOrigin, localDir, 3f, out var local);
             // Growing land: past the shore the pointer lands on the real floor.
             if (!hit && (LandMode || Tool == Tool.Track)) hit = World.Terrain.RaycastFloor(localOrigin, localDir, 5f, out local);
+            lastHit = hit; lastLocal = local;
             if (PlacingWorld) { PlaceWorld(input, ray, dt); return; }
 
             // Stick: size on X (rotation for houses), strength / density on Y.
             var stick = input.Stick;
-            if (Tool == Tool.Houses)
+            if (Tool == Tool.Houses || carrying)
             {
                 // Turning what is being placed: a flick turns it 15 degrees (on the grid: a quarter turn); holding the stick
                 // over turns it smoothly (off the grid).
@@ -515,9 +517,9 @@ namespace Wonderland
             // What is being pointed at, in any tool: grip opens its card (a ring under it shows what grip would select).
             // Small things are found by how close the ray passes to them - a villager in front of a house is found
             // before the house - but nothing behind a building or the land is.
-            bool looking = !stroking && carriedTrain == null && !carrying && drawn.Count == 0;
+            bool looking = !stroking && !Holding && drawn.Count == 0;
             var dirN = localDir.normalized;
-            int houseHit = World.Buildings.Pick(localOrigin, dirN);
+            int houseHit = rayHouse = World.Buildings.Pick(localOrigin, dirN);
             // What hides things: the land, and buildings' walls (not the air under a sloping roof). Someone at a door
             // stands a little inside its box (eaves): a few centimetres' grace - anyone behind it is further.
             bool walled = World.Buildings.Pick(localOrigin, dirN, out float wallT, true) >= 0;
@@ -531,8 +533,17 @@ namespace Wonderland
             // ...and a building: grip (trigger in the Life tool) opens its card - not in Build or Eraser, where these pick up or remove.
             peekHouse = looking && !small && peekBoat < 0 && Tool != Tool.Houses && Tool != Tool.Eraser ? houseHit : -1;
             ShowTarget();
-            // Select: the trigger picks what is pointed at. Everywhere else grip does (and in Life the trigger on a building).
-            bool picking = input.GripDown && (small || peekHouse >= 0 && Tool != Tool.Track) || input.TriggerDown && (Tool == Tool.Select && (small || peekHouse >= 0) || Tool == Tool.Decor && peekHouse >= 0);
+            // Grip, in any tool: pick up what is pointed at (a building, a train, someone) or bend the track under it.
+            if (looking && input.GripDown && GrabAt(input, hit, local, houseHit))
+            {
+                DrawPointer(ray, rayLength, new Color(1f, 0.85f, 0.3f, 0.9f), true);
+                return;
+            }
+            // Holding something: it follows the pointer until it is put down.
+            if (carriedPerson.HasValue || carriedAnimal.HasValue) { CarryLiving(input, hit, local, ref colour); DrawPointer(ray, rayLength, colour, hit); return; }
+            if (dragEdge >= 0) { DragTrack(input, hit, local, ref colour); DrawPointer(ray, rayLength, colour, hit); return; }
+            // Select: the trigger picks what is pointed at and opens its card.
+            bool picking = input.TriggerDown && Tool == Tool.Select && (small || peekHouse >= 0);
             if (looking && picking)
             {
                 if (peekPerson >= 0 || peekAnimal >= 0) Inspect(peekPerson, peekAnimal);
@@ -543,7 +554,9 @@ namespace Wonderland
                 return;
             }
             bool meeting = small || peekHouse >= 0;
-            switch (Tool)
+            // What is carried decides which tool's hands are on it (a building picked up in any tool is placed as in Build).
+            var active = carrying ? Tool.Houses : carriedTrain != null ? Tool.Train : Tool;
+            switch (active)
             {
                 case Tool.Terrain: TerrainTool(input, hit, local, dt, ref colour); break;
                 case Tool.Water: WaterTool(input, hit, local, dt, ref colour); break;
@@ -556,9 +569,9 @@ namespace Wonderland
                 case Tool.Select: SelectTool(input, hit, local, dt, ref colour); break;
                 case Tool.Eraser: EraserTool(input, hit, local, localOrigin, localDir, dt, ref colour); break;
             }
-            if (Tool != Tool.Houses) ghost.gameObject.SetActive(false);
-            BuildGrid.Show(Tool == Tool.Houses || Tool == Tool.Paths && PlacingVehicle == null && PathSystem.IsRoad((int)PathKind));
-            if (facing != null && (Tool != Tool.Houses || !ghost.gameObject.activeSelf)) facing.enabled = false;
+            if (active != Tool.Houses) ghost.gameObject.SetActive(false);
+            BuildGrid.Show(active == Tool.Houses || Tool == Tool.Paths && PlacingVehicle == null && PathSystem.IsRoad((int)PathKind));
+            if (facing != null && (active != Tool.Houses || !ghost.gameObject.activeSelf)) facing.enabled = false;
             if (Tool != Tool.Track || drawn.Count == 0) HideEntryArrows();
             if (Tool != Tool.Train) { hoveredTrain = null; if (World.Trains.Highlighted != null) World.Trains.Highlighted = null; }
             floorRing.gameObject.SetActive(LandMode && hit);
@@ -714,8 +727,8 @@ namespace Wonderland
             hoverPerson = peekPerson;   // (the same pointing as everywhere: the ray passing near them)
             hoverAnimal = hoverPerson < 0 ? peekAnimal : -1;
             hoverVehicle = hit && hoverPerson < 0 && hoverAnimal < 0 ? World.Traffic.Nearest(p2, 0.03f) : null;
-            // Trigger on someone who is already there: their card (and follow them), not another one.
-            if (input.TriggerDown && hit && (hoverPerson >= 0 || hoverAnimal >= 0)) { Inspect(hoverPerson, hoverAnimal); return; }
+            // Trigger on someone who is already there: not another one on top of them (their card is in Select).
+            if (input.TriggerDown && hit && (hoverPerson >= 0 || hoverAnimal >= 0)) { Say("Someone's here already - Select shows their card, grip moves them"); return; }
             bool free = hit && (person ? World.People.Walkable(p2) : World.Habitat(p2, kind, p2));
             colour = free ? new Color(1f, 0.95f, 0.75f, 0.85f) : new Color(1f, 0.5f, 0.45f, 0.85f);
             if (hit) World.TerrainView.SetBrush(local, radius * 1.4f, free ? new Color(1f, 0.95f, 0.7f) : new Color(1f, 0.4f, 0.35f), 0.8f);
@@ -860,38 +873,10 @@ namespace Wonderland
                 }
                 return;
             }
-            // Grip on the track: bend it like a rope (the piece between its switches follows), let go to keep the shape.
-            if (dragEdge >= 0)
-            {
-                if (dragEdge >= net.Edges.Count) { dragEdge = -1; World.Track.HidePreview(); return; }
-                if (hit && Time.time - dragPreviewAt > 0.08f)
-                {
-                    dragPreviewAt = Time.time;
-                    dragError = World.ReshapePreview(dragEdge, dragIndex, local, out var preview);
-                    World.Track.ShowPreview(preview, false, dragError != null);
-                }
-                if (hit) World.TerrainView.SetBrush(local, 0.025f, dragError == null ? new Color(0.45f, 0.9f, 1f) : new Color(1f, 0.4f, 0.35f), 0.95f);
-                if (input.GripUp || !input.Grip)
-                {
-                    string error = hit ? World.Reshape(dragEdge, dragIndex, local) : "Point at the ground to put the track down";
-                    World.Track.HidePreview();
-                    Debug.Log($"Wonderland track: reshape {(error ?? "done")}");
-                    if (error != null) { Say("Can't bend it there: " + error, 4f); Haptic(0.7f, 0.1f); } else { Say("Track reshaped"); Haptic(0.5f, 0.05f); }
-                    dragEdge = -1;
-                }
-                return;
-            }
             // Pointing at a piece of track (not drawing): it can be grabbed - show where, and say so.
             int grabEdge = -1; float grabS = 0f;
             grabbable = drawn.Count == 0 && hit && net.Nearest(local, out grabEdge, out grabS, out _, 0.06f) && World.Track.PickJoint(local, 0.045f) < 0;
-            if (grabbable && input.GripDown)
-            {
-                dragEdge = grabEdge; dragIndex = TrackPlanner.IndexAt(net.Edges[grabEdge].Layout, grabS); dragError = null; dragPreviewAt = 0f;
-                Debug.Log($"Wonderland track: grabbed piece {grabEdge} at {grabS:0.00} m");
-                Say("Move the pointer and let go of grip - the track bends like a rope (red: it can't go there, the banner says why)", 6f);
-                Haptic(0.4f, 0.04f);
-                return;
-            }
+            if (grabbable && input.GripDown) { heldByTrigger = false; BendTrack(grabEdge, grabS); return; }   // grip on the track: bend it like a rope
             // Hover: switches light up (tap to throw), dead ends and track show where a stroke would attach.
             if (drawn.Count == 0 && hit)
             {
@@ -1007,8 +992,9 @@ namespace Wonderland
             {
                 bool onTrack = hit && net.Nearest(local, out _, out _, out _, 0.08f);
                 World.TerrainView.SetBrush(local, 0.05f, onTrack ? new Color(0.6f, 1f, 0.6f) : new Color(1f, 0.5f, 0.4f), hit ? 0.9f : 0f);
-                if (input.GripUp || !input.Grip)
+                if (LetGo(input))
                 {
+                    heldByTrigger = false;
                     var kind = carriedTrain.Kind; bool running = carriedTrain.Running; float speed = carriedTrain.SpeedFactor; int cars = carriedTrain.Carriages;
                     carriedTrain = null;
                     // The pick-up was checkpointed: undo puts it back if the new spot doesn't work.
@@ -1047,14 +1033,7 @@ namespace Wonderland
                 }
                 if (Mathf.Abs(input.Stick.x) < 0.3f) carTimer = 0f;
                 if (input.TriggerDown) { hoveredTrain.Running = !hoveredTrain.Running; Say(hoveredTrain.Running ? "All aboard!" : "Train stopping"); Haptic(0.5f, 0.05f); RefreshOptions(); }
-                if (input.GripDown)
-                {
-                    World.Checkpoint();
-                    carriedTrain = new Train { Kind = hoveredTrain.Kind, Running = hoveredTrain.Running, SpeedFactor = hoveredTrain.SpeedFactor, Carriages = hoveredTrain.Carriages };
-                    World.Trains.Remove(hoveredTrain);
-                    hoveredTrain = null;
-                    Say("Point at the track and let go");
-                }
+                if (input.GripDown) { heldByTrigger = false; PickUpTrain(hoveredTrain); }
                 return;
             }
             if (joint >= 0)
@@ -1097,18 +1076,16 @@ namespace Wonderland
                 {
                     ghost.gameObject.SetActive(false);
                     World.TerrainView.HideBrush();
-                    if (input.TriggerDown || input.GripDown)
-                    {
-                        var h = World.PickUpHouse(hover);
-                        HouseVariant = h.variant; houseRotation = h.rotation; houseStyle = h.style; carrying = true; pickedHover = -1;
-                        BuildCategory = Catalog.Get(h.variant).Category;
-                        Say("Moving " + HouseFactory.Name(h.variant));
-                        RefreshOptions();
-                    }
+                    if (input.TriggerDown || input.GripDown) { heldByTrigger = !input.GripDown; PickUpHouse(hover); }
                     return;
                 }
             }
-            if (!hit) { ghost.gameObject.SetActive(false); World.TerrainView.HideBrush(); return; }
+            if (!hit)
+            {
+                ghost.gameObject.SetActive(false); World.TerrainView.HideBrush();
+                if (carrying && !heldByTrigger && input.GripUp) { DropCarried(); Say("Point at the land to put it down - it's back where it was", 4f); Haptic(0.7f, 0.1f); RefreshOptions(); }
+                return;
+            }
             if (BuildGrid.Snap && !Catalog.IsStation(HouseVariant))
             {
                 // On the grid: beside a road, facing it and lined up along it; elsewhere on the grid, in quarter turns.
@@ -1133,17 +1110,26 @@ namespace Wonderland
             var wt = World.transform;
             ghost.position = wt.TransformPoint(new Vector3(local.x, World.SitHeightFor(candidate) + 0.004f * Mathf.Sin(Time.time * 6f) + 0.004f, local.z));
             ghost.rotation = wt.rotation * Quaternion.Euler(0f, houseRotation, 0f);
+            ghost.localScale = wt.lossyScale;
             ShowFacing(new Vector3(local.x, 0f, local.z), houseRotation, Catalog.Get(HouseVariant).Half.y, HouseVariant == Catalog.Camera);
             ghostBlock.SetColor("_Highlight", error == null ? new Color(0.6f, 1f, 0.5f, 0.18f) : new Color(1f, 0.3f, 0.25f, 0.45f));
             ghostRenderer.SetPropertyBlock(ghostBlock);
             World.TerrainView.SetBrush(local, BuildingSystem.Radius(HouseVariant) * 0.9f, error == null ? new Color(0.6f, 1f, 0.5f) : new Color(1f, 0.4f, 0.35f), 0.6f);
-            if (input.TriggerDown || (carrying && input.GripUp))
+            bool gripped = carrying && !heldByTrigger;
+            if (input.TriggerDown || gripped && input.GripUp)
             {
-                if (error == null)
+                if (error != null && gripped && input.GripUp)
+                {
+                    // Let go where it can't go: back where it was.
+                    DropCarried();
+                    Say(error + " - it's back where it was", 4f); Haptic(0.7f, 0.1f);
+                    RefreshOptions();
+                }
+                else if (error == null)
                 {
                     bool wasCarrying = carrying;
                     World.PlaceHouse(candidate, !carrying);
-                    carrying = false;
+                    carrying = false; heldByTrigger = false;
                     int styles = Mathf.Max(1, Catalog.Get(HouseVariant).Styles);
                     if (!wasCarrying) houseStyle = styles > 1 ? (houseStyle + 1 + Random.Range(0, styles - 1)) % styles : 0;
                     Haptic(0.5f, 0.05f);
@@ -1271,6 +1257,7 @@ namespace Wonderland
             dot.gameObject.SetActive(showDot);
             dot.position = end;
             dot.GetComponent<MeshRenderer>().sharedMaterial.color = colour;
+            ShowLabel(end, ray.origin);
         }
     }
 }
