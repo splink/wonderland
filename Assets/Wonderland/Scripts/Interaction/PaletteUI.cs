@@ -342,20 +342,43 @@ namespace Wonderland
         {
             list ??= new List<Option>();
             if (info == null) { if (list.Count == 0) return; info = MakePanel("Info", Width / 2 + InfoWidth / 2 + 0.006f, InfoWidth, false); }
-            while (infoButtons.Count > list.Count)
+            PanelButtons(info, InfoWidth, infoButtons, list, 2);
+        }
+
+        private readonly List<PaletteButton> cardButtons = new();
+
+        /// <summary>
+        /// What can be done with what the card shows - Move, Remove, Stop, Always left... - as buttons along the bottom of
+        /// the card, three to a row; the body shrinks to the space above them. Null or empty removes them. Call after
+        /// <see cref="ShowCard(string, string, string, IReadOnlyList{ValueTuple{Mesh, Matrix4x4}}, Action)"/>.
+        /// </summary>
+        public void SetCardButtons(IReadOnlyList<Option> list)
+        {
+            list ??= new List<Option>();
+            if (card == null) return;
+            PanelButtons(card, CardWidth, cardButtons, list, 3);
+        }
+
+        public IReadOnlyList<PaletteButton> CardButtons => cardButtons;
+
+        private void PanelButtons(Panel panel, float width, List<PaletteButton> pool, IReadOnlyList<Option> list, int perRow)
+        {
+            while (pool.Count > list.Count)
             {
-                if (Application.isPlaying) Destroy(infoButtons[^1].gameObject); else DestroyImmediate(infoButtons[^1].gameObject);
-                infoButtons.RemoveAt(infoButtons.Count - 1);
+                if (Application.isPlaying) Destroy(pool[^1].gameObject); else DestroyImmediate(pool[^1].gameObject);
+                pool.RemoveAt(pool.Count - 1);
             }
             const float h = 0.0155f, gap = 0.003f;
-            float w = (InfoWidth - 0.016f - gap) / 2f, bottom = -PanelHeight / 2 + 0.008f;
-            int rows = (list.Count + 1) / 2;
+            float w = (width - 0.016f - gap * (perRow - 1)) / perRow, bottom = -PanelHeight / 2 + 0.008f;
+            int rows = (list.Count + perRow - 1) / perRow;
             for (int i = 0; i < list.Count; i++)
             {
-                if (i >= infoButtons.Count) infoButtons.Add(Button("Setting", info.Root, Vector3.zero, new Vector2(w, h), "", false));
-                var b = infoButtons[i];
-                int row = i / 2, col = i % 2;
-                b.transform.localPosition = new Vector3(-w / 2 - gap / 2 + col * (w + gap), bottom + (rows - 1 - row) * (h + gap) + h / 2, 0f);
+                if (i >= pool.Count) pool.Add(Button("Setting", panel.Root, Vector3.zero, new Vector2(w, h), "", false));
+                var b = pool[i];
+                int row = i / perRow, col = i % perRow;
+                int inRow = Mathf.Min(perRow, list.Count - row * perRow);
+                float x = (col - (inRow - 1) / 2f) * (w + gap);
+                b.transform.localPosition = new Vector3(x, bottom + (rows - 1 - row) * (h + gap) + h / 2, 0f);
                 b.Label.text = list[i].Label;
                 b.Selected = list[i].Selected; b.Enabled = list[i].Enabled;
                 b.OnClick = list[i].OnClick;
@@ -363,8 +386,8 @@ namespace Wonderland
             }
             // The body fills what is left between the header and the buttons.
             float top = PanelHeight / 2 - 0.004f - 0.046f - 0.008f, low = rows > 0 ? bottom + rows * (h + gap) + 0.002f : -PanelHeight / 2 + 0.008f;
-            info.Body.rectTransform.localPosition = new Vector3(0f, (top + low) / 2, -0.002f);
-            info.Body.rectTransform.sizeDelta = new Vector2(InfoWidth - 0.022f, top - low);
+            panel.Body.rectTransform.localPosition = new Vector3(0f, (top + low) / 2, -0.002f);
+            panel.Body.rectTransform.sizeDelta = new Vector2(width - 0.022f, top - low);
         }
 
         public IReadOnlyList<PaletteButton> InfoButtons => infoButtons;

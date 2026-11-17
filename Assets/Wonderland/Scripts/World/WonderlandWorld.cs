@@ -1222,6 +1222,35 @@ namespace Wonderland
             return h;
         }
 
+        /// <summary>Takes away building <paramref name="index"/> (checkpointed); what went, in words.</summary>
+        public string RemoveHouse(int index)
+        {
+            Checkpoint();
+            var h = Buildings.RemoveAt(index);
+            ApplyPads();
+            Cover.MarkDirtyRegion(new Vector2(h.x, h.z), 0.1f);
+            return HouseFactory.Name(h.variant) + " removed";
+        }
+
+        /// <summary>Gives building <paramref name="index"/> its next colour style (checkpointed); null, or why not.</summary>
+        public string RestyleHouse(int index)
+        {
+            if (index < 0 || index >= Buildings.Houses.Count) return "It has gone";
+            var h = PickUpHouse(index);
+            h.style = (h.style + 1) % Mathf.Max(1, Catalog.Get(h.variant).Styles);
+            string error = PlaceHouse(h, false);
+            if (error != null) { Undo(false); return error; }
+            return null;
+        }
+
+        /// <summary>Takes away signal <paramref name="i"/> (checkpointed).</summary>
+        public string RemoveSignal(int i)
+        {
+            Checkpoint();
+            Track.Signals.RemoveAt(i); Track.SnapSignals(); Track.RebuildFixtures();
+            return "Signal removed";
+        }
+
         // ------------------------------------------------------------------ eraser
 
         /// <summary>Erases the most specific thing under the pointer: a house, the train, or the railway. Returns what went.</summary>

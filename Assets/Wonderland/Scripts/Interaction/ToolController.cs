@@ -691,8 +691,9 @@ namespace Wonderland
             if (cam >= 0 && input.Stick.sqrMagnitude > 0.09f) TurnCamera(input.Stick.x * 70f * dt, -input.Stick.y * 40f * dt);
             bool target = peekPerson >= 0 || peekAnimal >= 0 || peekVehicle != null || peekTrain != null || peekHouse >= 0 || peekBoat >= 0;
             if (!input.TriggerDown || target) return;
+            if (hit && SelectRail(local)) return;
             if (cam >= 0 && hit) { cctv.AimAt(cam, local); Say($"{cctv.NameOf(cam)} now looks this way"); Haptic(0.4f, 0.03f); cardTimer = 0f; return; }
-            Say("Point at something - a villager, a building, a train, a camera - and pull the trigger to select it");
+            Say("Point at something - a villager, a building, a train, a switch, the track - and pull the trigger to select it");
         }
 
         /// <summary>Turns the selected camera (on a pole) by <paramref name="yaw"/> and tilts it by <paramref name="pitch"/> degrees.</summary>

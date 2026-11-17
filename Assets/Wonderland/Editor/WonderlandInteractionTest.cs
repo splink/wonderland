@@ -360,6 +360,55 @@ namespace Wonderland.Editor
                     Check((tools.PointerLabel ?? "").Contains("Switch"), $"Pointing at a switch, the label says what it is and what the trigger does (\"{(tools.PointerLabel ?? "").Replace("\n", " / ")}\")");
                 }
                 world.Undo();
+                // Cards with buttons: a switch's card chooses which way trains go; a piece of track's card bends it.
+                if (world.Track.Network.Joints.Count > 0)
+                {
+                    var jw = world.transform.TransformPoint(world.Track.Network.Joints[0].Position);
+                    tools.CloseCards();
+                    Frame(hand, jw, false); Frame(hand, jw, true); Frame(hand, jw, false);
+                    bool switchCard = palette.CardShown && palette.CardTitle == "Switch" && Find("Always left") != null;
+                    ClickButton(hand, "Always left");
+                    var j0 = world.Track.Network.Joints[0];
+                    bool pinnedLeft = j0.Pinned;
+                    ClickButton(hand, "Trains choose");
+                    Check(switchCard && pinnedLeft && !j0.Pinned, $"Select a switch: its card says where each way leads, and Always left / Always right / Trains choose set it [card {switchCard}, pinned {pinnedLeft}, free {!j0.Pinned}]");
+                }
+                {
+                    var rl = world.Track.Network;
+                    int e1 = 0; float len1 = 0f;
+                    for (int e = 0; e < rl.Edges.Count; e++) if (rl.Edges[e].Layout.Length > len1) { len1 = rl.Edges[e].Layout.Length; e1 = e; }
+                    var mid1 = rl.Edges[e1].Layout.Evaluate(len1 * 0.3f, out var tan1);
+                    var midW1 = world.transform.TransformPoint(mid1);
+                    tools.CloseCards();
+                    Frame(hand, midW1, false); Frame(hand, midW1, true); Frame(hand, midW1, false);
+                    bool trackCard = palette.CardShown && palette.CardTitle == "Railway line";
+                    ClickButton(hand, "Bend");
+                    bool bending1 = tools.Holding && !palette.CardShown;
+                    var toW1 = world.transform.TransformPoint(mid1 + Vector3.Cross(Vector3.up, tan1.normalized) * 0.03f);
+                    for (int i = 0; i < 3; i++) Frame(hand, toW1, false);
+                    Frame(hand, toW1, true); Frame(hand, toW1, false);
+                    Check(trackCard && bending1 && !tools.Holding && tools.LastMessage == "Track reshaped", $"Select the track: its card's Bend button bends it, the trigger puts it down [card {trackCard}, bending1 {bending1}] - {tools.LastMessage}");
+                    world.Undo();
+                }
+            }
+            // A building's card: Move (trigger puts it down), Remove (B brings it back).
+            {
+                ClickButton(hand, "Select");
+                int bh = world.Buildings.Houses.FindIndex(h => h.variant != Catalog.Camera);
+                if (bh >= 0)
+                {
+                    var hh = world.Buildings.Houses[bh];
+                    var roof = world.transform.TransformPoint(new Vector3(hh.x, world.Buildings.TopOf(bh) - 0.01f, hh.z));
+                    tools.CloseCards();
+                    Frame(hand, roof, false); Frame(hand, roof, true); Frame(hand, roof, false);
+                    int n = world.Buildings.Houses.Count;
+                    bool opened = palette.CardShown && Find("Remove") != null;
+                    ClickButton(hand, "Remove");
+                    bool gone = world.Buildings.Houses.Count == n - 1 && !palette.CardShown;
+                    world.Undo();
+                    bool backAgain = world.Buildings.Houses.Count == n;
+                    Check(opened && gone && backAgain, $"A building's card has Remove; B brings it back [card {opened}, removed {gone}, back {backAgain}]");
+                }
             }
 
             // Several worlds: save this one as World 2, change it, save that as World 3, and load World 2 back.

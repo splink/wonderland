@@ -181,6 +181,7 @@ namespace Wonderland
             followKind = 0; followVehicle = null; followTrain = null;
             StopCameras();
             Palette.SetCardAction(null, false, null);
+            Palette.SetCardButtons(null);
             Palette.HideCard();
             if (followMarker) { followMarker.gameObject.SetActive(false); homePin.gameObject.SetActive(false); workPin.gameObject.SetActive(false); routeLine.enabled = false; }
         }
@@ -192,6 +193,7 @@ namespace Wonderland
             else if (followKind == 3) { var list = World.Buildings.Houses; for (int i = 0; i < list.Count; i++) if (Mathf.Abs(list[i].x - followHouse.x) < 1e-4f && Mathf.Abs(list[i].z - followHouse.y) < 1e-4f) return i; }
             else if (followKind == 4) return World.Trains.Trains.IndexOf(followTrain);
             else if (followKind == 5) return World.Traffic.Vehicles.IndexOf(followVehicle);
+            else if (followKind >= 6) return FollowedRail();
             return -1;
         }
 
@@ -201,7 +203,7 @@ namespace Wonderland
             SyncViewer();
             if (followKind == 0) return;
             int i = Followed();
-            if (i < 0) { Say(followKind == 1 ? "They have left the world" : followKind == 3 ? "It was taken down" : "It has gone"); CloseCard(); return; }
+            if (i < 0) { Say(followKind == 1 ? "They have left the world" : followKind == 3 ? "It was taken down" : followKind >= 6 ? "That part of the railway has changed" : "It has gone"); CloseCard(); return; }
             EnsureMarkers();
             var root = World.transform;
             Vector3 head;
@@ -294,6 +296,7 @@ namespace Wonderland
                     routeLine.enabled = false;
                 }
             }
+            else if (followKind >= 6) RailCard(i, refresh, out head);
             else
             {
                 var animals = World.Animals;
@@ -314,6 +317,7 @@ namespace Wonderland
                     routeLine.enabled = c.Destination.HasValue;
                 }
             }
+            if (refresh) Palette.SetCardButtons(CardActions(i));
             followMarker.gameObject.SetActive(true);
             followMarker.position = root.TransformPoint(head + Vector3.up * (Mathf.Sin(Time.time * 3f) * 0.003f));
             followMarker.rotation = root.rotation * Quaternion.Euler(0f, Time.time * 90f, 0f);
@@ -642,7 +646,7 @@ namespace Wonderland
                     foreach (var piece in line.Split(" · "))
                     {
                         int colon = piece.IndexOf(": ");
-                        if (colon > 0 && colon < 34) t.Row(piece.Substring(0, colon), piece.Substring(colon + 2)); else t.Line(piece);
+                        if (colon > 0 && colon < 20) t.Row(piece.Substring(0, colon), piece.Substring(colon + 2)); else t.Line(piece);
                     }
             }
             t.Section("This tool"); Rows(here);
@@ -665,10 +669,10 @@ namespace Wonderland
                 Tool.Train => "Trigger on the track: a train - pick it on the second row (Steam, Express, Tank engine, Goods, Railcar); it runs the way the arrows point\nPointing at a train: trigger stop / go · stick up/down: speed · grip: pick it up and put it elsewhere\nCarriages: point at a train, then + Carriage / - Carriage (trains always run engine first, the way the arrows point)\nThe hint says what it is doing and why it waits (a red signal, the train ahead, the buffers)\nSwitches: Spread (trains take the way with fewer trains ahead, so they cover the whole railway), Random, Manual (tap a switch) · A: start / stop all",
                 Tool.Houses => "Pick a category, then a building. Trigger: place it · stick: a flick turns it 15°, hold to turn smoothly (the arrow is its front) · A: next\nTrigger (or grip) on a building: pick it up and move it · pointing at one says who is there\nTravel: a landing stage at a pond's edge, and boats on the water",
                 Tool.Decor => "Trigger: place people or animals (hold and sweep for a herd)\nTrigger on a villager or animal: their card - a marker follows them, a line shows where they are going, pins mark home and work\nChips: days pass / fast / stop time, Fête, Emergency, Clouds · A: next kind",
-                Tool.Select => "Trigger on anything with a gold ring under it - a villager, a building, a train, a switch, the track: its card, with buttons for what you can do with it\nA villager's card follows them with their camera; a train's card rides along at the front\nA camera (Build, Small, Camera): its picture on the monitor - the buttons round it or the stick turn and tilt it, the trigger on the land points it there\nCam 1, 2... and Train 1, 2...: open a camera · A: next camera",
+                Tool.Select => "Trigger: on anything with a gold ring under it - a villager, a building, a train, a switch, the track - its card, with buttons for what you can do with it\nVillagers: their card follows them with their camera · trains: Camera rides along at the front\nCameras: their picture on the monitor - the buttons round it or the stick turn it, the trigger on the land points it (put one up: Build, Small, Camera)\nCam / Train chips: open a camera · A: next camera",
                 _ => "Trigger on anything you built: take it away · hold over trees: clear them",
             };
-            return here + "\n\nEverywhere: the label at the pointer says what each button does to what you point at · Grip: pick it up and move it (track bends) · B undo (Redo below) · point at the palette and pull the trigger to choose\nSave / Load: Worlds 1-6 · Move: place the world elsewhere · New: start again (press twice) · Sound: on / quiet / muted · Stats: frame rate and the world's numbers";
+            return here + "\n\nEverywhere: Label: beside the pointer, what each button does to what you point at · Grip: pick it up and move it (track bends) · B undo (Redo below) · point at the palette and pull the trigger to choose\nSave / Load: Worlds 1-6 · Move: place the world elsewhere · New: start again (press twice) · Sound: on / quiet / muted · Stats: frame rate and the world's numbers";
         }
     }
 }

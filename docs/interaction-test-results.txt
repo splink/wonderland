@@ -41,6 +41,9 @@ PASS  Select: trigger on a camera - its card and its live picture over the palet
 PASS  Close puts the picture away
 PASS  Grip on the track bends it in any tool (label: "<b><color=#FFE3A8>Railway · trains run the way the arrows point</color></b> / <color=#FFD27A><b>Trigger</b></color>  its card / <color=#FFD27A><b>Grip</b></color>  bend it") - Track reshaped
 PASS  Pointing at a switch, the label says what it is and what the trigger does ("<b><color=#FFE3A8>Switch · set: trains always go the way it points</color></b> / <color=#FFD27A><b>Trigger</b></color>  its card - choose which way trains go")
+PASS  Select a switch: its card says where each way leads, and Always left / Always right / Trains choose set it [card True, pinned True, free True]
+PASS  Select the track: its card's Bend button bends it, the trigger puts it down [card True, bending1 True] - Track reshaped
+PASS  A building's card has Remove; B brings it back [card True, removed True, back True]
 PASS  Save and Load keep several worlds: saved as World 2 and World 3, and World 2 loads back as it was (4 buildings)
 PASS  Stats opens the performance panel; Grass cycles to Off (no tufts) and Defaults brings them back (5538 tufts)
 PASS  Help and Stats open beside the palette (with the world's own numbers) and close again
