@@ -87,6 +87,7 @@ namespace Wonderland
             WaterView.Init(Terrain, materials.Water);
             Animals = Child<AnimalSystem>("Animals");
             Animals.Init(Terrain, materials.Lit, Habitat, (a, b) => Paths.CrossesBarrier(a, b), Threat);
+            Animals.Watched = () => Cctv != null && Cctv.Watching;
             Animals.Resting = () => Clock.Hour >= 22.5f || Clock.Hour < 5.5f;
             People = Child<PeopleSystem>("Villagers");
             People.Init(this, materials.Lit);

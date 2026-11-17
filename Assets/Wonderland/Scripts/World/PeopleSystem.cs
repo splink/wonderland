@@ -59,6 +59,7 @@ namespace Wonderland
             public float Ground, Chosen = float.NaN, ChosenWant;
             public int Style, Level;   // their outfit, and the level of detail they are drawn at
             public float Pending;      // time not yet thought through (coarse scheduling)
+            public MeshRenderer[] Parts; public MeshFilter[] Filters; public int PartCount = -1;   // drawn together (FigureBatch)
             public float Heading, Timer, Phase, Height, Cooldown, Ride, WaveHeading, ResumeTimer;
             public Activity State, Resume;
             public bool ToStation, Cheering, Hidden;
@@ -422,6 +423,35 @@ namespace Wonderland
             long t0 = SimCost.Now; Step(Time.deltaTime); SimCost.Add(SimCost.People, t0);
         }
 
+        private readonly FigureBatch batch = new();
+        private bool drawnTogether;
+
+        /// <summary>All the villagers drawn together, a draw per body part mesh (see <see cref="FigureBatch"/>).</summary>
+        private void LateUpdate()
+        {
+            if (world == null || world.Terrain == null) return;
+            if (!FigureBatch.Together)
+            {
+                if (drawnTogether) foreach (var a in agents) if (a.Parts != null) FigureBatch.Restore(a.Parts);
+                drawnTogether = false;
+                return;
+            }
+            drawnTogether = true;
+            batch.Begin(material, world.Cctv != null && world.Cctv.Watching);
+            foreach (var a in agents)
+            {
+                if (a.Hidden || !a.Root.gameObject.activeSelf || !batch.Visible(a.Root.position)) continue;
+                if (a.Parts == null || a.Root.childCount != a.PartCount)
+                {
+                    a.Parts = a.Root.GetComponentsInChildren<MeshRenderer>(true);
+                    a.Filters = System.Array.ConvertAll(a.Parts, r => r.GetComponent<MeshFilter>());
+                    a.PartCount = a.Root.childCount;
+                }
+                batch.Add(a.Parts, a.Filters);
+            }
+            batch.Draw(WonderlandWorld.MiniatureLayer);
+        }
+
         /// <summary>Advances every villager (also driven by the scripted test). The village clock is ticked by the world.</summary>
         public void Step(float dt)
         {
@@ -431,6 +461,7 @@ namespace Wonderland
             decisionsThisStep = 0;
             tick++;
             bool smart = PerfSettings.SmartVillagers;
+            bool watched = world.Cctv != null && world.Cctv.Watching;   // (a CCTV feed sees far and behind: everyone moves smoothly)
             FindLocos();
             var eye = Camera.main != null ? (Vector3?)transform.InverseTransformPoint(Camera.main.transform.position) : null;
             var viewDir = Camera.main != null ? transform.InverseTransformDirection(Camera.main.transform.forward) : Vector3.forward;
@@ -451,7 +482,7 @@ namespace Wonderland
                 // Coarse (Smart): behind the player or beyond drawing distance, a villager thinks every fourth frame,
                 // catching up the time in between - nothing goes slower, it just goes in bigger steps nobody sees.
                 float dtA = dt, hoursA = hours;
-                if (smart && eye.HasValue)
+                if (smart && eye.HasValue && !watched)
                 {
                     var rel = new Vector3(a.Position.x, a.Height, a.Position.y) - eye.Value;
                     bool coarse = rel.sqrMagnitude > drawn * drawn || Vector3.Dot(rel, viewDir) < -0.05f;
@@ -534,7 +565,7 @@ namespace Wonderland
                 a.Height = Mathf.MoveTowards(a.Height, a.Ground + (a.State == Activity.Watching ? a.SpotLift : 0f), (a.SpotLift > 0f ? 0.4f : 0.12f) * dtA);
                 if (eye.HasValue && (beat & 7) == 0) Detail(a, (new Vector3(a.Position.x, a.Height, a.Position.y) - eye.Value).magnitude * transform.lossyScale.x);
                 // Beyond the distance figures are drawn at, nobody sees them move: posed only now and then.
-                if (smart && eye.HasValue && (beat & 7) != 0 && (new Vector3(a.Position.x, a.Height, a.Position.y) - eye.Value).sqrMagnitude > drawn * drawn) continue;
+                if (smart && eye.HasValue && !watched && (beat & 7) != 0 && (new Vector3(a.Position.x, a.Height, a.Position.y) - eye.Value).sqrMagnitude > drawn * drawn) continue;
                 Pose(a);
             }
             double stepMs = (System.Diagnostics.Stopwatch.GetTimestamp() - t1) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;

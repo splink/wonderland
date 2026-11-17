@@ -45,6 +45,7 @@ namespace Wonderland
         public static readonly Setting Grass = Make("Grass", "grass", 0, "the tufts, flowers and pebbles on the meadows", "Full", "Half", "Off");
         public static readonly Setting Detail = Make("Detail", "detail", 0, "five levels chosen by how big each thing looks: extra detail up close, simpler (still recognisable) far away", "By size", "Always high");
         public static readonly Setting Villagers = Make("Villagers", "villagers", 0, "villagers and animals think on a schedule instead of every frame", "Smart", "Every frame");
+        public static readonly Setting Figures = Make("Figures", "figures", 0, "villagers and animals drawn together, one draw per body part for all of them, instead of one each", "Together", "One by one");
         public static readonly Setting Haze = Make("Haze", "haze", 0, "the far side of the world takes on a soft tint of the sky, for depth (costs next to nothing)", "Soft", "Strong", "Off");
         public static readonly Setting WorldSize = Make("World size", "worldsize", 0, "everything smaller, to see more of the world at once (try it: the same things cost the same to draw at any size)", "100%", "80%", "60%");
         public static float WorldScale => WorldSize.Value switch { 0 => 1f, 1 => 0.8f, _ => 0.6f };

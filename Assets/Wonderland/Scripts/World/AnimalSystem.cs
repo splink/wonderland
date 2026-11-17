@@ -50,6 +50,7 @@ namespace Wonderland
             public float Heading, Timer, Bob, Pitch, Speed;
             public int Index, Level;   // (Level: the level of detail it is drawn at)
             public float Pending;      // time not yet moved through (coarse scheduling)
+            public MeshRenderer[] Parts; public MeshFilter[] Filters; public int PartCount = -1;   // drawn together (FigureBatch)
             public Vector2 GroundPos = new(float.NaN, 0f);   // where Ground and Normal were last looked up (Smart scheduling)
             public float Ground;
             public Vector3 Normal = Vector3.up;
@@ -166,11 +167,42 @@ namespace Wonderland
             long t0 = SimCost.Now; Step(Time.deltaTime); SimCost.Add(SimCost.Animals, t0);
         }
 
+        private readonly FigureBatch batch = new();
+        private bool drawnTogether;
+        /// <summary>Set by the world: a CCTV feed is being watched (far animals are drawn too).</summary>
+        public System.Func<bool> Watched;
+
+        /// <summary>All the animals drawn together, a draw per body and head mesh (see <see cref="FigureBatch"/>).</summary>
+        private void LateUpdate()
+        {
+            if (terrain == null) return;
+            if (!FigureBatch.Together)
+            {
+                if (drawnTogether) foreach (var a in agents) if (a.Parts != null) FigureBatch.Restore(a.Parts);
+                drawnTogether = false;
+                return;
+            }
+            drawnTogether = true;
+            batch.Begin(material, Watched != null && Watched());
+            foreach (var a in agents)
+            {
+                if (!a.Body.gameObject.activeSelf || !batch.Visible(a.Body.position)) continue;
+                if (a.Parts == null || a.Body.childCount != a.PartCount)
+                {
+                    a.Parts = a.Body.GetComponentsInChildren<MeshRenderer>(true);
+                    a.Filters = System.Array.ConvertAll(a.Parts, r => r.GetComponent<MeshFilter>());
+                    a.PartCount = a.Body.childCount;
+                }
+                batch.Add(a.Parts, a.Filters);
+            }
+            batch.Draw(WonderlandWorld.MiniatureLayer);
+        }
+
         /// <summary>Advances every animal (also driven by the scripted test).</summary>
         public void Step(float dt)
         {
             tick++;
-            bool smart = PerfSettings.SmartVillagers;
+            bool smart = PerfSettings.SmartVillagers && !(Watched != null && Watched());   // (a CCTV feed sees far and behind)
             var eye = Camera.main != null ? (Vector3?)transform.InverseTransformPoint(Camera.main.transform.position) : null;
             var viewDir = Camera.main != null ? transform.InverseTransformDirection(Camera.main.transform.forward) : Vector3.forward;
             float drawn = WonderlandWorld.MiniatureCullDistance / Mathf.Max(transform.lossyScale.x, 1e-3f) + 0.1f;

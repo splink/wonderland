@@ -727,6 +727,17 @@ The CPU main thread was 12.6 ms on World 1, of which the simulation was 5–7 ms
    - The grid shows around the pointer while placing.
    - Render: `editor-grid.png`.
 
+**Second round** (after the first headset session):
+- Five levels of detail chosen by how big things look on screen (Extreme up close, then High, Medium, Low,
+  Minimal).
+- Distance haze.
+- A World size setting.
+- Coarse simulation for villagers and animals behind the player or beyond 3 m. Editor timing on World 1, with a player
+  at the edge of the land: 7.1 ms every frame, 2.0 ms Smart.
+- Villagers and animals drawn together (GPU instancing, one draw per part mesh).
+
+Known: the "Clouds drift on the breeze" check failed once and passed on rerun; it looks flaky, and is unrelated.
+
 **Not yet re-measured on the headset with all of this in place.** Run Measure in Stats > Performance, or the
 benchmark ("bench" file), to see the new numbers.
 

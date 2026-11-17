@@ -335,7 +335,9 @@ the ponds, without damming them; a stream from a higher pond falls into the lowe
     animal by how big it looks: Extreme right up close (rounder shapes, a door knob and letterbox, villagers' smiles and
     eyebrows), High (the model as designed), then Medium, Low and Minimal (still recognisable: shape, colours, windows,
     roof), one level per doubling of distance. A big building keeps its detail further away than a small villager.
-  - **Villagers:** Smart (the default: occasional checks spread over the frames) or Every frame.
+  - **Villagers:** Smart (the default: occasional checks spread over the frames, and those behind you or beyond 3 m
+    think every fourth frame) or Every frame.
+  - **Figures:** Together (the default: all villagers and animals drawn with one draw per body part) or One by one.
   - **Haze:** Soft (the default), Strong or Off: the far side of the world takes on a soft tint of the sky, for depth.
   - **World size:** 100%, 80% or 60%: everything smaller, to see more of it at once.
   - **Resolution** and **Foveation.**

@@ -189,6 +189,16 @@ namespace Wonderland.Editor
                 WonderlandRenders.Capture(cam, $"editor-haze-{name}.png", 1600, 1000);
             }
             Shader.SetGlobalVector("_WL_Haze", Vector4.zero);
+            // Villagers and animals drawn together (instanced) and one by one: the pictures should match.
+            for (int i = 0; i < 30; i++) { w.Clock.Tick(Dt); w.People.Step(Dt); w.Animals.Step(Dt); }
+            cam.transform.position = c + new Vector3(0.15f, 0.25f, -0.45f); cam.transform.LookAt(c + new Vector3(0.05f, 0f, 0.1f));
+            foreach (var (mode, name) in new[] { (0, "together"), (1, "one-by-one") })
+            {
+                PerfSettings.Figures.Value = mode;
+                w.People.SendMessage("LateUpdate"); w.Animals.SendMessage("LateUpdate");
+                WonderlandRenders.Capture(cam, $"editor-figures-{name}.png", 1600, 1000);
+            }
+            PerfSettings.ResetAll();
             TerrainNoise.SetMode(0);
             Object.DestroyImmediate(w.gameObject);
             if (Application.isBatchMode) EditorApplication.Exit(0);
