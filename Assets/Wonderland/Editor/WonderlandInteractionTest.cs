@@ -182,10 +182,7 @@ namespace Wonderland.Editor
                 int more = TrainSystem.CarsOf(tr);
                 ClickButton(hand, "- Carriage");
                 Check(more == cars + 1 && TrainSystem.CarsOf(tr) == cars, $"Point at a train, then + / - Carriage couple and uncouple a carriage ({cars} -> {more} -> {TrainSystem.CarsOf(tr)})");
-                var engine = world.Trains.LocoPosition(tr); int dir = tr.Dir;
-                ClickButton(hand, "Turn round");
-                float shift = (world.Trains.LocoPosition(tr) - engine).magnitude;
-                Check(shift > 0.05f && tr.Dir == -dir, $"Turn round moves the engine to the other end of its train ({shift * 100f:0} cm)");
+                Check(Find("Turn round") == null && tr.Dir > 0, "Trains run engine first, the way the arrows point (no Turn round)");
             }
             ClickButton(hand, "Stop all");
             Check(!world.Trains.AnyRunning, "Stop all stops the trains");

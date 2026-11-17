@@ -61,7 +61,49 @@ namespace Wonderland
     /// </summary>
     public sealed class TrackNetwork
     {
-        public const float FoulDistance = 0.16f;   // trains on different branches are clear of each other this far from a switch
+        public const float FoulDistance = 0.16f;   // trains on different branches are clear of each other this far from a switch (at least)
+
+        /// <summary>
+        /// How far from switch <paramref name="ji"/> trains on its branches are clear of each other: where the branches
+        /// have drawn 3.6 cm apart (two train bodies side by side, with room between), plus a little - a gentle switch
+        /// whose lines run alongside for a while needs more than a sharp one. Never less than <see cref="FoulDistance"/>.
+        /// </summary>
+        public float FoulOf(int ji)
+        {
+            if (foul == null || foul.Length != Joints.Count || foulVersion != Version)
+            {
+                foul = new float[Joints.Count]; foulVersion = Version;
+                for (int k = 0; k < Joints.Count; k++) foul[k] = ClearOf(Joints[k]);
+            }
+            return ji >= 0 && ji < foul.Length ? foul[ji] : FoulDistance;
+        }
+
+        private float[] foul;
+        private int foulVersion = -1;
+
+        private float ClearOf(TrackJoint j)
+        {
+            if (j == null || j.Ends.Count != 3) return FoulDistance;
+            float clear = FoulDistance;
+            var branches = new List<EdgeEnd>();
+            foreach (var e in j.Ends) if (e != j.Trunk) branches.Add(e);
+            if (branches.Count != 2) return FoulDistance;
+            for (int k = 0; k < 2; k++)
+            {
+                var a = branches[k]; var b = branches[1 - k];
+                var la = Edges[a.Edge].Layout; var lb = Edges[b.Edge].Layout;
+                for (float d = 0.02f; d < 0.6f; d += 0.01f)
+                {
+                    if (d > la.Length) break;
+                    var p = la.Evaluate(a.End == 0 ? d : la.Length - d, out _);
+                    float near = float.MaxValue;
+                    for (float u = 0f; u <= Mathf.Min(0.8f, lb.Length); u += 0.01f) near = Mathf.Min(near, (lb.Evaluate(b.End == 0 ? u : lb.Length - u, out _) - p).magnitude);
+                    if (near >= 0.036f) { clear = Mathf.Max(clear, d + 0.02f); break; }
+                    if (d + 0.01f >= 0.6f) clear = Mathf.Max(clear, 0.6f);
+                }
+            }
+            return clear;
+        }
         public const float CrossingZone = 0.055f;  // a diamond crossing is occupied within this distance of its centre
         public readonly List<TrackEdge> Edges = new();
         public readonly List<TrackJoint> Joints = new();
@@ -83,9 +125,9 @@ namespace Wonderland
         public string TwoWayReason => TwoWayParts > 0 ? TurnBack : null;
 
         /// <summary>
-        /// Connected parts of the railway that can't run one way (a line that turns back into itself, built before the
-        /// railway ran one way): their pieces stay two-way - no arrows, trains shuttle as they always did - while every
-        /// other part runs one way.
+        /// Connected parts of the railway that can't run one way everywhere (a line that turns back into itself, built
+        /// before the railway ran one way). They are still given a direction - as consistent as it can be - so trains
+        /// there follow the arrows too; a branch that would take a train back against them is simply never taken.
         /// </summary>
         public int TwoWayParts { get; private set; }
 
@@ -125,7 +167,8 @@ namespace Wonderland
                     links[t.Edge].Add((b.Edge, p)); links[b.Edge].Add((t.Edge, p));
                 }
             }
-            // Each connected part on its own: oriented if it can be, otherwise left two-way exactly as it is.
+            // Each connected part on its own, oriented (where it contradicts itself, as far as it goes: those switches'
+            // wrong-way branches are never taken, since trains only ever leave a switch the way the arrows point).
             int twoWay = 0;
             var comp = new List<int>(); var queue = new Queue<int>();
             for (int s = 0; s < n; s++)
@@ -144,7 +187,7 @@ namespace Wonderland
                         else if (flip[o] != want) conflict = true;
                     }
                 }
-                if (conflict) { twoWay++; foreach (int e in comp) flip[e] = 0; continue; }
+                if (conflict) twoWay++;
                 float keep = 0f;
                 foreach (int e in comp) keep += (agreement?.Invoke(e) ?? 0f) * (flip[e] == 0 ? 1f : -1f);
                 if (keep < 0f) foreach (int e in comp) flip[e] ^= 1;

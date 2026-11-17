@@ -62,7 +62,7 @@ namespace Wonderland
                 new() { Id = "dead-end", When = () => Tool == Tool.Track && DeadEndCount() > 0,
                     Text = "A line that stops at a dead end isn't used by trains (they'd have to reverse). Join its end back onto the railway." },
                 new() { Id = "train-tool", When = () => Tool == Tool.Train && World.Trains.Trains.Count > 0,
-                    Text = "Point at a train: trigger stops or starts it, + / - Carriage changes its length, Turn round puts the engine at the other end." },
+                    Text = "Point at a train: trigger stops or starts it, + / - Carriage changes its length. Trains always run the way the arrows point." },
                 new() { Id = "stations", When = () => World.Trains.Trains.Count > 0 && World.Trains.Stations.Count == 0,
                     Text = "Put a station beside the track (Build > Travel): trains stop there and villagers ride them to other villages." },
                 new() { Id = "build", When = () => Tool == Tool.Houses,

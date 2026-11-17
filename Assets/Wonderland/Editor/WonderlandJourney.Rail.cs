@@ -176,11 +176,11 @@ namespace Wonderland.Editor
                 Check(oldParts == 1 && preview.Ok && built.Ok, $"An old two-way railway in the world doesn't stop a new loop being built (preview {preview.Error ?? "ok"}, built {built.Error ?? "ok"})");
                 var branch = w.BuildTrack(Line(t, new Vector2(-0.55f, -0.3f), new Vector2(-0.4f, -0.4f), new Vector2(-0.3f, -0.62f)));
                 Check(branch.Ok, $"...nor a branch off the old part ({branch.Error ?? "built"})");
-                bool arrowsOnNew = false, noArrowsOnOld = true;
+                bool arrowsOnNew = false, arrowsOnOld = true;
                 for (int e = 0; e < n.Edges.Count; e++) { if (n.Edges[e].Closed && n.Directed(e)) arrowsOnNew = true; }
                 n = w.Track.Network;
-                for (int e = 0; e < n.Edges.Count; e++) if (!n.Edges[e].Closed && n.Directed(e) && n.Edges[e].Layout.Points[0].z < -0.2f) noArrowsOnOld = false;
-                Check(arrowsOnNew && noArrowsOnOld && n.TwoWayParts == 1, $"The new loop runs one way (arrows), the old part stays two-way ({n.TwoWayParts} two-way part)");
+                for (int e = 0; e < n.Edges.Count; e++) if (!n.Directed(e)) arrowsOnOld = false;
+                Check(arrowsOnNew && arrowsOnOld && n.TwoWayParts == 1, $"Every piece has a direction - the new loop and the old part too (its wrong-way branch is never taken); the old part is still counted as one that can't run one way everywhere ({n.TwoWayParts})");
                 UnityEngine.Object.DestroyImmediate(w.gameObject);
             }
             RailOperations();

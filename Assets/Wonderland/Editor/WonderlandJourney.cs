@@ -1226,11 +1226,12 @@ namespace Wonderland.Editor
                 w.PlaceTrain(t.PointAt(-0.75f, -0.095f), TrainKind.Railcar, Vector3.right, out _);
                 var (gap, off) = RunTrains(w, 150f);
                 Check(w.Trains.Trains.Count == 2 && gap > 0.04f, $"Trains take turns at the crossings (closest {gap * 100f:0.0} cm)");
-                Check(w.Trains.Trains.Count == 2 && w.Trains.Trains[1].Odometer > 2f, $"The railcar shuttles along its line, reversing at the buffers ({(w.Trains.Trains.Count == 2 ? w.Trains.Trains[1].Odometer : 0f):0.0} m)");
+                Check(w.Trains.Trains.Count == 2 && w.Trains.Trains[1].Odometer > 0.5f && w.Trains.Trains[1].Reversals == 0 && w.Trains.Trains[1].Dir > 0,
+                    $"The railcar runs along its line the way the arrows point and stops at the buffers - it never reverses ({(w.Trains.Trains.Count == 2 ? w.Trains.Trains[1].Odometer : 0f):0.0} m)");
                 UnityEngine.Object.DestroyImmediate(w.gameObject);
             }
             {
-                // Head-on on a single line: they stop nose to nose and one backs away.
+                // Two trains on a single line, put on facing each other: both are set the way the line runs - no head-on.
                 var w = Scratch("Single line", 120f);
                 var t = w.Terrain;
                 var line = w.BuildTrack(Line(t, new Vector2(-0.9f, -0.2f), new Vector2(-0.3f, 0.1f), new Vector2(0.3f, -0.1f), new Vector2(0.9f, 0.2f)));
@@ -1242,8 +1243,9 @@ namespace Wonderland.Editor
                     int da = a.Dir, db = b.Dir;
                     bool turned = false;
                     var (gap, _) = RunTrains(w, 60f, _ => { if (a.Dir != da || b.Dir != db) turned = true; });
-                    Check(gap > 0.04f && turned, $"Head-on on single track: they stop short and one backs away (closest {gap * 100f:0.0} cm)");
-                    Check(a.Odometer > 0.5f && b.Odometer > 0.5f, $"Both keep running ({a.Odometer:0.0} m, {b.Odometer:0.0} m)");
+                    Check(da > 0 && db > 0 && gap > 0.02f && !turned && a.Reversals + b.Reversals == 0,
+                        $"Put on a single line facing each other, both run the way the arrows point - no head-on, nobody reverses (closest {gap * 100f:0.0} cm)");
+                    Check(a.Odometer + b.Odometer > 0.3f, $"They run on to the buffers ({a.Odometer:0.0} m, {b.Odometer:0.0} m)");
                 }
                 else Check(false, "Two trains placed on the single line");
                 UnityEngine.Object.DestroyImmediate(w.gameObject);

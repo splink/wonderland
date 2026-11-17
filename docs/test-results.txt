@@ -44,24 +44,24 @@ PASS  Drawing on from the buffers extends the line (3.40 -> 3.72 m)
 PASS  Drawing from the end back onto the loop joins it with a second switch (2 switches, 3 pieces)
 PASS  A goods train and a railcar join the steam train (3 trains)
 PASS  Every train gets its own colours
-PASS  Trains sharing the network never touch (closest 5.8 cm between cars in 3 minutes)
-PASS  All trains keep running (no jams) (41.4, 23.2, 20.6 m)
+PASS  Trains sharing the network never touch (closest 7.0 cm between cars in 3 minutes)
+PASS  All trains keep running (no jams) (41.4, 23.2, 20.5 m)
 PASS  Every train stays on the rails through the switches (worst offset 0.0 mm)
 PASS  Speed setting: half speed is half speed (6.5 cm/s)
 PASS  A tapped switch stays where it was set ("Switch set - trains will keep this way")
 PASS  Grip and drag bends a piece of track (moved 12 cm, track within 1.1 cm of the hand)
 PASS  The trains stay on the bent track (3/3)
-PASS  Trains run on over the bent track (closest 5.0 cm)
+PASS  Trains run on over the bent track (closest 6.6 cm)
 PASS  A bend that would squeeze into other track is refused ("That bend is too tight for the train")
 PASS  Save/load keeps the network (3 pieces, 2 switches, 3 trains)
 PASS  The eraser takes away one piece of track ("Track removed": 0 switches, 1 pieces left)
 PASS  Undo puts the piece back
 PASS  A line drawn across the loop crosses it with two diamond crossings (2)
-PASS  Trains take turns at the crossings (closest 7.0 cm)
-PASS  The railcar shuttles along its line, reversing at the buffers (14.6 m)
+PASS  Trains take turns at the crossings (closest 16.7 cm)
+PASS  The railcar runs along its line the way the arrows point and stops at the buffers - it never reverses (1.6 m)
 PASS  An open line with buffers at both ends
-PASS  Head-on on single track: they stop short and one backs away (closest 4.9 cm)
-PASS  Both keep running (2.9 m, 2.6 m)
+PASS  Put on a single line facing each other, both run the way the arrows point - no head-on, nobody reverses (closest 6.6 cm)
+PASS  They run on to the buffers (0.8 m, 0.1 m)
 PASS  Every one of the 57 library objects builds (largest: Wheat field, 16552 vertices)
 PASS  Library objects stay within the vertex budget
 PASS  A village square goes up (9/9 places)
@@ -117,7 +117,7 @@ PASS  The village clock runs a day in 7.6 minutes (360 s of daylight, 97 s of ni
 PASS  The daily rhythm: shops in the morning, lunch at midday, the fair in the afternoon, the square in the evening
 PASS  A railway loop divides the land
 PASS  A village goes up around the railway (13/13 places, 8 residents moved in)
-PASS  The walk grid sees the railway as a divide (2 regions over 6972 cells, built in 24 ms)
+PASS  The walk grid sees the railway as a divide (2 regions over 6972 cells, built in 42 ms)
 PASS  Every resident knows their home (8/8; 2 live inside the loop)
 PASS  The baker lives over the bakery
 PASS  At two in the morning everyone is asleep at home (8/8)
@@ -140,8 +140,8 @@ PASS  ...get off at the far station and walk on to where they were going
 PASS  A lane with a level crossing joins the two sides (1 regions)
 PASS  ...and people from inside the loop walk over it to the village
 PASS  Save/load keeps the time (10:00), the clock speed, needs and homes (8/8)
-PASS  40 villagers: 0.28 ms per frame on average, worst 7.7 ms, 1.5 decisions/s, slowest decision 7.3 ms, places directory 0.6 ms (editor timing)
-PASS  After an edit the walk grid rebuilds over 32 frames (61 ms of work, worst frame 3.4 ms)
+PASS  40 villagers: 0.26 ms per frame on average, worst 2.8 ms, 1.5 decisions/s, slowest decision 2.5 ms, places directory 0.4 ms (editor timing)
+PASS  After an edit the walk grid rebuilds over 32 frames (61 ms of work, worst frame 3.2 ms)
 PASS  With no places at all, villagers wander by day and sleep under the stars at night
 PASS  A working village goes up (15/15 places, 10 villagers)
 PASS  Opening hours: the bakery opens at half six and shuts at six, the carousel stops in the evening, the fountain never closes
@@ -201,7 +201,7 @@ PASS  Save and load keep where the cameras look (71 / 15 degrees; loaded 71 / 15
 PASS  Erasing a camera leaves the other selected, still aimed where it was
 PASS  Sound: 2 sources near the crossroads (at most 8); off means silent; five barks in a row play once; a meow out of earshot isn't played
 PASS  Taking a road away re-routes or parks the traffic (worst 1.4 cm off the remaining roads)
-PASS  A busy town (40 villagers, 8 vehicles, 2 animals, sound and a camera feed): 0.27 ms per frame on average, worst 7.0 ms (editor timing, simulation only)
+PASS  A busy town (40 villagers, 8 vehicles, 2 animals, sound and a camera feed): 0.28 ms per frame on average, worst 6.8 ms (editor timing, simulation only)
 PASS  A road crosses the railway at a level crossing; homes on both sides have vehicles (5 places, 4 vehicles)
 PASS  Vehicles wait at the level crossing while a train goes by (793 waits, 7 trips), and are never on it with the train
 PASS  A loop drawn in two halves closes (1 pieces, 0 dead ends)
@@ -220,23 +220,23 @@ PASS  ...and a piece with a jump in it is cut at the jump
 PASS  A railway saved with a wrongly joined switch is repaired when loaded
 PASS  An old two-way railway in the world doesn't stop a new loop being built (preview ok, built ok)
 PASS  ...nor a branch off the old part (built)
-PASS  The new loop runs one way (arrows), the old part stays two-way (1 two-way part)
+PASS  Every piece has a direction - the new loop and the old part too (its wrong-way branch is never taken); the old part is still counted as one that can't run one way everywhere (1)
 PASS  A loop with a branch, a signal, a station and two trains
 PASS  Carriages couple on behind the engine (41 -> 67 cm, engine still); more than the most is refused ("That's as long as this train gets (6 carriages)")
 PASS  Wagons uncouple (Goods train, 1 wagon - running at 100 %, next stop Hazelbank)
 PASS  The automatic signal turns red as a train passes and green once the line is clear
-PASS  Two trains share the network without touching (closest 8.7 cm), and keep off the dead-end branch (one way, they couldn't come back out)
+PASS  Two trains share the network without touching (closest 9.8 cm), and keep off the dead-end branch (one way, they couldn't come back out)
 PASS  Pointing at a train says what it is doing ("Steam train, 4 carriages - running at 100 %, next stop Hazelbank")
-PASS  Held at red, the signal stops a train, and the train says so ("Goods train, 1 wagon - waiting at a red signal (tap it for automatic), next stop Hazelbank")
+PASS  Held at red, the signal stops a train, and the train says so ("Steam train, 4 carriages - waiting at a red signal (tap it for automatic), next stop Hazelbank")
 PASS  Save and load keep the network (2 pieces, 1 switch), the held signal, the station (Hazelbank) and each train's carriages
 INFO  Joining two loops: 56/60 built; 2x "Tracks must cross at a wider angle"; 2x "Too close to the other track - leave a little gap"
 PASS  What the drawing shows while the trigger is held is what letting go builds (60/60 agree)
 PASS  Most hand-drawn links between two loops can be built (56/60)
 PASS  A station and a country halt beside the line (2 stops)
 PASS  An express (faster) and a tank engine (slower) join the steam train (Express, 4 carriages - running at 130 %, next stop Willowmere; Tank engine, 2 carriages - running at 80 %, next stop Orchard End)
-PASS  Every train runs one way round the network, never backing up or meeting another (closest 4.7 cm, 0 reversals)
-PASS  Trains share both loops rather than piling into one (48% of train-time in the quieter loop)
-PASS  Trains call at the country halt (120 calls)
+PASS  Every train runs one way round the network, never backing up or meeting another (closest 6.5 cm, 0 reversals)
+PASS  Trains share both loops rather than piling into one (50% of train-time in the quieter loop)
+PASS  Trains call at the country halt (111 calls)
 PASS  A shower: rain falls from the clouds over the land (369 drops)
 PASS  Villagers know it is raining: the park is out, the museum is in
 PASS  14 clouds drift on the wind
@@ -343,5 +343,5 @@ PASS  Land still grows with bad room data
 PASS  Trimmed land grows back (1.19 -> 1.04 -> 1.16 m2)
 INFO  terrain: 6 chunk meshes, 17 k triangles, land 3.49 m2 of a 4.8 x 4.8 m grid
 INFO  static budget of this world: 346 mesh renderers (~draw calls per eye pass before batching, excl. shadows/UI), 1160 k triangles, ground cover 5538 tufts
-INFO  trees 131, forest chunks 30, houses 3, track 3.40 m, undo depth 9, journey simulated in 76.9 s wall time
+INFO  trees 131, forest chunks 30, houses 3, track 3.40 m, undo depth 9, journey simulated in 77.2 s wall time
 RESULT: PASS

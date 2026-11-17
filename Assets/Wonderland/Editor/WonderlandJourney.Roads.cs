@@ -276,6 +276,63 @@ namespace Wonderland.Editor
             if (Application.isBatchMode) EditorApplication.Exit(0);
         }
 
+        /// <summary>
+        /// Trains on saved worlds (Logs/trainflow-results.txt): five minutes running - every train always the way the
+        /// arrows point (no reversal, engine first), how far each went, the longest wait, and the closest two trains came.
+        /// </summary>
+        public static void TrainFlow()
+        {
+            var report = new System.Text.StringBuilder();
+            var saves = (System.Environment.GetEnvironmentVariable("WL_SAVES") ?? "Tests/Saves/headset-wonderland-world.json").Split(';');
+            int failures = 0;
+            foreach (var save in saves)
+            {
+                var w = new GameObject("Trains").AddComponent<WonderlandWorld>();
+                w.Deserialize(System.IO.File.ReadAllText(save), Materials());
+                var net = w.Track.Network;
+                foreach (var tr in w.Trains.Trains) tr.Running = true;
+                var trains = w.Trains.Trains;
+                var longest = new float[trains.Count]; var waited = new float[trains.Count];
+                float closest = float.MaxValue, closestSide = float.MaxValue; Vector3 sideAt = Vector3.zero;
+                bool against = false;
+                for (float s2 = 0f; s2 < 300f; s2 += 1f / 30f)
+                {
+                    w.Clock.Tick(1f / 30f); w.Trains.Step(1f / 30f);
+                    for (int i = 0; i < trains.Count; i++)
+                    {
+                        waited[i] = trains[i].Speed < 0.002f && trains[i].Dwell <= 0f ? waited[i] + 1f / 30f : 0f;
+                        longest[i] = Mathf.Max(longest[i], waited[i]);
+                        if (trains[i].Dir < 0) against = true;
+                        for (int k = i + 1; k < trains.Count; k++)
+                        {
+                            float d = w.Trains.Between(trains[i], trains[k], out bool side, out var at);
+                            closest = Mathf.Min(closest, d);
+                            if (side && d < closestSide) { closestSide = d; sideAt = at; }
+                        }
+                    }
+                }
+                int reversals = 0; foreach (var tr in trains) reversals += tr.Reversals;
+                report.AppendLine($"--- {System.IO.Path.GetFileName(save)}: {net.Edges.Count} pieces, {net.Joints.Count} switches, {trains.Count} trains; parts that can't run one way everywhere: {net.TwoWayParts}, traps {net.Traps}");
+                for (int i = 0; i < trains.Count; i++) report.AppendLine($"  {w.Trains.Describe(trains[i]),-60} {trains[i].Odometer,6:0.0} m, longest wait {longest[i],5:0} s");
+                bool ok = reversals == 0 && !against;
+                if (!ok) failures++;
+                report.AppendLine($"  {(ok ? "PASS" : "FAIL")}  no train reversed or ran engine-last ({reversals} reversals); closest two trains came: {closest * 100f:0.0} cm; side by side: {closestSide * 100f:0.0} cm at ({sideAt.x:0.00}, {sideAt.z:0.00}){Near(w, sideAt)}");
+                Object.DestroyImmediate(w.gameObject);
+            }
+            report.AppendLine(failures == 0 ? "RESULT: PASS" : $"RESULT: FAIL ({failures})");
+            System.IO.File.WriteAllText("Logs/trainflow-results.txt", report.ToString());
+            Debug.Log(report.ToString());
+            if (Application.isBatchMode) EditorApplication.Exit(0);
+        }
+
+        private static string Near(WonderlandWorld w, Vector3 p)
+        {
+            var net = w.Track.Network;
+            float bestJ = float.MaxValue; foreach (var j in net.Joints) if (j != null) bestJ = Mathf.Min(bestJ, (j.Position - p).magnitude);
+            float bestC = float.MaxValue; foreach (var c in net.Crossings) bestC = Mathf.Min(bestC, (c.Position - p).magnitude);
+            return $" ({bestJ * 100f:0} cm from a switch, {bestC * 100f:0} cm from a crossing)";
+        }
+
         /// <summary>The player's world in each terrain shading mode (Full, Light, Simple), from where they would stand.</summary>
         public static void TerrainModeRenders()
         {

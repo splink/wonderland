@@ -282,6 +282,36 @@ namespace Wonderland
 
         public Vector3 LocoPosition(Train t) => t.Cars[0].Body.localPosition;
 
+        /// <summary>How far apart two trains' bodies are (between their nearest cars, side by side or end to end; 0: touching).</summary>
+        public float Between(Train a, Train b) => Between(a, b, out _, out _);
+
+        /// <summary>...and whether that is side by side (not one behind the other on the same line), and where.</summary>
+        public float Between(Train a, Train b, out bool sideBySide, out Vector3 where)
+        {
+            float best = float.MaxValue; sideBySide = false; where = Vector3.zero;
+            if (a.Cars == null || b.Cars == null) return best;
+            foreach (var ca in a.Cars)
+            foreach (var cb in b.Cars)
+            {
+                if (ca?.Body == null || cb?.Body == null) continue;
+                var fa = ca.Body.localRotation * Vector3.forward; var fb = cb.Body.localRotation * Vector3.forward;
+                for (int i = 0; i <= 4; i++)
+                for (int k = 0; k <= 4; k++)
+                {
+                    var pa = ca.Body.localPosition + fa * Mathf.Lerp(ca.Layout.Rear, ca.Layout.Front, i / 4f);
+                    var pb = cb.Body.localPosition + fb * Mathf.Lerp(cb.Layout.Rear, cb.Layout.Front, k / 4f);
+                    float d = (pa - pb).magnitude;
+                    if (d < best)
+                    {
+                        best = d; where = (pa + pb) * 0.5f;
+                        var off = pb - pa; off.y = 0f;
+                        sideBySide = off.sqrMagnitude > 1e-8f && Mathf.Abs(Vector3.Dot(off.normalized, fa)) < 0.7f;   // (across, not along)
+                    }
+                }
+            }
+            return Mathf.Max(0f, best - 0.026f);   // (a car body is about 2.6 cm wide)
+        }
+
         /// <summary>The train the pointer ray is on (local space, unit direction), nearer than <paramref name="maxT"/>; null if none.</summary>
         public Train PickRay(Vector3 o, Vector3 d, float maxT, out float t)
         {
@@ -578,7 +608,8 @@ namespace Wonderland
             foreach (var e in j.Ends)
             {
                 float s = Net.EndS(e);
-                float lo = e.End == 0 ? 0f : s - TrackNetwork.FoulDistance, hi = e.End == 0 ? TrackNetwork.FoulDistance : s;
+                float foul = Net.FoulOf(ji);
+                float lo = e.End == 0 ? 0f : s - foul, hi = e.End == 0 ? foul : s;
                 foreach (var iv in set) if (iv.Edge == e.Edge && iv.Hi > lo && iv.Lo < hi) return true;
             }
             return false;
@@ -660,7 +691,7 @@ namespace Wonderland
                 claimSet.AddRange(own);
                 var probeSet = Intervals(probe);
                 for (int ji = 0; ji < Net.Joints.Count; ji++)
-                    if (TouchesJoint(probeSet, ji) && !TouchesJoint(claimSet, ji)) { extra = Mathf.Max(extra, TrackNetwork.FoulDistance * 2f + 0.03f); PrepareSwitch(ji, t); }
+                    if (TouchesJoint(probeSet, ji) && !TouchesJoint(claimSet, ji)) { extra = Mathf.Max(extra, Net.FoulOf(ji) * 2f + 0.03f); PrepareSwitch(ji, t); }
                 foreach (var c in Net.Crossings)
                     if (TouchesCrossing(probeSet, c) && !TouchesCrossing(claimSet, c)) extra = Mathf.Max(extra, TrackNetwork.CrossingZone * 2f + 0.03f);
                 // Tentative reservation of this step (or the whole switch / crossing).
@@ -837,17 +868,13 @@ namespace Wonderland
             {
                 t.Dwell -= dt; t.Speed = 0f;
                 if (t.Dwell > 0f) { Pose(t); return; }
-                // Explore: now and then a train turns back at a station, so in time it runs every way through every
-                // switch (a train circling a loop one way would never take a branch that faces the other way).
-                if (!OneWayHere(t) && Mode == SwitchMode.Explore && random.NextDouble() < 0.3 && Alone(t, 0.8f)) TurnBack(t);
-                // One that had to back away from another train: at the station its engine runs round to lead again.
-                else if (t.Dir < 0 && t.Kind != TrainKind.Railcar) TurnRound(t);
+                // (Trains never turn back or run round: they go the way the arrows point, always.)
                 // Keeping their distance: a train ahead that is close? Wait a little longer, so trains spread round the railway.
                 if (OneWayHere(t) && t.HeldBack < 8f && Trains.Count > 1 && GapAhead(t) < EvenSpacing() * 0.45f) { t.Dwell = 1f; t.HeldBack += 1f; Pose(t); return; }
                 t.HeldBack = 0f;
             }
-            // Never beyond the reservation.
-            float room = Mathf.Max(0f, t.ClaimLength - 0.008f);
+            // Never beyond the reservation - and when it ends at the train ahead, a couple of centimetres short of it.
+            float room = Mathf.Max(0f, t.ClaimLength - (t.Blocked == BlockReason.Train ? 0.025f : 0.008f));
             target = Mathf.Min(target, Mathf.Sqrt(2f * Acceleration * room));
             // Stations ahead: brake to halt with the train centred on the platform.
             if (t.Running && Stations.Count > 0)
@@ -937,13 +964,6 @@ namespace Wonderland
             Pose(t);
         }
 
-        /// <summary>Turns back at the end of the line or a station: the engine runs round so it leads again (railcars just change ends).</summary>
-        private void TurnBack(Train t)
-        {
-            if (t.Kind == TrainKind.Railcar) Reverse(t);
-            else { Reverse(t); TurnRound(t); }
-        }
-
         public void Reverse(Train t)
         {
             t.Reversals++;
@@ -953,8 +973,9 @@ namespace Wonderland
         }
 
         /// <summary>
-        /// Trains stuck at buffers reverse; two trains waiting for each other (head-on on single track) resolve it by one
-        /// backing away; a train stuck behind another for a long time turns back too.
+        /// How long trains have stood waiting (for the train ahead, a red signal, the buffers). They never back away or
+        /// turn round: the railway runs one way, so whoever is ahead moves on in time - and a train at the buffers of a
+        /// line that ends stays there (the Track tool says such a line isn't used).
         /// </summary>
         private void ResolveStandoffs(float dt)
         {
@@ -963,14 +984,6 @@ namespace Wonderland
                 var t = Trains[i];
                 bool waiting = t.Running && t.Dwell <= 0f && t.Speed < 0.002f && t.ClaimLength < 0.02f;
                 t.WaitTime = waiting && t.Blocked != BlockReason.None ? t.WaitTime + dt : 0f;
-                if (!waiting) continue;
-                if (t.Blocked == BlockReason.Buffers && t.WaitTime > 0.5f) { TurnBack(t); continue; }
-                if (t.Blocked != BlockReason.Train || t.BlockedBy < 0 || t.BlockedBy >= Trains.Count) continue;
-                var other = Trains[t.BlockedBy];
-                bool mutual = other.Blocked == BlockReason.Train && other.BlockedBy == i;
-                bool queueing = other.Blocked == BlockReason.Signal || other.Dwell > 0f;   // behind a train at a red signal or a station: wait
-                if (OneWayHere(t) && !mutual) continue;   // one way: whoever is ahead moves on in time; never back into oncoming trains
-                if ((mutual && i > t.BlockedBy && t.WaitTime > 1.5f) || (!queueing && t.WaitTime > 12f)) Reverse(t);
             }
         }
 
@@ -1202,7 +1215,7 @@ namespace Wonderland
             else if (!t.Running) doing = t.Speed > 0.002f ? "stopping" : "stopped (trigger: go)";
             else if (t.Speed < 0.004f && t.Blocked == BlockReason.Signal) doing = "waiting at a red signal (tap it for automatic)";
             else if (t.Speed < 0.004f && t.Blocked == BlockReason.Train) doing = "waiting for the train ahead to clear the line";
-            else if (t.Blocked == BlockReason.Buffers) doing = "at the buffers, reversing";
+            else if (t.Blocked == BlockReason.Buffers) doing = "at the end of the line (it goes no further: trains never reverse)";
             else doing = $"running at {t.SpeedFactor * 100f:0} %";
             if (t.AtStation < 0 && Stations.Count > 0 && t.Running)
             {
@@ -1236,7 +1249,8 @@ namespace Wonderland
                     {
                         // Green for the end the owning train comes from or goes to, red for the others.
                         float s = net.EndS(end);
-                        float lo = end.End == 0 ? 0f : s - TrackNetwork.FoulDistance, hi = end.End == 0 ? TrackNetwork.FoulDistance : s;
+                        float foul = net.FoulOf(ji);
+                        float lo = end.End == 0 ? 0f : s - foul, hi = end.End == 0 ? foul : s;
                         foreach (var iv in held[owner]) if (iv.Edge == end.Edge && iv.Hi > lo && iv.Lo < hi) g = true;
                     }
                     green[k++] = g;

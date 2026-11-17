@@ -16,7 +16,7 @@ PASS  Grip on the track and drag bends it to where you let go (now 0.7 cm from t
 PASS  Trigger on the railway puts a running train on it
 PASS  Train moves (0.27 m)
 PASS  Point at a train, then + / - Carriage couple and uncouple a carriage (2 -> 3 -> 2)
-PASS  Turn round moves the engine to the other end of its train (25 cm)
+PASS  Trains run engine first, the way the arrows point (no Turn round)
 PASS  Stop all stops the trains
 PASS  Start all sets them running again
 PASS  Trigger places a house where the pointer is

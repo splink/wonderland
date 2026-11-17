@@ -150,15 +150,6 @@ namespace Wonderland
         }
         private Train lastTrain;
 
-        /// <summary>The engine runs round to the other end of the train (a train running backwards then runs engine first).</summary>
-        private void TurnRound(Train t)
-        {
-            if (t == null || !World.Trains.Trains.Contains(t)) { Say("Point at a train first, then press Turn round"); return; }
-            World.Checkpoint();
-            World.Trains.TurnRound(t);
-            Say(t.Kind == TrainKind.Railcar ? "The driver changes ends" : "The engine runs round to the other end of its train");
-            Haptic(0.5f, 0.05f);
-        }
 
         /// <summary>Couples on (+1) or uncouples (-1) a carriage of a train, and says how long it is now (or why not).</summary>
         private void Couple(Train t, int change)
@@ -292,7 +283,6 @@ namespace Wonderland
                     var chosen = lastTrain != null && World.Trains.Trains.Contains(lastTrain) ? lastTrain : null;
                     o.Add(new PaletteUI.Option("- Carriage", false, () => Couple(chosen, -1), chosen != null));
                     o.Add(new PaletteUI.Option("+ Carriage", false, () => Couple(chosen, 1), chosen != null));
-                    o.Add(new PaletteUI.Option("Turn round", false, () => TurnRound(chosen), chosen != null));
                     bool running = World.Trains.AnyRunning;
                     o.Add(new PaletteUI.Option(running ? "Stop all" : "Start all", running, () => { ToggleAll(); }, World.Trains.Any));
                     o.Add(new PaletteUI.Option("Switches: " + (World.Trains.Mode == SwitchMode.Explore ? "Spread" : World.Trains.Mode.ToString()), false, () =>
