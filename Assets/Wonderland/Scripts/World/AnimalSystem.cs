@@ -36,6 +36,8 @@ namespace Wonderland
         /// on a train, far), the top of a wall, fence or hedge at a point (0: none), the ground (or a bridge deck) height.</summary>
         public Func<Vector2, int> OwnerOf;
         public Func<int, Vector2?> Outdoors;
+        /// <summary>Where people can walk: a dog keeps to it (gardens and paths, not into fenced fields or flower beds).</summary>
+        public Func<Vector2, bool> PeopleWalkable;
         public Func<Vector2, float> PerchAt;
         public Func<Vector2, float> GroundAt;
         /// <summary>An animal makes itself heard (a bark, a meow): sound picks it up.</summary>
@@ -164,7 +166,7 @@ namespace Wonderland
         }
         public bool IsFleeing(int i) => agents[i].Fleeing;
 
-        private bool Suits(Agent a, Vector2 p) => suits == null || suits(p, a.Kind, a.Home);
+        private bool Suits(Agent a, Vector2 p) => (suits == null || suits(p, a.Kind, a.Home)) && (a.Kind != AnimalKind.Dog || PeopleWalkable == null || PeopleWalkable(p));
         private int tick;
 
         /// <summary>A simpler animal further away (same shape and coat, fewer facets), unless Distance is set to Full.</summary>
@@ -384,11 +386,18 @@ namespace Wonderland
             {
                 if (!a.Following) { a.Following = true; a.Returning = false; a.Trail.Clear(); Speak(a, 0.6f); }
                 a.Wait = 0f;
-                if (a.Trail.Count == 0 || (owner.Value - a.Trail[^1]).magnitude > 0.008f) { a.Trail.Add(owner.Value); if (a.Trail.Count > 400) a.Trail.RemoveAt(0); }
+                // (their footsteps on walkable ground: not the doorstep they stepped out of, nor anywhere a dog shouldn't go)
+                if ((a.Trail.Count == 0 || (owner.Value - a.Trail[^1]).magnitude > 0.008f) && (PeopleWalkable == null || PeopleWalkable(owner.Value))) { a.Trail.Add(owner.Value); if (a.Trail.Count > 400) a.Trail.RemoveAt(0); }
                 while (a.Trail.Count > 1 && (a.Trail[0] - a.Position).magnitude < 0.008f) a.Trail.RemoveAt(0);
                 float gap = (owner.Value - a.Position).magnitude;
                 if (gap < 0.02f) { a.Walking = false; a.Pitch = Mathf.MoveTowards(a.Pitch, 20f, 60f * dt); Face(a, owner.Value, dt, 200f); }
-                else Move(a, a.Trail[0], gap > 0.08f ? 0.04f : 0.026f, dt, false);
+                else if (a.Trail.Count > 0)
+                {
+                    // In their footsteps - never across ground people can't walk on (a corner cut by the house): then the next footprint.
+                    var step = a.Position + (a.Trail[0] - a.Position).normalized * Mathf.Min((gap > 0.08f ? 0.04f : 0.026f) * dt, (a.Trail[0] - a.Position).magnitude);
+                    if (PeopleWalkable != null && !PeopleWalkable(step) && PeopleWalkable(a.Position)) { if (a.Trail.Count > 1) a.Trail.RemoveAt(0); else a.Walking = false; }   // (or wait for them)
+                    else Move(a, a.Trail[0], gap > 0.08f ? 0.04f : 0.026f, dt, false);
+                }
                 NoteAway(a);
                 if ((a.VoiceTimer -= dt) <= 0f) { a.VoiceTimer = a.Rng.Range(40f, 90f); Speak(a, 1f); }
                 return;

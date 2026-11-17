@@ -117,16 +117,16 @@ PASS  The village clock runs a day in 7.6 minutes (360 s of daylight, 97 s of ni
 PASS  The daily rhythm: shops in the morning, lunch at midday, the fair in the afternoon, the square in the evening
 PASS  A railway loop divides the land
 PASS  A village goes up around the railway (13/13 places, 8 residents moved in)
-PASS  The walk grid sees the railway as a divide (2 regions over 6972 cells, built in 22 ms)
+PASS  The walk grid sees the railway as a divide (2 regions over 6972 cells, built in 24 ms)
 PASS  Every resident knows their home (8/8; 2 live inside the loop)
 PASS  The baker lives over the bakery
 PASS  At two in the morning everyone is asleep at home (8/8)
 PASS  The streets are empty at night (0 out)
 PASS  The fair's rides stop at night and run in the afternoon
 PASS  In the evening windows glow where people are home (1.9) and stay dark where nobody is (0.1)
-PASS  Mornings fill the shops (errands 29% of visits in the morning, 4% in the afternoon)
-PASS  Afternoons fill the fair (fun 32% of visits in the afternoon, 3% in the morning)
-PASS  Evenings gather people at the fountain (68% vs 0% in the morning)
+PASS  Mornings fill the shops (errands 29% of visits in the morning, 3% in the afternoon)
+PASS  Afternoons fill the fair (fun 37% of visits in the afternoon, 3% in the morning)
+PASS  Evenings gather people at the fountain (61% vs 0% in the morning)
 PASS  Shopkeepers mind their shops in opening hours, not at night
 PASS  Places never hold more people than they have spots, and no spot is shared
 PASS  Nobody inside the loop sets off for a place they cannot reach
@@ -140,27 +140,27 @@ PASS  ...get off at the far station and walk on to where they were going
 PASS  A lane with a level crossing joins the two sides (1 regions)
 PASS  ...and people from inside the loop walk over it to the village
 PASS  Save/load keeps the time (10:00), the clock speed, needs and homes (8/8)
-PASS  40 villagers: 0.14 ms per frame on average, worst 2.5 ms, 1.3 decisions/s, slowest decision 2.3 ms, places directory 0.4 ms (editor timing)
-PASS  After an edit the walk grid rebuilds over 32 frames (59 ms of work, worst frame 3.0 ms)
+PASS  40 villagers: 0.28 ms per frame on average, worst 7.7 ms, 1.5 decisions/s, slowest decision 7.3 ms, places directory 0.6 ms (editor timing)
+PASS  After an edit the walk grid rebuilds over 32 frames (61 ms of work, worst frame 3.4 ms)
 PASS  With no places at all, villagers wander by day and sleep under the stars at night
 PASS  A working village goes up (15/15 places, 10 villagers)
 PASS  Opening hours: the bakery opens at half six and shuts at six, the carousel stops in the evening, the fountain never closes
 PASS  Jobs go to the villagers: Gus the baker lives over the bakery, Otto farms the field, Hugo teaches (6/6 places staffed, 4 without a job)
 PASS  Workers keep their shifts: the teacher indoors at the school, the farmer out in the field, nobody at work at night
-PASS  Farms grow produce while the farmer works, and it is carried to the shops ("Milo brought the first vegetables to the grocer")
-PASS  After closing time nobody shops at the bakery ("Bakery: closed, opens at 6:30 · Gus is the baker · shelves full")
-PASS  The village tells the player what changes: The shelves at the grocer are bare - a farm nearby would help / Milo brought the first vegetables to the grocer / Cleo brought the first sacks of wheat to the café / Frida and Viggo have become friends at the café
-PASS  With no farm, shelves run bare and the village says so ("The shelves at the bakery are bare - a farm nearby would help")
-PASS  ...pointing at the shop shows it ("Bakery: 1 visitor, 1 on the way - people come for the morning shopping, busiest in the morning · Gus is the baker · shelves bare · open till 18:00")
-PASS  Villagers who spend time together become friends (4 friendships; "Viggo and Milo have become friends at the fountain")
-PASS  Save and load keep the friendships (4) and what is on the shelves (3.8 crates at the bakery)
+PASS  Farms grow produce while the farmer works, and it is carried to the shops ("Gus brought the first sacks of wheat to the bakery")
+PASS  After closing time nobody shops at the bakery ("Bakery: closed, opens at 6:30 · Gus is the baker · shelves half empty")
+PASS  The village tells the player what changes: The shelves at the grocer are bare - a farm nearby would help / The shelves at the bakery are bare - a farm nearby would help / Gus brought the first sacks of wheat to the bakery / Milo brought the first vegetables to the grocer
+PASS  With no farm, shelves run bare and the village says so ("The shelves at the grocer are bare - a farm nearby would help")
+PASS  ...pointing at the shop shows it ("Bakery: nobody here, 2 on the way - people come for the morning shopping, busiest in the morning · Gus is the baker · shelves bare · open till 18:00")
+PASS  Villagers who spend time together become friends (1 friendships; "Theo and Viggo have become friends at the café")
+PASS  Save and load keep the friendships (1) and what is on the shelves (4.8 crates at the bakery)
 PASS  A fête at the fountain - everyone's invited! - 8 of 10 gather at the fountain
 PASS  The fête ends after 2.5 hours and everyone gets on with their day (0 still gathering)
-PASS  A decider from outside fills the café (4 of 5 spots, asked 11 times); one handing out nonsense is ignored
+PASS  A decider from outside fills the café (4 of 5 spots, asked 6 times); one handing out nonsense is ignored
 PASS  Deciders that are done are dropped
 PASS  A farm inside a railway loop, a bakery outside, two stations and a goods train (6/6 places; farmer Greta)
 PASS  The farmer carries crates to the station for the goods train (up to 2 waiting on the platform)
-PASS  The goods train loads them and unloads at the far station (2 aboard, 4 unloaded)
+PASS  The goods train loads them and unloads at the far station (2 aboard, 2 unloaded)
 PASS  ...where the shopkeeper fetches them ("Finn brought the first goods to the bakery")
 PASS  A loop with a branch line, a station on each and a train (1 switch)
 PASS  The destination board follows the switches: set for the loop the train won't call at the branch station; set for the branch it will
@@ -169,11 +169,11 @@ PASS  Set for the branch: they board, ride to the branch station and walk on to 
 PASS  A small town with homes, shops, a school, a park and a road (11 villagers)
 PASS  Everyone leaves home during the day; most visit two or more places (10/11; e.g. "Ugo (Curator): On the way to work at the museum; going to work at the museum (as planned); then 12:00 lunch at the café")
 PASS  Workers go to work and children to school (9/11)
-PASS  Days follow plans (planned choices seen 3598 times) and nobody with a home wanders aimlessly (0)
+PASS  Days follow plans (planned choices seen 3667 times) and nobody with a home wanders aimlessly (0)
 PASS  The card says where they are really going (400 checked, 0 wrong)
 PASS  Nobody walks for ages without getting anywhere (0)
 PASS  By one in the morning everyone with a home is in bed there (11/11)
-PASS  A planned place taken away drops out of Vera's plan (then: "08:00 home")
+PASS  A planned place taken away drops out of Vera's plan (then: "")
 PASS  New places (11/11), vehicles (11/11), a dog and a cat are generated
 PASS  The disco opens at eight and dances past midnight; the restaurant is busiest at supper
 PASS  Every sound is synthesised, audible and unclipped (22 clips)
@@ -181,14 +181,14 @@ PASS  A town goes up along two crossing roads and a lane (23/23 places, 11 villa
 PASS  The roads make one network, joined where they cross (124 nodes)
 PASS  Homes by the road have vehicles (3 cars, 0 motorbikes, 2 bicycles), and the stations theirs
 PASS  A dog and a cat move in
-PASS  Vehicles drive the roads all day and never leave them (worst 2.4 cm from a road's centre line; 15 trips, 39 stops for traffic or people)
+PASS  Vehicles drive the roads all day and never leave them (worst 2.4 cm from a road's centre line; 15 trips, 109 stops for traffic or people)
 PASS  Households drive to the shops, the restaurant and the park and come home (15 round trips)
-PASS  Supper fills the restaurant terrace (135 in the evening vs 104 in the afternoon)
-PASS  The disco comes alive after dark (41 dancing, 2 night owls; heard 187 times; nobody there by day)
-PASS  Visitors come to the museum (339) and the park (38)
-PASS  Children go to school and play football: a match with a ball (1.7 m of passes, 9 goals)
+PASS  Supper fills the restaurant terrace (158 in the evening vs 99 in the afternoon)
+PASS  The disco comes alive after dark (74 dancing, 2 night owls; heard 187 times; nobody there by day)
+PASS  Visitors come to the museum (338) and the park (38)
+PASS  Children go to school and play football: a match with a ball (3.6 m of passes, 26 goals)
 PASS  The factory chimney smokes while it works (Dora works there; next door: Dora (child False, works at 15))
-PASS  The dog goes out with its owner, in their footsteps, and never strays from home
+PASS  The dog goes out with its owner, in their footsteps, and never strays from home (followed True)
 PASS  The cat keeps to its territory and sits up on the wall
 PASS  The balloon flies by day and stays down at night
 PASS  The disco's DISCO sign lights up letter by letter, blinks and shines (6 different states)
@@ -201,7 +201,7 @@ PASS  Save and load keep where the cameras look (71 / 15 degrees; loaded 71 / 15
 PASS  Erasing a camera leaves the other selected, still aimed where it was
 PASS  Sound: 2 sources near the crossroads (at most 8); off means silent; five barks in a row play once; a meow out of earshot isn't played
 PASS  Taking a road away re-routes or parks the traffic (worst 1.4 cm off the remaining roads)
-PASS  A busy town (40 villagers, 8 vehicles, 2 animals, sound and a camera feed): 0.14 ms per frame on average, worst 2.4 ms (editor timing, simulation only)
+PASS  A busy town (40 villagers, 8 vehicles, 2 animals, sound and a camera feed): 0.27 ms per frame on average, worst 7.0 ms (editor timing, simulation only)
 PASS  A road crosses the railway at a level crossing; homes on both sides have vehicles (5 places, 4 vehicles)
 PASS  Vehicles wait at the level crossing while a train goes by (793 waits, 7 trips), and are never on it with the train
 PASS  A loop drawn in two halves closes (1 pieces, 0 dead ends)
@@ -343,5 +343,5 @@ PASS  Land still grows with bad room data
 PASS  Trimmed land grows back (1.19 -> 1.04 -> 1.16 m2)
 INFO  terrain: 6 chunk meshes, 17 k triangles, land 3.49 m2 of a 4.8 x 4.8 m grid
 INFO  static budget of this world: 346 mesh renderers (~draw calls per eye pass before batching, excl. shadows/UI), 1160 k triangles, ground cover 5538 tufts
-INFO  trees 131, forest chunks 30, houses 3, track 3.40 m, undo depth 9, journey simulated in 69.9 s wall time
+INFO  trees 131, forest chunks 30, houses 3, track 3.40 m, undo depth 9, journey simulated in 76.9 s wall time
 RESULT: PASS

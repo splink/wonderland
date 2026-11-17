@@ -117,6 +117,7 @@ namespace Wonderland
             // Pets live with people: whose they are, where their people are, walls to sit on, and their voices.
             Animals.OwnerOf = home => People.ResidentNear(home, 0.15f);
             Animals.Outdoors = i => People.OutdoorsAt(i);
+            Animals.PeopleWalkable = p => People.Walkable(p) || Paths.Covers(p, 0.01f);
             Animals.PerchAt = p => Paths.BarrierTop(p);
             Animals.GroundAt = p => People.GroundHeight(p);
             Animals.Voice += (p, kind) => Sounds.Cue(kind == AnimalKind.Dog ? SoundCue.Bark : SoundCue.Meow, p);

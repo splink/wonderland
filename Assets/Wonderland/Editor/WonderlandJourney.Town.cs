@@ -74,7 +74,7 @@ namespace Wonderland.Editor
                 $"Homes by the road have vehicles ({traffic.Count(VehicleKind.Car)} cars, {traffic.Count(VehicleKind.Motorbike)} motorbikes, {traffic.Count(VehicleKind.Bicycle)} bicycles), and the stations theirs");
 
             // A pet each: a dog at the first cottage, a cat behind a townhouse by a wall.
-            var dogHome = cottage + new Vector2(0.03f, 0f);
+            var dogHome = cottage + new Vector2(0.03f, 0f);   // (in the cottage: its first steps out cross the house's own ground)
             string dog = w.PlaceAnimal(new Vector3(dogHome.x, 0f, dogHome.y), AnimalKind.Dog, 501);
             var catHome = new Vector2(0.7f, -0.2f);
             string cat = w.PlaceAnimal(new Vector3(catHome.x, 0f, catHome.y), AnimalKind.Cat, 502);
@@ -91,6 +91,7 @@ namespace Wonderland.Editor
             w.Sounds.Listener = listener;
             var keep = SoundSystem.Setting;
             SoundSystem.Setting = SoundSetting.On;
+            string strayWhy = "", discoDayHours = ""; bool lastDogWalkable = true;
             float worstOff = 0f; bool inHouse = false, moved = false, followed = false, dogStrayed = false, catStrayed = false, perched = false, childAtSchool = false, aloft = false, nightFlight = false;
             int restaurantEvening = 0, restaurantAfternoon = 0, discoNight = 0, discoDay = 0, museum = 0, park = 0, kidsPlaying = 0, smoke = 0, fairHeard = 0, discoHeard = 0;
             int restaurant = Find(Catalog.Restaurant), disco = Find(Catalog.Disco), museumAt = Find(Catalog.Museum), parkAt = Find(Catalog.Park), pitch = Find(Catalog.Football), school = Find(Catalog.School), factory = Find(Catalog.Factory), balloon = Find(Catalog.Balloon);
@@ -113,7 +114,7 @@ namespace Wonderland.Editor
                     int at = people.PlaceOf(i);
                     var st = people.StateOf(i);
                     if (at == restaurant && st != PeopleSystem.Activity.Working) { if (hour >= 18.5f && hour < 21.5f) restaurantEvening++; if (hour >= 14f && hour < 17f) restaurantAfternoon++; }
-                    if (at == disco && st != PeopleSystem.Activity.Working) { if (hour >= 21f || hour < 1.5f) discoNight++; else discoDay++; }
+                    if (at == disco && st != PeopleSystem.Activity.Working) { if (hour >= 20f || hour < 1.5f) discoNight++; else { discoDay++; discoDayHours += $" {hour:0.0}"; } }   // (it opens at eight)
                     if (at == museumAt) museum++;
                     if (at == parkAt) park++;
                     if (at == pitch && people.IsChild(i)) kidsPlaying++;
@@ -121,7 +122,10 @@ namespace Wonderland.Editor
                 }
                 followed |= w.Animals.IsFollowing(dogIndex);
                 var dp = w.Animals.PositionOf(dogIndex);
-                if ((dp - dogHome).magnitude > AnimalSystem.Leash + 0.1f || !people.Walkable(dp) && !w.Paths.Covers(dp, 0.01f)) dogStrayed = true;
+                bool walkableNow = people.Walkable(dp) || w.Paths.Covers(dp, 0.01f);
+                if ((dp - dogHome).magnitude > AnimalSystem.Leash + 0.1f) { dogStrayed = true; strayWhy = $"{(dp - dogHome).magnitude:0.00} m from home"; }
+                else if (!people.Walkable(dp) && !w.Paths.Covers(dp, 0.01f) && (dp - dogHome).magnitude > 0.08f) { dogStrayed = true; int nb = w.Buildings.Nearest(dp, 0.2f); strayWhy = $"on unwalkable ground at ({dp.x:0.000}, {dp.y:0.000}){(nb >= 0 ? $", {(new Vector2(w.Buildings.Houses[nb].x, w.Buildings.Houses[nb].z) - dp).magnitude * 100f:0.0} cm from the {Catalog.Get(w.Buildings.Houses[nb].variant).Name}" : "")}, at {hour:0.0} h, following {w.Animals.IsFollowing(dogIndex)}, walkable a moment ago {lastDogWalkable}"; }
+                if (!dogStrayed) lastDogWalkable = walkableNow;
                 var cp = w.Animals.PositionOf(catIndex);
                 if ((cp - catHome).magnitude > AnimalSystem.CatRange * 1.4f) catStrayed = true;
                 perched |= w.Animals.Perched(catIndex);
@@ -135,12 +139,12 @@ namespace Wonderland.Editor
             Check(traffic.Trips >= 2, $"Households drive to the shops, the restaurant and the park and come home ({traffic.Trips} round trips)");
             Check(restaurantEvening > restaurantAfternoon && restaurantEvening > 0, $"Supper fills the restaurant terrace ({restaurantEvening} in the evening vs {restaurantAfternoon} in the afternoon)");
             int owls = 0; for (int i = 0; i < people.People.Count; i++) if (people.NightOwl(i)) owls++;
-            Check(discoNight > 0 && discoDay == 0 && discoHeard > 0, $"The disco comes alive after dark ({discoNight} dancing, {owls} night owls; heard {discoHeard} times; nobody there by day)");
+            Check(discoNight > 0 && discoDay == 0 && discoHeard > 0, $"The disco comes alive after dark ({discoNight} dancing, {owls} night owls; heard {discoHeard} times; nobody there by day{(discoDay > 0 ? ": " + discoDay + " seen at" + discoDayHours.Substring(0, Mathf.Min(60, discoDayHours.Length)) : "")})");
             Check(museum > 0 && park > 0, $"Visitors come to the museum ({museum}) and the park ({park})");
             Check(childAtSchool && kidsPlaying > 0 && people.Matches + people.GoalsScored >= 0 && people.BallTravel > 0.05f,
                 $"Children go to school and play football: a match with a ball ({people.BallTravel:0.0} m of passes, {people.GoalsScored} goals)");
             Check(smoke > 0, $"The factory chimney smokes while it works ({(people.WorkerAt(factory) >= 0 ? people.NameOf(people.WorkerAt(factory)) + " works there" : "nobody works there")}; next door: {Neighbour(w, Catalog.Cottage, 0.62f)})");
-            Check(followed && !dogStrayed, "The dog goes out with its owner, in their footsteps, and never strays from home");
+            Check(followed && !dogStrayed, $"The dog goes out with its owner, in their footsteps, and never strays from home (followed {followed}{(dogStrayed ? ", strayed: " + strayWhy : "")})");
             Check(!catStrayed && perched, "The cat keeps to its territory and sits up on the wall");
             Check(aloft && !nightFlight, "The balloon flies by day and stays down at night");
             // The disco's neon sign chases, blinks and shines: over its cycle every number of letters from none to all is seen.

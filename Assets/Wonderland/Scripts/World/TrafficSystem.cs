@@ -685,6 +685,21 @@ namespace Wonderland
         /// <summary>Set by the world: whether a villager (by seed) is still indoors, out of sight.</summary>
         public System.Func<int, bool> StillIn;
 
+        /// <summary>Whether a point is on (or within <paramref name="margin"/> of) a vehicle's body: people walk round cars.</summary>
+        public bool Blocks(Vector2 p, float margin, bool movingOnly = false)
+        {
+            foreach (var v in Vehicles)
+            {
+                if (movingOnly && (v.State != Mode.Driving || v.Speed < 0.002f)) continue;
+                var d = p - v.Position;
+                if (d.sqrMagnitude > 0.004f) continue;   // (more than 6 cm away)
+                var fwd = new Vector2(Mathf.Sin(v.Heading * Mathf.Deg2Rad), Mathf.Cos(v.Heading * Mathf.Deg2Rad));
+                float along = Mathf.Abs(Vector2.Dot(d, fwd)), side = Mathf.Abs(d.x * fwd.y - d.y * fwd.x);
+                if (along < VehicleFactory.Length(v.Kind) * 0.5f + margin && side < 0.011f + margin) return true;
+            }
+            return false;
+        }
+
         /// <summary>The car a villager (by seed) is out in, or null.</summary>
         public Vehicle DrivenBy(int seed)
         {

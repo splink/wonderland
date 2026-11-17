@@ -347,7 +347,7 @@ namespace Wonderland
         public void SetStock(int house, float have)
         {
             RefreshPlaces();
-            if (PlaceAt(house) is { } p) p.Stock.Have = Mathf.Max(0f, have);
+            if (PlaceAt(house) is { } p) { p.Stock.Have = Mathf.Max(0f, have); p.Stock.BareDay = -1; }   // (shelves set anew: a bare day is news again)
         }
 
         /// <summary>Crates on a station's platform waiting for a goods train.</summary>

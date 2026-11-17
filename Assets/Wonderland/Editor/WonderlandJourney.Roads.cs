@@ -241,6 +241,41 @@ namespace Wonderland.Editor
             if (Application.isBatchMode) EditorApplication.Exit(0);
         }
 
+        /// <summary>
+        /// How villagers walk on saved worlds (Logs/walkprobe-results.txt): people bumping into each other, standing in
+        /// cars, spinning on the spot - two minutes each, with the walking checks before and after this change.
+        /// </summary>
+        public static void WalkProbe()
+        {
+            var report = new System.Text.StringBuilder();
+            var saves = (System.Environment.GetEnvironmentVariable("WL_SAVES") ?? "Tests/Saves/headset-wonderland-world.json").Split(';');
+            PeopleSystem.Diagnose = true;
+            foreach (bool legacy in new[] { true, false })
+            foreach (var save in saves)
+            {
+                PeopleSystem.Legacy = legacy;
+                var w = new GameObject("Walk").AddComponent<WonderlandWorld>();
+                w.Deserialize(System.IO.File.ReadAllText(save), Materials());
+                w.People.Grid.Complete();
+                w.Clock.Hour = 10f;
+                long touching = 0, inCars = 0; int frames = 0;
+                w.People.Spins = 0;
+                for (float s2 = 0f; s2 < 120f; s2 += 1f / 30f)
+                {
+                    float dt = 1f / 30f;
+                    w.Clock.Tick(dt); w.People.Step(dt); w.Animals.Step(dt); w.Trains.Step(dt); w.Traffic.Step(dt);
+                    if (s2 > 10f) { var (t1, c1) = w.People.Crowding(); touching += t1; inCars += c1; frames++; }
+                }
+                if (!legacy) foreach (var note in w.People.SpinNotes) report.AppendLine("    spin: " + note);
+                report.AppendLine($"{(legacy ? "before" : "after ")} {System.IO.Path.GetFileName(save)}: {w.People.People.Count} people, {w.Traffic.Vehicles.Count} vehicles; per frame {touching / (float)frames:0.00} pairs walking within 5 mm, {inCars / (float)frames:0.00} people inside a car; {w.People.Spins} spins in 110 s");
+                Object.DestroyImmediate(w.gameObject);
+            }
+            PeopleSystem.Diagnose = false; PeopleSystem.Legacy = false;
+            System.IO.File.WriteAllText("Logs/walkprobe-results.txt", report.ToString());
+            Debug.Log(report.ToString());
+            if (Application.isBatchMode) EditorApplication.Exit(0);
+        }
+
         /// <summary>The player's world in each terrain shading mode (Full, Light, Simple), from where they would stand.</summary>
         public static void TerrainModeRenders()
         {

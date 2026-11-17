@@ -31,13 +31,14 @@ case "$task" in
   terrainrender) method=Wonderland.Editor.WonderlandJourney.TerrainModeRenders; graphics=() ;;
   simprofile) method=Wonderland.Editor.WonderlandJourney.SimProfile ;;
   followrender) method=Wonderland.Editor.WonderlandJourney.FollowRenders; graphics=() ;;
+  walkprobe) method=Wonderland.Editor.WonderlandJourney.WalkProbe ;;
   shops) method=Wonderland.Editor.WonderlandTownGallery.Run; graphics=() ;;
   trackprobe) method=Wonderland.Editor.WonderlandTrackProbe.Run ;;
   budget) method=Wonderland.Editor.WonderlandTrackProbe.Budget ;;
   gallery) method=Wonderland.Editor.WonderlandRenders.Gallery; graphics=() ;;
   renders) method=Wonderland.Editor.WonderlandJourney.Renders; graphics=() ;;
   compile) method="" ;;
-  *) echo "Usage: $0 [configure|build|test|village|town|rail|roads|questworld|interaction|cards|pond|railrender|roadrender|terrainrender|simprofile|followrender|shops|trackprobe|budget|gallery|renders|compile]" >&2; exit 2 ;;
+  *) echo "Usage: $0 [configure|build|test|village|town|rail|roads|questworld|interaction|cards|pond|railrender|roadrender|terrainrender|simprofile|followrender|walkprobe|shops|trackprobe|budget|gallery|renders|compile]" >&2; exit 2 ;;
 esac
 mkdir -p "$project_dir/Logs"
 log="$project_dir/Logs/$task.log"

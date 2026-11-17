@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -59,6 +60,9 @@ namespace Wonderland
             public float Ground, Chosen = float.NaN, ChosenWant;
             public int Style, Level;   // their outfit, and the level of detail they are drawn at
             public float Pending;      // time not yet thought through (coarse scheduling)
+            public float Spin, LastHeading;   // (diagnostics: turning on the spot)
+            public string LastSteer;
+            public float Hover, Closest = float.MaxValue;   // time since last getting closer to the current waypoint; how close
             public MeshRenderer[] Parts; public MeshFilter[] Filters; public int PartCount = -1;   // drawn together (FigureBatch)
             public float Heading, Timer, Phase, Height, Cooldown, Ride, WaveHeading, ResumeTimer;
             public Activity State, Resume;
@@ -526,6 +530,7 @@ namespace Wonderland
             bool smart = PerfSettings.SmartVillagers;
             var cctv = world.Cctv;   // (on a CCTV feed - out of the player's sight or not - they move smoothly)
             FindLocos();
+            MapCrowd();
             var eye = Camera.main != null ? (Vector3?)transform.InverseTransformPoint(Camera.main.transform.position) : null;
             var viewDir = Camera.main != null ? transform.InverseTransformDirection(Camera.main.transform.forward) : Vector3.forward;
             float drawn = WonderlandWorld.MiniatureCullDistance / Mathf.Max(transform.lossyScale.x, 1e-3f) + 0.1f;
@@ -625,6 +630,16 @@ namespace Wonderland
                 }
                 // The ground under them: looked up again once they have moved (or now and then: the land may change).
                 if (!smart || (beat & 7) == 0 || !((a.Position - a.GroundPos).sqrMagnitude < 0.0015f * 0.0015f)) { a.Ground = GroundAt(a.Position); a.GroundPos = a.Position; }
+                if (Diagnose)
+                {
+                    a.Spin = a.Spin * Mathf.Exp(-dtA * 1.2f) + Mathf.DeltaAngle(a.LastHeading, a.Heading);
+                    if (Mathf.Abs(a.Spin) > 270f)
+                    {
+                        Spins++; a.Spin = 0f;
+                        if (SpinNotes.Count < 12) SpinNotes.Add($"{a.State} {a.Plan.What} wp {a.Waypoints.Count} to-target {(a.Target - a.Position).magnitude * 100f:0.0} cm stuck {a.Stuck} last-steer {a.LastSteer}");
+                    }
+                }
+                a.LastHeading = a.Heading;
                 a.Height = Mathf.MoveTowards(a.Height, a.Ground + (a.State == Activity.Watching ? a.SpotLift : 0f), (a.SpotLift > 0f ? 0.4f : 0.12f) * dtA);
                 if (eye.HasValue && (beat & 7) == 0) Detail(a, (new Vector3(a.Position.x, a.Height, a.Position.y) - eye.Value).magnitude * transform.lossyScale.x);
                 // Beyond the distance figures are drawn at, nobody sees them move: posed only now and then.
@@ -1045,8 +1060,11 @@ namespace Wonderland
             var route = world.Paths.Hike(a.Home, 0.45f, ref a.Rng);
             if (route == null) return false;
             var toStart = Grid.Route(a.Position, route[0]);
-            if (toStart != null) foreach (var p in toStart) a.Waypoints.Enqueue(p);
-            foreach (var p in route) a.Waypoints.Enqueue(p);
+            var all = new List<Vector2>();
+            if (toStart != null) all.AddRange(toStart);
+            all.AddRange(route);
+            foreach (var p in Soften(a.Position, all)) a.Waypoints.Enqueue(p);
+            a.Hover = 0f; a.Closest = float.MaxValue;
             a.Hiking = true;
             a.Target = route[^1]; a.ToStation = false;
             a.State = Activity.Walking; a.Timer = 20f + (route.Count + a.Waypoints.Count) * 0.03f / Speed;
@@ -1058,13 +1076,44 @@ namespace Wonderland
             a.Target = target; a.ToStation = station;
             a.State = Activity.Walking; a.Timer = 25f;
             a.Progress = a.Position; a.ProgressTimer = 3f;
-            a.Waypoints.Clear();
+            a.Waypoints.Clear(); a.Hover = 0f; a.Closest = float.MaxValue;
             // Round fences and ponds, over the level crossing, along the roads and paths.
             var route = Grid.Ready ? Grid.Route(a.Position, target) : world.Paths.Route(a.Position, target);
             if (route == null) return;
             float length = 0f; var from = a.Position;
-            foreach (var p in route) { a.Waypoints.Enqueue(p); length += (p - from).magnitude; from = p; }
+            foreach (var p in Soften(a.Position, route)) { a.Waypoints.Enqueue(p); length += (p - from).magnitude; from = p; }
             a.Timer = 12f + length / Speed * 1.6f;
+        }
+
+        /// <summary>A corner that can be rounded: it turns less than 60 degrees and the way straight on to the next waypoint is clear.</summary>
+        private bool Gentle(Agent a, Vector2 w0, Vector2 w1)
+        {
+            var din = w0 - a.Position; var dout = w1 - w0;
+            if (din.sqrMagnitude < 1e-8f || dout.sqrMagnitude < 1e-8f) return true;
+            if (Vector2.Dot(din.normalized, dout.normalized) < 0.5f) return false;
+            return Walkable(Vector2.Lerp(a.Position, w1, 0.5f)) && !world.Paths.CrossesBarrier(a.Position, w1);
+        }
+
+        /// <summary>
+        /// A route's corners softened (one pass of Chaikin's corner cutting): people walk curves, not zigzags. A cut is
+        /// only taken where it stays on walkable ground and doesn't cross a fence or hedge; the end stays exactly where it was.
+        /// </summary>
+        private List<Vector2> Soften(Vector2 start, IList<Vector2> route)
+        {
+            if ((LegacyParts & 1) != 0) return new List<Vector2>(route);
+            var pts = new List<Vector2>(route.Count + 1) { start };
+            pts.AddRange(route);
+            if (pts.Count < 3) return new List<Vector2>(route);
+            var soft = new List<Vector2>(pts.Count * 2);
+            for (int i = 1; i < pts.Count - 1; i++)
+            {
+                Vector2 prev = pts[i - 1], at = pts[i], next = pts[i + 1];
+                var q = Vector2.Lerp(at, prev, 0.3f); var r = Vector2.Lerp(at, next, 0.3f);
+                bool ok = Walkable(q) && Walkable(r) && !world.Paths.CrossesBarrier(q, r) && (soft.Count == 0 || !world.Paths.CrossesBarrier(soft[^1], q));
+                if (ok) { soft.Add(q); soft.Add(r); } else soft.Add(at);
+            }
+            soft.Add(pts[^1]);
+            return soft;
         }
 
         private void Walk(Agent a, float dt)
@@ -1080,10 +1129,33 @@ namespace Wonderland
                 if (a.Stuck >= 2) { a.Stuck = 0; if (PlaceAt(a.SpotHouse) is { } missed) Avoid(a, missed.Key, 3f); Stop(a, a.Rng.Range(0.5f, 1.5f)); return; }
                 a.Progress = a.Position; a.ProgressTimer = 3f;
             }
-            while (a.Waypoints.Count > 0 && (a.Waypoints.Peek() - a.Position).magnitude < 0.01f) a.Waypoints.Dequeue();
+            // A waypoint is reached when near it - or when already past it, heading for the next (no turning round to
+            // step back onto it).
+            while (a.Waypoints.Count > 0)
+            {
+                var w0 = a.Waypoints.Peek();
+                float d0 = (w0 - a.Position).magnitude;
+                if (d0 < 0.01f) { a.Waypoints.Dequeue(); a.Hover = 0f; a.Closest = float.MaxValue; continue; }
+                // Circling a waypoint that can't quite be reached (just inside a hedge, on a stream bank): no closer for a
+                // second and a half - on to the next.
+                if (d0 < a.Closest - 0.005f) { a.Closest = d0; a.Hover = 0f; } else a.Hover += dt;
+                if (a.Hover > 1.5f && a.Waypoints.Count > 1) { a.Waypoints.Dequeue(); a.Hover = 0f; a.Closest = float.MaxValue; continue; }
+                if (a.Waypoints.Count > 1 && d0 < 0.03f && (LegacyParts & 2) == 0)
+                {
+                    var w1 = a.Waypoints.ElementAt(1);
+                    if (Vector2.Dot(w1 - w0, a.Position - w0) > 0f && Gentle(a, w0, w1)) { a.Waypoints.Dequeue(); continue; }
+                }
+                break;
+            }
             if (a.Waypoints.Count > 1 && a.Timer > 0f)
             {
-                Steer(a, a.Waypoints.Peek(), dt);
+                // Round a gentle corner: closing on this waypoint, aim more and more at the next one. (A sharp turn - round
+                // the end of a fence, through a gate - is walked to the point first.)
+                var w0 = a.Waypoints.Peek();
+                var w1 = a.Waypoints.ElementAt(1);
+                float d0 = (w0 - a.Position).magnitude;
+                const float lead = 0.025f;
+                Steer(a, d0 < lead && (LegacyParts & 2) == 0 && Gentle(a, w0, w1) ? Vector2.Lerp(w1, w0, d0 / lead) : w0, dt);
                 return;
             }
             if (a.Waypoints.Count == 1) a.Waypoints.Clear();   // the last waypoint is the target itself
@@ -1123,25 +1195,96 @@ namespace Wonderland
                 chosen = a.Chosen + Mathf.DeltaAngle(a.ChosenWant, want);
             else
             {
-                foreach (float off in Offsets)
-                {
-                    float h = want + off;
-                    var dir = new Vector2(Mathf.Sin(h * Mathf.Deg2Rad), Mathf.Cos(h * Mathf.Deg2Rad));
-                    if (Walkable(a.Position + dir * Mathf.Min(0.012f, to.magnitude)) && Walkable(a.Position + dir * step)) { chosen = h; break; }
-                }
-                a.Chosen = chosen; a.ChosenWant = want;
+                // First a way clear of other people and vehicles too; failing that, a way past them (then wait a moment
+                // for them instead of walking through).
+                bool crowded = false;
+                for (int pass = 0; pass < 2 && float.IsNaN(chosen); pass++)
+                    foreach (float off in Offsets)
+                    {
+                        float h = want + off;
+                        var dir = new Vector2(Mathf.Sin(h * Mathf.Deg2Rad), Mathf.Cos(h * Mathf.Deg2Rad));
+                        var near = a.Position + dir * Mathf.Min(0.012f, to.magnitude);
+                        if (!Walkable(near) || !Walkable(a.Position + dir * step)) continue;
+                        if (pass == 0 && Occupied(a, near)) continue;
+                        if (pass == 1 && world.Traffic.Blocks(near, 0.004f, true)) continue;   // (never into a car going by)
+                        chosen = h; crowded = pass == 1 && Occupied(a, near, true);   // past a parked car: walk on; into someone: wait
+                        break;
+                    }
+                a.Chosen = crowded ? float.NaN : chosen; a.ChosenWant = want;
+                if (crowded) { a.LastSteer = "waiting for someone"; a.Heading = Mathf.MoveTowardsAngle(a.Heading, want, 300f * dt); return; }   // someone in the way: wait for them
             }
             if (float.IsNaN(chosen)) { a.Timer = 0f; a.Waypoints.Clear(); return; }
+            if (Diagnose) a.LastSteer = $"off {Mathf.DeltaAngle(want, chosen):0}, to goal {to.magnitude * 100f:0.0} cm";
             a.Heading = Mathf.MoveTowardsAngle(a.Heading, chosen, 300f * dt);
             if (Mathf.Abs(Mathf.DeltaAngle(a.Heading, chosen)) > 50f) return;   // turn first
             var fwd = new Vector2(Mathf.Sin(a.Heading * Mathf.Deg2Rad), Mathf.Cos(a.Heading * Mathf.Deg2Rad));
             var next = a.Position + fwd * step;
+            if (Occupied(a, next, true) || world.Traffic.Blocks(next, 0.002f, true)) { a.Chosen = float.NaN; return; }   // (someone - or a car - stepped in the way)
             if (!Walkable(next)) { a.Heading = chosen; a.Chosen = float.NaN; return; }
             a.Position = next;
             a.Phase += step / 0.0105f * Mathf.PI;   // one stride per ~1 cm
         }
 
         private static readonly float[] Offsets = { 0f, 30f, -30f, 60f, -60f, 95f, -95f, 135f, -135f };
+
+        /// <summary>Diagnostics for the tests: count spins (turning three quarters round within about a second).</summary>
+        public static bool Diagnose;
+        /// <summary>Diagnostics: the old walking, part by part (1 straight routes, 2 corners reached exactly, 4 walking through people).</summary>
+        public static int LegacyParts;
+        public static bool Legacy { get => LegacyParts == 7; set => LegacyParts = value ? 7 : 0; }
+        public int Spins { get; set; }
+        public readonly List<string> SpinNotes = new();
+
+        /// <summary>Now: pairs of people (not sitting or working together) closer than 5 mm, and people inside a car's body.</summary>
+        public (int touching, int inCars) Crowding()
+        {
+            int touching = 0, inCars = 0;
+            var seen = new List<Agent>();
+            foreach (var a in agents)
+            {
+                if (a.Hidden || a.State is Activity.Riding or Activity.OnRide or Activity.Sleeping) continue;
+                if (world.Traffic.Blocks(a.Position, -0.002f)) inCars++;
+                if (a.State != Activity.Walking) continue;
+                foreach (var b in seen) if ((a.Position - b.Position).sqrMagnitude < 0.005f * 0.005f) touching++;
+                seen.Add(a);
+            }
+            return (touching, inCars);
+        }
+
+        // Who stands where (a 2 cm grid, rebuilt every frame), for keeping out of each other's way.
+        private readonly Dictionary<long, List<Agent>> crowd = new();
+        private static long CrowdKey(int x, int z) => ((long)x << 32) ^ (uint)z;
+
+        private void MapCrowd()
+        {
+            foreach (var l in crowd.Values) l.Clear();
+            foreach (var a in agents)
+            {
+                if (a.Hidden || a.State is Activity.Riding or Activity.OnRide or Activity.Sleeping) continue;
+                long k = CrowdKey(Mathf.FloorToInt(a.Position.x / 0.02f), Mathf.FloorToInt(a.Position.y / 0.02f));
+                if (!crowd.TryGetValue(k, out var l)) crowd[k] = l = new List<Agent>(4);
+                l.Add(a);
+            }
+        }
+
+        /// <summary>Whether someone else (or a vehicle) is where <paramref name="a"/> would step - personal space, a car's body.</summary>
+        private bool Occupied(Agent a, Vector2 p, bool peopleOnly = false)
+        {
+            if ((LegacyParts & 4) != 0) return false;
+            // (the last few centimetres to a door, a platform, a seat on a busy terrace: people gather there - no waiting for room)
+            // (...and the first steps out of a door: nobody waits on a doorstep, blocking it)
+            if ((a.Target - a.Position).sqrMagnitude < 0.05f * 0.05f || (a.Approach - a.Position).sqrMagnitude < 0.025f * 0.025f) return !peopleOnly && world.Traffic.Blocks(p, 0.004f, true);
+            const float room = 0.0075f;   // (shoulder to shoulder, a little apart)
+            int cx = Mathf.FloorToInt(p.x / 0.02f), cz = Mathf.FloorToInt(p.y / 0.02f);
+            for (int dz = -1; dz <= 1; dz++)
+            for (int dx = -1; dx <= 1; dx++)
+            {
+                if (!crowd.TryGetValue(CrowdKey(cx + dx, cz + dz), out var l)) continue;
+                foreach (var b in l)
+                    if (b != a && (b.Position - p).sqrMagnitude < room * room && (b.Position - p).sqrMagnitude < (b.Position - a.Position).sqrMagnitude) return true;   // (only what is nearer than they are now: never stuck in a crowd they're already in)
+            }
+            return !peopleOnly && world.Traffic.Blocks(p, 0.004f);
+        }
 
         /// <summary>On the train: get off at the station they were going to (or, on a trip for its own sake, the next one).</summary>
         private void StepRiding(Agent a, float dt)
@@ -1231,11 +1374,22 @@ namespace Wonderland
         /// a slightly different moment as a shower sets in, and puts it away when it stops or they go indoors. Five
         /// cheerful colours; made the first time it rains on someone, so dry worlds carry none.
         /// </summary>
+        /// <summary>Under a roof already: on a station platform (its canopy), or at a spot within a building's walls or porch.</summary>
+        private bool Sheltered(Agent a)
+        {
+            if (a.State == Activity.Waiting || OnPlatform(a.Position, out _)) return true;
+            if (a.SpotHouse < 0 || a.SpotHouse >= world.Buildings.Houses.Count) return false;
+            var h = world.Buildings.Houses[a.SpotHouse];
+            var half = Catalog.Get(h.variant).Half;
+            var q = Quaternion.Inverse(Quaternion.Euler(0f, h.rotation, 0f)) * new Vector3(a.Position.x - h.x, 0f, a.Position.y - h.z);
+            return Mathf.Abs(q.x) < half.x + 0.004f && Mathf.Abs(q.z) < half.y + 0.004f;
+        }
+
         private void HoldUmbrella(Agent a, bool queueing = false)
         {
             bool outdoors = queueing || a.State is Activity.Walking or Activity.Waiting or Activity.Watching or Activity.Chatting or Activity.Gathering or Activity.Idle or Activity.Waving;
             float threshold = 0.3f + ((uint)a.Seed % 9u) * 0.05f;   // not all at once
-            bool up = outdoors && a.Carrying == 0 && !a.Cheering && Rain > threshold;
+            bool up = outdoors && a.Carrying == 0 && !a.Cheering && Rain > threshold && !Sheltered(a);
             if (up && a.Umbrella == null)
             {
                 int colour = (int)((uint)a.Seed / 7u % (uint)umbrellas.Length);

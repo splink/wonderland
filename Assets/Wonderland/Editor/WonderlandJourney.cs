@@ -39,8 +39,10 @@ namespace Wonderland.Editor
         public static void TestVillage()
         {
             Report.Clear(); failures = 0; BuildGrid.Snap = false;   // (journeys drawn by hand; the road journey checks the grid)
+            PeopleSystem.LegacyParts = int.TryParse(System.Environment.GetEnvironmentVariable("WL_LEGACY"), out int parts) ? parts : 0;   // (compare with the old walking)
             try { VillageLifeJourney(); VillageWorkJourney(); DayJourney(); }
             catch (Exception e) { Fail("Exception: " + e); }
+            finally { PeopleSystem.LegacyParts = 0; }
             BuildGrid.Snap = true;
             Report.AppendLine(failures == 0 ? "RESULT: PASS" : $"RESULT: FAIL ({failures})");
             File.WriteAllText("Logs/village-results.txt", Report.ToString());
@@ -52,8 +54,10 @@ namespace Wonderland.Editor
         public static void TestTown()
         {
             Report.Clear(); failures = 0; BuildGrid.Snap = false;   // (journeys drawn by hand; the road journey checks the grid)
+            PeopleSystem.LegacyParts = int.TryParse(System.Environment.GetEnvironmentVariable("WL_LEGACY"), out int parts) ? parts : 0;   // (compare with the old walking)
             try { TownJourney(); WeatherJourney(); }
             catch (Exception e) { Fail("Exception: " + e); }
+            finally { PeopleSystem.Legacy = false; }
             BuildGrid.Snap = true;
             Report.AppendLine(failures == 0 ? "RESULT: PASS" : $"RESULT: FAIL ({failures})");
             File.WriteAllText("Logs/town-results.txt", Report.ToString());
