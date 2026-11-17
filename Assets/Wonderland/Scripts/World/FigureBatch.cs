@@ -15,7 +15,7 @@ namespace Wonderland
     {
         private readonly Dictionary<Mesh, List<Matrix4x4>> casting = new(), plain = new();
         private Material material;
-        private Vector3 eye, forward;
+        private Vector3 eye, forward, centre;
         private float reach;
         private bool cull;
         private System.Func<Vector3, bool> filming;   // (world position: on a camera feed)
@@ -31,6 +31,11 @@ namespace Wonderland
             foreach (var l in casting.Values) l.Clear();
             foreach (var l in plain.Values) l.Clear();
             var cam = Camera.main;
+            // The bounds the draws are culled by are centred on the eyes: the headset's camera culls the figures' layer
+            // beyond 3 m measured to the centre of the bounds, so bounds centred anywhere else (the room's origin) would
+            // make every figure vanish at once whenever the player stood 3 m from it. Which figures are near enough is
+            // decided here, figure by figure (Visible).
+            centre = cam != null ? cam.transform.position : Vector3.zero;
             cull = cam != null && !watched;
             if (cull) { eye = cam.transform.position; forward = cam.transform.forward; reach = WonderlandWorld.MiniatureCullDistance; }
         }
@@ -72,7 +77,7 @@ namespace Wonderland
 
         private void Draw(Dictionary<Mesh, List<Matrix4x4>> lists, ShadowCastingMode shadows, int layer)
         {
-            var rp = new RenderParams(material) { shadowCastingMode = shadows, receiveShadows = true, layer = layer, worldBounds = new Bounds(Vector3.zero, Vector3.one * 2000f) };
+            var rp = new RenderParams(material) { shadowCastingMode = shadows, receiveShadows = true, layer = layer, worldBounds = new Bounds(centre, Vector3.one * 2000f) };
             foreach (var (mesh, list) in lists)
                 for (int start = 0; start < list.Count; start += 511)
                     Graphics.RenderMeshInstanced(rp, mesh, 0, list, Mathf.Min(511, list.Count - start), start);
