@@ -48,7 +48,7 @@ namespace Wonderland
             public AnimalKind Kind;
             public Vector2 Home, Position, Target;
             public float Heading, Timer, Bob, Pitch, Speed;
-            public int Index;
+            public int Index, Level;   // (Level: the level of detail it is drawn at)
             public Vector2 GroundPos = new(float.NaN, 0f);   // where Ground and Normal were last looked up (Smart scheduling)
             public float Ground;
             public Vector3 Normal = Vector3.up;
@@ -148,6 +148,16 @@ namespace Wonderland
         private bool Suits(Agent a, Vector2 p) => suits == null || suits(p, a.Kind, a.Home);
         private int tick;
 
+        /// <summary>A simpler animal further away (same shape and coat, fewer facets), unless Distance is set to Full.</summary>
+        private static void Detail(Agent a, float distance)
+        {
+            int level = !PerfSettings.ReducedDetail || distance < Lod.Near ? 0 : distance < Lod.Far ? 1 : 2;
+            if (level == a.Level) return;
+            a.Level = level;
+            a.Body.GetComponent<MeshFilter>().sharedMesh = AnimalFactory.Body(a.Kind, level);
+            a.Head.GetComponent<MeshFilter>().sharedMesh = AnimalFactory.Head(a.Kind, level);
+        }
+
         private void Update()
         {
             if (terrain == null) return;
@@ -168,6 +178,7 @@ namespace Wonderland
                 int beat = tick + i;
                 var t = Of(a.Kind);
                 a.Timer -= dt;
+                if (eye.HasValue && (beat & 7) == 0) Detail(a, (new Vector3(a.Position.x, a.Ground, a.Position.y) - eye.Value).magnitude * transform.lossyScale.x);
                 // Beyond the distance figures are drawn at, nobody sees them: posed only now and then.
                 bool unseen = smart && eye.HasValue && (beat & 7) != 0 && (new Vector3(a.Position.x, a.Ground, a.Position.y) - eye.Value).sqrMagnitude > drawn * drawn;
                 if (a.Kind == AnimalKind.Dog) { StepDog(a, dt); if (!unseen) Pose(a); continue; }

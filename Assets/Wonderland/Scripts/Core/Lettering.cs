@@ -65,7 +65,11 @@ namespace Wonderland
         /// </summary>
         public static void Add(MeshBuilder b, string text, Vector3 centre, Vector3 facing, float height, float depth, Color colour)
         {
+            // Lettering stays at the first simpler level of detail (a sign still reads from a metre or two away).
+            int detail = b.Detail;
+            if (detail == 1) b.Detail = 0;
             for (int i = 0; i < text.Length; i++) AddLetter(b, text, i, centre, facing, height, depth, colour);
+            b.Detail = detail;
         }
 
         /// <summary>Just letter <paramref name="index"/> of <paramref name="text"/> (placed as in <see cref="Add"/>): for neon that lights letter by letter.</summary>

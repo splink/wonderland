@@ -24,6 +24,43 @@ namespace Wonderland
 
         public int VertexCount => Vertices.Count;
 
+        /// <summary>
+        /// Level of detail for what is added from now on: 0 everything; 1 (seen from a metre or two) leaves out features
+        /// under 2 mm (and sticks thinner than 1.4 mm) and rounds with fewer facets; 2 (further) leaves out features under
+        /// 3.5 mm (sticks under 2.5 mm), fewer facets still - all well under a pixel at those distances.
+        /// Shapes, colours, windows and signs stay: a bakery still reads as the bakery. Factories set
+        /// <see cref="DefaultDetail"/> around a build so every builder they make inherits it.
+        /// </summary>
+        public int Detail = DefaultDetail;
+        [System.ThreadStatic] public static int DefaultDetail;
+        /// <summary>Scales the size limits (the 3 cm figures use 0.4: their eyes go further away, their arms stay).</summary>
+        public float FeatureScale = DefaultFeatureScale > 0f ? DefaultFeatureScale : 1f;
+        [System.ThreadStatic] public static float DefaultFeatureScale;
+        public float MinFeature => FeatureScale * Detail switch { 0 => 0f, 1 => 0.002f, _ => 0.0035f };
+
+        /// <summary>Runs a factory's build with every builder it makes at this level of detail (and size scale).</summary>
+        public static Mesh At(int detail, float featureScale, System.Func<Mesh> build)
+        {
+            int was = DefaultDetail; float scaleWas = DefaultFeatureScale;
+            DefaultDetail = detail; DefaultFeatureScale = featureScale;
+            try { return build(); }
+            finally { DefaultDetail = was; DefaultFeatureScale = scaleWas; }
+        }
+
+        /// <summary>Whether a feature of this size (in the current matrix) is too small to keep at this level of detail.</summary>
+        public bool TooSmall(float size, float thickness = float.MaxValue)
+        {
+            if (Detail == 0) return false;
+            float scale = Mathf.Max(((Vector3)matrix.GetColumn(0)).magnitude, ((Vector3)matrix.GetColumn(1)).magnitude, ((Vector3)matrix.GetColumn(2)).magnitude);
+            return size * scale < MinFeature || thickness * scale < MinFeature * 0.7f;
+        }
+
+        /// <summary>The middle of three sizes (a box's thickness, if it is a stick: long, but thin in two directions).</summary>
+        private static float Middle(Vector3 s) => Mathf.Max(Mathf.Min(s.x, s.y), Mathf.Min(Mathf.Max(s.x, s.y), s.z));
+
+        /// <summary>Facets for a round shape at this level of detail (halved per level, at least <paramref name="least"/>, kept even).</summary>
+        public int Facets(int segments, int least = 4) => Detail == 0 ? segments : Mathf.Max(least, (segments >> (Detail >= 2 && segments >= 16 ? 2 : 1)) & ~1);
+
         public Matrix4x4 Matrix
         {
             get => matrix;
@@ -115,6 +152,7 @@ namespace Wonderland
         /// <summary>Axis-aligned box (in the current matrix) with separate top and bottom colours; <paramref name="skipBottom"/> drops hidden faces.</summary>
         public void AddBox(Vector3 center, Vector3 size, Color side, Color top, Color bottom, bool skipBottom = true)
         {
+            if (TooSmall(Mathf.Max(size.x, size.y, size.z), Middle(size))) return;
             var h = size * 0.5f;
             AddFace(center + Vector3.up * h.y, Vector3.up, Vector3.forward, h.x, h.z, top);
             if (!skipBottom) AddFace(center - Vector3.up * h.y, Vector3.down, Vector3.forward, h.x, h.z, bottom);
@@ -132,6 +170,9 @@ namespace Wonderland
             Color baseColor, Color topColor, bool capTop = true, bool capBottom = false, bool smooth = true, float phase = 0f,
             float edgeWave = 0f)
         {
+            float across = Mathf.Max(bottomRadius, topRadius) * 2f;
+            if (TooSmall(Mathf.Max(across, height), across)) return;   // (a thin rod is too small; a thin disc is not)
+            segments = Facets(segments, edgeWave != 0f || across >= 0.005f * FeatureScale ? 6 : 4);   // (a body stays round)
             float slope = (bottomRadius - topRadius) / Mathf.Max(height, 1e-5f);
             int start = VertexCount;
             for (int i = 0; i <= segments; i++)
@@ -177,6 +218,8 @@ namespace Wonderland
 
         public void AddDisc(Vector3 center, float radius, int segments, Color color, bool facingUp, float phase = 0f)
         {
+            if (TooSmall(radius * 2f)) return;
+            segments = Facets(segments);
             var n = facingUp ? Vector3.up : Vector3.down;
             int c = AddVertex(center, n, color);
             for (int i = 0; i <= segments; i++)
@@ -200,6 +243,9 @@ namespace Wonderland
         public void AddBlob(Vector3 center, Vector3 radius, int subdivisions, float lumpiness, int seed, BlobColor color,
             float lumpFrequency = 2.2f)
         {
+            if (TooSmall(Mathf.Max(radius.x, radius.y, radius.z) * 2f)) return;
+            // (big blobs - a canopy, a thatched roof - keep one more level of facets than small ones)
+            subdivisions = Mathf.Max(0, subdivisions - Mathf.Max(0, Detail - (Mathf.Max(radius.x, radius.y, radius.z) * 2f >= 0.03f ? 1 : 0)));
             var sphere = IcoSphere.Get(subdivisions);
             int start = VertexCount;
             var local = new Vector3[sphere.Vertices.Length];

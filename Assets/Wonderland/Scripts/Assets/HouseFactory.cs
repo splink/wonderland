@@ -17,12 +17,22 @@ namespace Wonderland
         public static string Name(int variant) => Catalog.Get(variant).Name;
         private static readonly System.Collections.Generic.Dictionary<int, Mesh> Cache = new();
 
-        public static Mesh Get(int variant, int style = 0)
+        public static Mesh Get(int variant, int style = 0) => Get(variant, style, 0);
+
+        /// <summary>A building at a level of detail (0 full; 1 and 2 simpler for further away - see <see cref="MeshBuilder.Detail"/>).</summary>
+        public static Mesh Get(int variant, int style, int detail)
         {
             variant = Mathf.Clamp(variant, 0, Catalog.Count - 1);
             style = Mathf.Abs(style) % Mathf.Max(1, Catalog.Get(variant).Styles);
-            int key = variant * 16 + style;
-            if (!Cache.TryGetValue(key, out var mesh)) Cache[key] = mesh = Build(variant, style);
+            int key = (variant * 16 + style) * 4 + detail;
+            if (!Cache.TryGetValue(key, out var mesh))
+            {
+                int was = MeshBuilder.DefaultDetail;
+                MeshBuilder.DefaultDetail = detail;
+                try { Cache[key] = mesh = Build(variant, style); }
+                finally { MeshBuilder.DefaultDetail = was; }
+                if (detail > 0) mesh.name += " detail " + detail;
+            }
             return mesh;
         }
 
@@ -324,6 +334,7 @@ namespace Wonderland
         private static void Foundation(MeshBuilder b, ref Rng rng, float w, float d)
         {
             b.AddBox(new Vector3(0f, -0.017f, 0f), new Vector3(w + 0.008f, 0.046f, d + 0.008f), Pal.StoneDark, Pal.Stone, Pal.StoneDark);
+            if (b.Detail > 0) { b.AddBox(new Vector3(0f, 0.0045f, 0f), new Vector3(w + 0.0095f, 0.004f, d + 0.0095f), Pal.StoneDark, Pal.Hex("#C9BBA3"), Pal.StoneDark); return; }   // (further away: one coping, no stones)
             for (int side = 0; side < 4; side++)
             {
                 bool alongX = side < 2;
@@ -442,6 +453,13 @@ namespace Wonderland
         private static void FlowerBox(MeshBuilder b, ref Rng rng, float w, float y, Color main)
         {
             b.AddBox(new Vector3(0f, y, 0.0035f), new Vector3(w, 0.004f, 0.0042f), Pal.Timber);
+            if (b.Detail > 0)
+            {
+                // Further away: a band of leaves with a band of blooms on top.
+                b.AddBox(new Vector3(0f, y + 0.0028f, 0.0035f), new Vector3(w * 0.96f, 0.0028f, 0.0042f), Pal.LeafMid);
+                b.AddBox(new Vector3(0f, y + 0.0046f, 0.0040f), new Vector3(w * 0.85f, 0.0016f, 0.0026f), main);
+                return;
+            }
             var palette = new[] { main, main, Pal.FlowerWhite, Pal.FlowerYellow, Pal.FlowerPink };
             int count = Mathf.RoundToInt(w / 0.0026f);
             for (int i = 0; i < count; i++)
@@ -581,6 +599,14 @@ namespace Wonderland
                     int tiles = Mathf.Max(3, Mathf.RoundToInt(roofLen / 0.0105f));
                     float tw = roofLen / tiles, offset = (k % 2) * tw * 0.5f;
                     b.Push((p0 + p1) * 0.5f, Quaternion.LookRotation(tangent, n));
+                    if (b.Detail > 0)
+                    {
+                        // Seen from further away: each row of tiles is one strip in the row's colour (the stepped rows remain).
+                        b.AddFace(new Vector3(0f, 0.0027f, 0.0005f), Vector3.up, Vector3.forward, roofLen / 2, step * 0.6f, rowColour);
+                        b.AddFace(new Vector3(0f, 0.0016f, 0.0005f - step * 0.6f), Vector3.back, Vector3.up, roofLen / 2, 0.0011f, Pal.Shade(rowColour, 0.7f));
+                        b.Pop();
+                        continue;
+                    }
                     // Dark underlay so the hairline gaps between tiles read as shadow, not daylight.
                     b.AddFace(new Vector3(0f, 0.0004f, 0f), Vector3.up, Vector3.forward, roofLen / 2, step * 0.6f, Pal.Shade(roof, 0.35f));
                     for (int i = 0; i < tiles; i++)

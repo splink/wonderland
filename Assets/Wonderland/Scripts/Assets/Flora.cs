@@ -17,7 +17,7 @@ namespace Wonderland
         /// </summary>
         public static void LeafCluster(MeshBuilder b, Vector3 centre, float radius, Vector3 outward, int lobes, ref Rng rng, Paint paint, float stretchY = 0.85f)
         {
-            var sphere = IcoSphere.Get(2);
+            var sphere = IcoSphere.Get(b.Detail > 0 ? 1 : 2);   // (further away: a quarter of the facets, the lobes still show)
             outward = outward.sqrMagnitude > 1e-6f ? outward.normalized : Vector3.up;
             lobes = Mathf.Clamp(lobes + 3, 5, 10);
             var dirs = new Vector3[lobes];

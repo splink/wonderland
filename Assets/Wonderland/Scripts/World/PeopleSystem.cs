@@ -57,6 +57,7 @@ namespace Wonderland
             public Vector2 Home, Position, Target;
             public Vector2 GroundPos = new(float.NaN, 0f);   // where Ground was last looked up (Smart scheduling)
             public float Ground, Chosen = float.NaN, ChosenWant;
+            public int Style, Level;   // their outfit, and the level of detail they are drawn at
             public float Heading, Timer, Phase, Height, Cooldown, Ride, WaveHeading, ResumeTimer;
             public Activity State, Resume;
             public bool ToStation, Cheering, Hidden;
@@ -147,7 +148,7 @@ namespace Wonderland
             var root = Part("Villager", PersonFactory.Body(p.style), transform);
             var agent = new Agent
             {
-                Root = root, Index = index, Seed = p.seed, Name = Needs.NameOf(p.seed),
+                Root = root, Index = index, Seed = p.seed, Name = Needs.NameOf(p.seed), Style = p.style,
                 LegL = Part("Leg", PersonFactory.Leg(p.style), root), LegR = Part("Leg", PersonFactory.Leg(p.style), root),
                 ArmL = Part("Arm", PersonFactory.Arm(p.style), root), ArmR = Part("Arm", PersonFactory.Arm(p.style), root),
                 Home = new Vector2(p.x, p.z), Position = new Vector2(p.x, p.z), Rng = new Rng(p.seed),
@@ -517,6 +518,7 @@ namespace Wonderland
                 // The ground under them: looked up again once they have moved (or now and then: the land may change).
                 if (!smart || (beat & 7) == 0 || !((a.Position - a.GroundPos).sqrMagnitude < 0.0015f * 0.0015f)) { a.Ground = GroundAt(a.Position); a.GroundPos = a.Position; }
                 a.Height = Mathf.MoveTowards(a.Height, a.Ground + (a.State == Activity.Watching ? a.SpotLift : 0f), (a.SpotLift > 0f ? 0.4f : 0.12f) * dt);
+                if (eye.HasValue && (beat & 7) == 0) Detail(a, (new Vector3(a.Position.x, a.Height, a.Position.y) - eye.Value).magnitude * transform.lossyScale.x);
                 // Beyond the distance figures are drawn at, nobody sees them move: posed only now and then.
                 if (smart && eye.HasValue && (beat & 7) != 0 && (new Vector3(a.Position.x, a.Height, a.Position.y) - eye.Value).sqrMagnitude > drawn * drawn) continue;
                 Pose(a);
@@ -557,6 +559,17 @@ namespace Wonderland
 
         private int tick;
         private readonly List<Vector2> locos = new();
+
+        /// <summary>A simpler figure further away (the same outfit, fewer facets, no buttons), unless Distance is set to Full.</summary>
+        private static void Detail(Agent a, float distance)
+        {
+            int level = !PerfSettings.ReducedDetail || distance < Lod.Near ? 0 : distance < Lod.Far ? 1 : 2;
+            if (level == a.Level) return;
+            a.Level = level;
+            a.Root.GetComponent<MeshFilter>().sharedMesh = PersonFactory.Body(a.Style, level);
+            a.LegL.GetComponent<MeshFilter>().sharedMesh = a.LegR.GetComponent<MeshFilter>().sharedMesh = PersonFactory.Leg(a.Style, level);
+            a.ArmL.GetComponent<MeshFilter>().sharedMesh = a.ArmR.GetComponent<MeshFilter>().sharedMesh = PersonFactory.Arm(a.Style, level);
+        }
 
         /// <summary>Where the moving engines are, once a frame (for everyone's "a train is passing" check).</summary>
         private void FindLocos()

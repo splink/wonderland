@@ -117,7 +117,7 @@ PASS  The village clock runs a day in 7.6 minutes (360 s of daylight, 97 s of ni
 PASS  The daily rhythm: shops in the morning, lunch at midday, the fair in the afternoon, the square in the evening
 PASS  A railway loop divides the land
 PASS  A village goes up around the railway (13/13 places, 8 residents moved in)
-PASS  The walk grid sees the railway as a divide (2 regions over 6972 cells, built in 24 ms)
+PASS  The walk grid sees the railway as a divide (2 regions over 6972 cells, built in 23 ms)
 PASS  Every resident knows their home (8/8; 2 live inside the loop)
 PASS  The baker lives over the bakery
 PASS  At two in the morning everyone is asleep at home (8/8)
@@ -140,8 +140,8 @@ PASS  ...get off at the far station and walk on to where they were going
 PASS  A lane with a level crossing joins the two sides (1 regions)
 PASS  ...and people from inside the loop walk over it to the village
 PASS  Save/load keeps the time (10:00), the clock speed, needs and homes (8/8)
-PASS  40 villagers: 0.16 ms per frame on average, worst 5.5 ms, 1.3 decisions/s, slowest decision 4.4 ms, places directory 0.6 ms (editor timing)
-PASS  After an edit the walk grid rebuilds over 33 frames (62 ms of work, worst frame 2.9 ms)
+PASS  40 villagers: 0.16 ms per frame on average, worst 3.6 ms, 1.3 decisions/s, slowest decision 3.1 ms, places directory 0.4 ms (editor timing)
+PASS  After an edit the walk grid rebuilds over 36 frames (77 ms of work, worst frame 8.4 ms)
 PASS  With no places at all, villagers wander by day and sleep under the stars at night
 PASS  A working village goes up (15/15 places, 10 villagers)
 PASS  Opening hours: the bakery opens at half six and shuts at six, the carousel stops in the evening, the fountain never closes
@@ -339,6 +339,6 @@ PASS  Bad room data does not block growth ("room (room scan) sizes the start; la
 PASS  Land still grows with bad room data
 PASS  Trimmed land grows back (1.19 -> 1.04 -> 1.16 m2)
 INFO  terrain: 6 chunk meshes, 17 k triangles, land 3.49 m2 of a 4.8 x 4.8 m grid
-INFO  static budget of this world: 214 mesh renderers (~draw calls per eye pass before batching, excl. shadows/UI), 440 k triangles, ground cover 5538 tufts
-INFO  trees 131, forest chunks 30, houses 3, track 3.40 m, undo depth 9, journey simulated in 68.6 s wall time
+INFO  static budget of this world: 280 mesh renderers (~draw calls per eye pass before batching, excl. shadows/UI), 631 k triangles, ground cover 5538 tufts
+INFO  trees 131, forest chunks 30, houses 3, track 3.40 m, undo depth 9, journey simulated in 68.7 s wall time
 RESULT: PASS

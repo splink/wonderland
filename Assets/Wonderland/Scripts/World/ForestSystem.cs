@@ -29,6 +29,7 @@ namespace Wonderland
         private readonly HashSet<int> dirty = new();
         private readonly Dictionary<int, MeshData> meshData = new(), proxyData = new();
         private readonly Dictionary<int, Mesh> proxyMeshes = new();
+        private readonly Dictionary<int, Mesh[]> levelMeshes = new();   // each chunk's simpler levels (detail 1, 2)
         private readonly MeshBuilder proxyBuilder = new();
         private TerrainField terrain;
         private Material material;
@@ -91,6 +92,7 @@ namespace Wonderland
                 {
                     if (chunks.TryGetValue(k, out var empty)) { Release(empty.go); Release(empty.mesh); chunks.Remove(k); }
                     if (proxyMeshes.TryGetValue(k, out var emptyProxy)) { Release(emptyProxy); proxyMeshes.Remove(k); }
+                    if (levelMeshes.TryGetValue(k, out var emptyLevels)) { foreach (var m in emptyLevels) Release(m); levelMeshes.Remove(k); }
                     continue;
                 }
                 if (!chunks.TryGetValue(k, out var chunk))
@@ -124,6 +126,20 @@ namespace Wonderland
                 proxyBuilder.ToMesh(proxy.name, proxy);
                 proxy.RecalculateBounds();
                 MeshProxy.Shadow(chunk.go.GetComponent<MeshRenderer>(), proxy);
+                // The same trees simpler, for further away.
+                if (!levelMeshes.TryGetValue(k, out var levels)) levelMeshes[k] = levels = new[] { new Mesh { name = chunk.go.name + " detail 1" }, new Mesh { name = chunk.go.name + " detail 2" } };
+                for (int level = 1; level <= 2; level++)
+                {
+                    proxyBuilder.Clear();
+                    foreach (var t in list)
+                    {
+                        float y = terrain.SurfaceAt(t.x, t.z) - 0.003f * t.scale;
+                        proxyBuilder.AppendFast(Data((TreeKind)t.kind, t.variant, level), new Vector3(t.x, y, t.z), Quaternion.Euler(0f, t.rotation, 0f), t.scale, new Color(t.tint, t.tint, t.tint * 0.97f));
+                    }
+                    proxyBuilder.ToMesh(levels[level - 1].name, levels[level - 1]);
+                    levels[level - 1].RecalculateBounds();
+                }
+                Lod.Attach(chunk.go.GetComponent<MeshRenderer>(), levels[0], levels[1], ChunkSize);
             }
         }
 
@@ -139,10 +155,10 @@ namespace Wonderland
             if (Application.isPlaying) UnityEngine.Object.Destroy(o); else DestroyImmediate(o);
         }
 
-        private MeshData Data(TreeKind kind, int variant)
+        private MeshData Data(TreeKind kind, int variant, int detail = 0)
         {
-            int key = (int)kind * 10 + variant;
-            if (!meshData.TryGetValue(key, out var d)) meshData[key] = d = new MeshData(TreeFactory.Get(kind, variant));
+            int key = ((int)kind * 10 + variant) * 3 + detail;
+            if (!meshData.TryGetValue(key, out var d)) meshData[key] = d = new MeshData(TreeFactory.Get(kind, variant, detail));
             return d;
         }
 

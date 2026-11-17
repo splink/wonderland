@@ -355,9 +355,13 @@ namespace Wonderland.Editor
             ClickButton(hand, "World stats");
             ClickButton(hand, "Stats");
             Check(helpOpen && statsTrue && !palette.InfoShown, "Help and Stats open beside the palette (with the world's own numbers) and close again");
-            bool standIns = false;
-            foreach (var r in world.GetComponentsInChildren<Renderer>(true)) if (r.name == "Proxy" || (r.TryGetComponent<LODGroup>(out var g) && g.lodCount > 1)) standIns = true;
-            Check(!standIns, "No blocky stand-ins are drawn anywhere (they only cast the shadows)");
+            bool standIns = false; int levels = 0;
+            foreach (var r in world.GetComponentsInChildren<Renderer>(true))
+            {
+                if (r.name == "Proxy") standIns = true;
+                if (r.name.StartsWith("Detail ")) { levels++; var m = r.GetComponent<MeshFilter>().sharedMesh; if (m == null || !m.name.Contains("detail")) standIns = true; }
+            }
+            Check(!standIns && levels > 0, $"No blocky stand-ins anywhere: further away the same buildings and trees are drawn with less detail ({levels} simpler levels)");
 
             // The card: trigger on a villager with the Life tool opens theirs, and follows them.
             ClickButton(hand, "Life");
