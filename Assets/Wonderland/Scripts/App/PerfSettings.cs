@@ -43,7 +43,7 @@ namespace Wonderland
         public static readonly Setting Msaa = Make("Edges", "msaa", 0, "anti-aliasing: smooth edges cost GPU time on every pixel", "MSAA 4x", "MSAA 2x", "Off");
         public static readonly Setting Shadows = Make("Shadows", "shadows", 0, "the sun's shadows", "On", "Off");
         public static readonly Setting Grass = Make("Grass", "grass", 0, "the tufts, flowers and pebbles on the meadows", "Full", "Half", "Off");
-        public static readonly Setting Detail = Make("Distance", "detail", 0, "simpler (but recognisable) buildings, trees and figures further away", "Reduced", "Full");
+        public static readonly Setting Detail = Make("Detail", "detail", 0, "five levels chosen by how big each thing looks: extra detail up close, simpler (still recognisable) far away", "By size", "Always high");
         public static readonly Setting Villagers = Make("Villagers", "villagers", 0, "villagers and animals think on a schedule instead of every frame", "Smart", "Every frame");
         public static readonly Setting Resolution = Make("Resolution", "resolution", 0, "the eye buffers' resolution", "100%", "90%", "80%", "70%");
         public static readonly Setting Foveation = Make("Foveation", "foveation", 0, "the edges of the view drawn at lower resolution", "High", "Highest", "Medium", "Off");

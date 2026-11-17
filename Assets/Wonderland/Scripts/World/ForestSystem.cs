@@ -92,7 +92,7 @@ namespace Wonderland
                 {
                     if (chunks.TryGetValue(k, out var empty)) { Release(empty.go); Release(empty.mesh); chunks.Remove(k); }
                     if (proxyMeshes.TryGetValue(k, out var emptyProxy)) { Release(emptyProxy); proxyMeshes.Remove(k); }
-                    if (levelMeshes.TryGetValue(k, out var emptyLevels)) { foreach (var m in emptyLevels) Release(m); levelMeshes.Remove(k); }
+                    if (levelMeshes.TryGetValue(k, out var emptyLevels)) { foreach (var m in emptyLevels) if (m != null) Release(m); levelMeshes.Remove(k); }
                     continue;
                 }
                 if (!chunks.TryGetValue(k, out var chunk))
@@ -126,20 +126,25 @@ namespace Wonderland
                 proxyBuilder.ToMesh(proxy.name, proxy);
                 proxy.RecalculateBounds();
                 MeshProxy.Shadow(chunk.go.GetComponent<MeshRenderer>(), proxy);
-                // The same trees simpler, for further away.
-                if (!levelMeshes.TryGetValue(k, out var levels)) levelMeshes[k] = levels = new[] { new Mesh { name = chunk.go.name + " detail 1" }, new Mesh { name = chunk.go.name + " detail 2" } };
-                for (int level = 1; level <= 2; level++)
+                // The same trees at the other levels of detail (rounder up close, simpler further away).
+                if (!levelMeshes.TryGetValue(k, out var levels))
                 {
+                    levelMeshes[k] = levels = new Mesh[MeshBuilder.Levels];
+                    for (int d = MeshBuilder.Extreme; d <= MeshBuilder.Minimal; d++) if (d != MeshBuilder.High) levels[d + 1] = new Mesh { name = chunk.go.name + " detail " + d };
+                }
+                for (int d = MeshBuilder.Extreme; d <= MeshBuilder.Minimal; d++)
+                {
+                    if (d == MeshBuilder.High) continue;
                     proxyBuilder.Clear();
                     foreach (var t in list)
                     {
                         float y = terrain.SurfaceAt(t.x, t.z) - 0.003f * t.scale;
-                        proxyBuilder.AppendFast(Data((TreeKind)t.kind, t.variant, level), new Vector3(t.x, y, t.z), Quaternion.Euler(0f, t.rotation, 0f), t.scale, new Color(t.tint, t.tint, t.tint * 0.97f));
+                        proxyBuilder.AppendFast(Data((TreeKind)t.kind, t.variant, d), new Vector3(t.x, y, t.z), Quaternion.Euler(0f, t.rotation, 0f), t.scale, new Color(t.tint, t.tint, t.tint * 0.97f));
                     }
-                    proxyBuilder.ToMesh(levels[level - 1].name, levels[level - 1]);
-                    levels[level - 1].RecalculateBounds();
+                    proxyBuilder.ToMesh(levels[d + 1].name, levels[d + 1]);
+                    levels[d + 1].RecalculateBounds();
                 }
-                Lod.Attach(chunk.go.GetComponent<MeshRenderer>(), levels[0], levels[1], ChunkSize);
+                Lod.Attach(chunk.go.GetComponent<MeshRenderer>(), d => levels[d + 1], ChunkSize);
             }
         }
 
@@ -157,7 +162,7 @@ namespace Wonderland
 
         private MeshData Data(TreeKind kind, int variant, int detail = 0)
         {
-            int key = ((int)kind * 10 + variant) * 3 + detail;
+            int key = ((int)kind * 10 + variant) * MeshBuilder.Levels + detail + 1;
             if (!meshData.TryGetValue(key, out var d)) meshData[key] = d = new MeshData(TreeFactory.Get(kind, variant, detail));
             return d;
         }

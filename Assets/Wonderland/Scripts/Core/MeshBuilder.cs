@@ -25,18 +25,20 @@ namespace Wonderland
         public int VertexCount => Vertices.Count;
 
         /// <summary>
-        /// Level of detail for what is added from now on: 0 everything; 1 (seen from a metre or two) leaves out features
-        /// under 2 mm (and sticks thinner than 1.4 mm) and rounds with fewer facets; 2 (further) leaves out features under
-        /// 3.5 mm (sticks under 2.5 mm), fewer facets still - all well under a pixel at those distances.
-        /// Shapes, colours, windows and signs stay: a bakery still reads as the bakery. Factories set
-        /// <see cref="DefaultDetail"/> around a build so every builder they make inherits it.
+        /// Level of detail for what is added from now on (<see cref="Lod"/> picks one per object by how big it looks):
+        /// -1 Extreme (right up close): rounder shapes, and the factories add the finest touches (a door knob, a smile);
+        /// 0 High: the model as designed; 1 Medium leaves out features under 2 mm (sticks thinner than 1.4 mm), fewer
+        /// facets; 2 Low: under 3.5 mm (sticks 2.5 mm); 3 Minimal: under 7 mm, one plane per roof side, fewest facets.
+        /// What is left out is under a pixel at the distance each level is used. Shapes, colours, windows and roofs stay:
+        /// a bakery still reads as the bakery. Factories set <see cref="DefaultDetail"/> around a build.
         /// </summary>
         public int Detail = DefaultDetail;
         [System.ThreadStatic] public static int DefaultDetail;
         /// <summary>Scales the size limits (the 3 cm figures use 0.4: their eyes go further away, their arms stay).</summary>
         public float FeatureScale = DefaultFeatureScale > 0f ? DefaultFeatureScale : 1f;
         [System.ThreadStatic] public static float DefaultFeatureScale;
-        public float MinFeature => FeatureScale * Detail switch { 0 => 0f, 1 => 0.002f, _ => 0.0035f };
+        public float MinFeature => FeatureScale * Detail switch { <= 0 => 0f, 1 => 0.002f, 2 => 0.0035f, _ => 0.007f };
+        public const int Extreme = -1, High = 0, Medium = 1, Low = 2, Minimal = 3, Levels = 5;
 
         /// <summary>Runs a factory's build with every builder it makes at this level of detail (and size scale).</summary>
         public static Mesh At(int detail, float featureScale, System.Func<Mesh> build)
@@ -50,7 +52,7 @@ namespace Wonderland
         /// <summary>Whether a feature of this size (in the current matrix) is too small to keep at this level of detail.</summary>
         public bool TooSmall(float size, float thickness = float.MaxValue)
         {
-            if (Detail == 0) return false;
+            if (Detail <= 0) return false;
             float scale = Mathf.Max(((Vector3)matrix.GetColumn(0)).magnitude, ((Vector3)matrix.GetColumn(1)).magnitude, ((Vector3)matrix.GetColumn(2)).magnitude);
             return size * scale < MinFeature || thickness * scale < MinFeature * 0.7f;
         }
@@ -59,7 +61,12 @@ namespace Wonderland
         private static float Middle(Vector3 s) => Mathf.Max(Mathf.Min(s.x, s.y), Mathf.Min(Mathf.Max(s.x, s.y), s.z));
 
         /// <summary>Facets for a round shape at this level of detail (halved per level, at least <paramref name="least"/>, kept even).</summary>
-        public int Facets(int segments, int least = 4) => Detail == 0 ? segments : Mathf.Max(least, (segments >> (Detail >= 2 && segments >= 16 ? 2 : 1)) & ~1);
+        public int Facets(int segments, int least = 4) => Detail switch
+        {
+            < 0 => Mathf.Min(32, (segments * 3 / 2 + 1) & ~1),
+            0 => segments,
+            _ => Mathf.Max(least, (segments >> (Detail >= 3 || Detail == 2 && segments >= 16 ? 2 : 1)) & ~1),
+        };
 
         public Matrix4x4 Matrix
         {
@@ -245,7 +252,8 @@ namespace Wonderland
         {
             if (TooSmall(Mathf.Max(radius.x, radius.y, radius.z) * 2f)) return;
             // (big blobs - a canopy, a thatched roof - keep one more level of facets than small ones)
-            subdivisions = Mathf.Max(0, subdivisions - Mathf.Max(0, Detail - (Mathf.Max(radius.x, radius.y, radius.z) * 2f >= 0.03f ? 1 : 0)));
+            if (Detail < 0) subdivisions = Mathf.Min(3, subdivisions + 1);
+            else subdivisions = Mathf.Max(0, subdivisions - Mathf.Max(0, Detail - (Mathf.Max(radius.x, radius.y, radius.z) * 2f >= 0.03f ? 1 : 0)));
             var sphere = IcoSphere.Get(subdivisions);
             int start = VertexCount;
             var local = new Vector3[sphere.Vertices.Length];

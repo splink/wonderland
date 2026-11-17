@@ -12,7 +12,7 @@ namespace Wonderland
         public const int StyleCount = 6;
         public static readonly Vector3 Hip = new(0f, 0.0118f, 0f);
         public const float LegX = 0.0019f, ShoulderX = 0.0048f, ShoulderY = 0.0215f;
-        private static readonly Mesh[] Bodies = new Mesh[StyleCount * 3], Arms = new Mesh[StyleCount * 3], Legs = new Mesh[StyleCount * 3];
+        private static readonly Mesh[] Bodies = new Mesh[StyleCount * MeshBuilder.Levels], Arms = new Mesh[StyleCount * MeshBuilder.Levels], Legs = new Mesh[StyleCount * MeshBuilder.Levels];
 
         private struct Outfit { public Color Shirt, Pants, Hat, Skin, Hair; public int HatKind; public bool Dress; }
 
@@ -26,9 +26,9 @@ namespace Wonderland
             _ => new Outfit { Shirt = Pal.Hex("#F7F1E6"), Pants = Pal.Hex("#4E6E3A"), Hat = Pal.Hex("#D9A94E"), Skin = Pal.Hex("#8E5E42"), Hair = Pal.Hex("#2E2420"), HatKind = 0 },
         };
 
-        public static Mesh Body(int s, int detail = 0) => Bodies[s % StyleCount * 3 + detail] ??= MeshBuilder.At(detail, Figure, () => BuildBody(Style(s % StyleCount)));
-        public static Mesh Arm(int s, int detail = 0) => Arms[s % StyleCount * 3 + detail] ??= MeshBuilder.At(detail, Figure, () => BuildArm(Style(s % StyleCount)));
-        public static Mesh Leg(int s, int detail = 0) => Legs[s % StyleCount * 3 + detail] ??= MeshBuilder.At(detail, Figure, () => BuildLeg(Style(s % StyleCount)));
+        public static Mesh Body(int s, int detail = 0) => Bodies[s % StyleCount * MeshBuilder.Levels + detail + 1] ??= MeshBuilder.At(detail, Figure, () => BuildBody(Style(s % StyleCount)));
+        public static Mesh Arm(int s, int detail = 0) => Arms[s % StyleCount * MeshBuilder.Levels + detail + 1] ??= MeshBuilder.At(detail, Figure, () => BuildArm(Style(s % StyleCount)));
+        public static Mesh Leg(int s, int detail = 0) => Legs[s % StyleCount * MeshBuilder.Levels + detail + 1] ??= MeshBuilder.At(detail, Figure, () => BuildLeg(Style(s % StyleCount)));
         /// <summary>Size scale of the figures' levels of detail (see <see cref="MeshBuilder.FeatureScale"/>).</summary>
         public const float Figure = 0.4f;
         private static Mesh crate;
@@ -70,6 +70,18 @@ namespace Wonderland
                 b.AddBlob(head + new Vector3(s * 0.0026f, -0.0009f, 0.0033f), new Vector3(0.0008f, 0.0006f, 0.0003f), 0, 0f, s + 6, (_, __) => Pal.Hex("#F08A8A"));
             }
             b.AddBlob(head + new Vector3(0f, -0.0003f, 0.0043f), Vector3.one * 0.0006f, 0, 0f, 8, (_, __) => Pal.Shade(o.Skin, 0.9f));
+            if (b.Detail < 0)
+            {
+                // Right up close: a smile and eyebrows.
+                for (int i = -2; i <= 2; i++)
+                    b.AddBlob(head + new Vector3(i * 0.0005f, -0.0019f + Mathf.Abs(i) * 0.00022f, 0.0038f), new Vector3(0.0003f, 0.00016f, 0.00012f), 0, 0f, 40 + i, (_, __) => Pal.Hex("#A8463F"));
+                foreach (int s in new[] { -1, 1 })
+                {
+                    b.Push(head + new Vector3(s * 0.0015f, 0.0016f, 0.0038f), Quaternion.Euler(0f, 0f, -s * 10f));
+                    b.AddBox(Vector3.zero, new Vector3(0.0012f, 0.00028f, 0.0002f), Pal.Shade(o.Hair, 0.8f));
+                    b.Pop();
+                }
+            }
             // Hat.
             var top = head + Vector3.up * 0.0034f;
             switch (o.HatKind)

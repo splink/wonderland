@@ -563,7 +563,7 @@ namespace Wonderland
         /// <summary>A simpler figure further away (the same outfit, fewer facets, no buttons), unless Distance is set to Full.</summary>
         private static void Detail(Agent a, float distance)
         {
-            int level = !PerfSettings.ReducedDetail || distance < Lod.Near ? 0 : distance < Lod.Far ? 1 : 2;
+            int level = Lod.For(0.035f, distance, a.Level);
             if (level == a.Level) return;
             a.Level = level;
             a.Root.GetComponent<MeshFilter>().sharedMesh = PersonFactory.Body(a.Style, level);

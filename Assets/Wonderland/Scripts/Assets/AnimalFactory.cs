@@ -14,11 +14,11 @@ namespace Wonderland
         public const int KindCount = 9;
         public static readonly string[] Names = { "Sheep", "Cow", "Horse", "Pig", "Hen", "Duck", "Deer", "Dog", "Cat" };
         public static bool Pet(AnimalKind k) => k == AnimalKind.Dog || k == AnimalKind.Cat;
-        private static readonly Mesh[] Bodies = new Mesh[KindCount * 3], Heads = new Mesh[KindCount * 3];
+        private static readonly Mesh[] Bodies = new Mesh[KindCount * MeshBuilder.Levels], Heads = new Mesh[KindCount * MeshBuilder.Levels];
 
         /// <summary>An animal's body or head at a level of detail (0 full; 1 and 2 simpler for further away).</summary>
-        public static Mesh Body(AnimalKind kind, int detail) => Bodies[(int)kind * 3 + detail] ??= MeshBuilder.At(detail, PersonFactory.Figure, () => BuildBody(kind));
-        public static Mesh Head(AnimalKind kind, int detail) => Heads[(int)kind * 3 + detail] ??= MeshBuilder.At(detail, PersonFactory.Figure, () => BuildHead(kind));
+        public static Mesh Body(AnimalKind kind, int detail) => Bodies[(int)kind * MeshBuilder.Levels + detail + 1] ??= MeshBuilder.At(detail, PersonFactory.Figure, () => BuildBody(kind));
+        public static Mesh Head(AnimalKind kind, int detail) => Heads[(int)kind * MeshBuilder.Levels + detail + 1] ??= MeshBuilder.At(detail, PersonFactory.Figure, () => BuildHead(kind));
         public static Mesh Body(AnimalKind kind) => Body(kind, 0);
         public static Mesh Head(AnimalKind kind) => Head(kind, 0);
 

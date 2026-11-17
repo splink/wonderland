@@ -24,14 +24,14 @@ namespace Wonderland
         {
             variant = Mathf.Clamp(variant, 0, Catalog.Count - 1);
             style = Mathf.Abs(style) % Mathf.Max(1, Catalog.Get(variant).Styles);
-            int key = (variant * 16 + style) * 4 + detail;
+            int key = (variant * 16 + style) * 8 + detail + 1;
             if (!Cache.TryGetValue(key, out var mesh))
             {
                 int was = MeshBuilder.DefaultDetail;
                 MeshBuilder.DefaultDetail = detail;
                 try { Cache[key] = mesh = Build(variant, style); }
                 finally { MeshBuilder.DefaultDetail = was; }
-                if (detail > 0) mesh.name += " detail " + detail;
+                if (detail != 0) mesh.name += " detail " + detail;
             }
             return mesh;
         }
@@ -516,6 +516,12 @@ namespace Wonderland
             b.Push(new Vector3(0f, rect * 0.82f, 0.0016f), Quaternion.Euler(-90f, 0f, 0f));
             b.AddDisc(Vector3.zero, 0.0016f, 8, Pal.Glow(Pal.WindowGlow), true);
             b.Pop();
+            if (b.Detail < 0)
+            {
+                // Right up close: a brass knob and a letterbox.
+                b.AddBlob(new Vector3(w * 0.32f, rect * 0.48f, 0.0021f), Vector3.one * 0.0007f, 1, 0f, 31, (_, __) => Pal.Brass);
+                b.AddBox(new Vector3(0f, rect * 0.58f, 0.00155f), new Vector3(w * 0.32f, 0.0009f, 0.0004f), Pal.Brass);
+            }
             if (arched)
             {
                 var centre = new Vector3(0f, rect, 0.0012f);
@@ -599,6 +605,13 @@ namespace Wonderland
                     int tiles = Mathf.Max(3, Mathf.RoundToInt(roofLen / 0.0105f));
                     float tw = roofLen / tiles, offset = (k % 2) * tw * 0.5f;
                     b.Push((p0 + p1) * 0.5f, Quaternion.LookRotation(tangent, n));
+                    if (b.Detail >= MeshBuilder.Minimal)
+                    {
+                        // From far away: the whole roof side is one plane in its colour.
+                        b.Pop();
+                        if (k == 0) { var top = Curve(1f); var mid = (p0 + top) * 0.5f; b.Push(mid, Quaternion.LookRotation((top - p0).normalized, n)); b.AddFace(new Vector3(0f, 0.002f, 0f), Vector3.up, Vector3.forward, roofLen / 2, (top - p0).magnitude * 0.5f, Pal.Shade(roof, 0.92f)); b.Pop(); }
+                        continue;
+                    }
                     if (b.Detail > 0)
                     {
                         // Seen from further away: each row of tiles is one strip in the row's colour (the stepped rows remain).

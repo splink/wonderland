@@ -331,8 +331,10 @@ the ponds, without damming them; a stream from a higher pond falls into the lowe
   - **Edges:** MSAA 4x, 2x or off.
   - **Shadows:** on or off.
   - **Grass:** full, half or off.
-  - **Distance:** Reduced (the default: buildings, trees and figures drawn with less detail beyond 1.3 m and 2.6 m, but
-    still recognisable) or Full.
+  - **Detail:** By size (the default) or Always high. By size picks one of five levels per building, tree, villager and
+    animal by how big it looks: Extreme right up close (rounder shapes, a door knob and letterbox, villagers' smiles and
+    eyebrows), High (the model as designed), then Medium, Low and Minimal (still recognisable: shape, colours, windows,
+    roof), one level per doubling of distance. A big building keeps its detail further away than a small villager.
   - **Villagers:** Smart (the default: occasional checks spread over the frames) or Every frame.
   - **Resolution** and **Foveation.**
   - **Measure** switches each part of the world off for a moment, on the view you have, and shows on the card what each

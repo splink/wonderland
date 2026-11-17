@@ -151,7 +151,8 @@ namespace Wonderland
         /// <summary>A simpler animal further away (same shape and coat, fewer facets), unless Distance is set to Full.</summary>
         private static void Detail(Agent a, float distance)
         {
-            int level = !PerfSettings.ReducedDetail || distance < Lod.Near ? 0 : distance < Lod.Far ? 1 : 2;
+            var size = AnimalFactory.Body(a.Kind).bounds.size;
+            int level = Lod.For(Mathf.Max(size.x, size.y, size.z), distance, a.Level);
             if (level == a.Level) return;
             a.Level = level;
             a.Body.GetComponent<MeshFilter>().sharedMesh = AnimalFactory.Body(a.Kind, level);

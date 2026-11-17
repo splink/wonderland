@@ -16,7 +16,7 @@ namespace Wonderland
     {
         public const int KindCount = 5;
         public const int MaxVariants = 4;
-        private static readonly Mesh[] Cache = new Mesh[KindCount * MaxVariants * 3];
+        private static readonly Mesh[] Cache = new Mesh[KindCount * MaxVariants * MeshBuilder.Levels];
 
         public static int Variants(TreeKind kind) => kind == TreeKind.Oak || kind == TreeKind.Bush ? 4 : 3;
 
@@ -39,7 +39,7 @@ namespace Wonderland
         public static Mesh Get(TreeKind kind, int variant, int detail)
         {
             variant = Mathf.Clamp(variant, 0, Variants(kind) - 1);
-            int index = ((int)kind * MaxVariants + variant) * 3 + detail;
+            int index = ((int)kind * MaxVariants + variant) * MeshBuilder.Levels + detail + 1;
             if (Cache[index] == null)
             {
                 int was = MeshBuilder.DefaultDetail;
