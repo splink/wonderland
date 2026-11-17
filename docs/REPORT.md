@@ -615,6 +615,50 @@ trees and are drawn instead of them beyond 2.2 m; ground cover 30 % thinner and 
 quarter of the triangles. Shadow triangles 703 k -> 266 k; buildings beyond 2.2 m: 47 stand-ins = 850 triangles
 (instead of ~190 k). `editor-standins.png` shows full models beside their stand-ins. Not yet measured on the headset.
 
+## Roads, junctions, traffic lights and placeable vehicles
+
+**Roads drawn like track.** A Road or the new Highway is planned by simplifying the stroke (Douglas-Peucker, 1.8 cm
+tolerance for a street, 3 cm for a highway), merging corners closer than 4 cm, and rounding each corner with an arc of
+5 cm (street) or 18 cm (highway) radius, capped so it fits between neighbouring corners. Ends snap onto other roads.
+While drawing, the planned road is previewed (re-planned every 0.15 s). Lanes, paths and trails keep the smoothed
+free-hand stroke.
+
+**Looks.** A street is 6 cm wide: asphalt between raised kerbs, white edge lines and a dashed centre line. A highway is
+9.2 cm wide: four lanes, a double yellow line and dashed lane lines. Street lamps stand along streets. Markings are
+left out inside junctions.
+
+**Junctions** are found where car ways cross (segment intersection through the spatial index) or where one ends on
+another. A junction is kept when it has three or more arms. Each gets a round asphalt patch, a stop line across its
+incoming lanes, and a traffic light on the kerb of every arm.
+
+**Lights** (`TrafficSystem.Lights.cs`): arms facing each other share a phase. The cycle is green 6 s, amber 1.6 s, all
+red 1.2 s, offset per junction. The lamps are one dynamic mesh, rebuilt only when a light changes.
+
+**Vehicles obeying them:**
+- A vehicle brakes to stop with its bumper at the stop line, and stops on amber if it can.
+- Once its nose is over the line it clears the junction. Sirens go through.
+- Waiting at a light, or in the queue behind one, never triggers the old "edge on after 4 s" deadlock breaker.
+
+**Vehicle sensing.** A vehicle now senses the whole body of the one ahead, tail to nose, so a long bus turning across
+the lane still counts. When two vehicles block each other (crossing paths), one of them goes first.
+
+**Placeable vehicles:**
+- New models: taxi (with a TAXI sign and chequers), van, bus, lorry and tanker.
+- They are placed from the Roads tool's second row and roam: on along the road they face, a random way onward at each
+  junction, never doubling back except at a dead end.
+- They keep to their lane for the road kind; buses and lorries take a highway's slow lane, and highways are 1.5x faster.
+- They are saved (`cars` in the save and in undo snapshots) and erasable.
+
+**Tests:**
+- New road journey (`scripts/unity.sh roads`): straightness, rounded corners, a crossroads and a T-junction with 7
+  lights, a highway, seven vehicles of six kinds over 3 minutes. Every vehicle moved at least 6 m; 168 stops at
+  lights, 0 red crossings; at most 1.8 cm from a road's centre; never closer than 1.5 cm; save/load; erase and undo.
+- Controller test: the Road chip lays a road, and the Bus chip puts a bus on it.
+- Renders: `editor-roads.png`, `editor-roads-crossroads.png`, `editor-roads-highway.png`.
+
+**Old saves.** Roads drawn free-hand before this change keep their points. They now render as asphalt with markings,
+but stay as wobbly as they were drawn. Redraw them to straighten them.
+
 ## Known defects and risks
 
 - **Station, water, bridges, tunnels, animals and villagers are untested on the device.** They are covered by the
@@ -684,6 +728,6 @@ USE_ANCHOR_API, BOUNDARY_VISIBILITY, HEADSET_CAMERA and INTERNET (the last added
 5. The livelier town on the headset: build a town along two roads with a hospital and a fire station, put up two
    cameras and a studio. Then watch with the Watch tool open: is the frame rate steady while the feed is filmed? The
    `Wonderland perf` line counts the pictures filmed and the sounds playing. Listen with Sound on and Quiet.
-6. Natural next improvements: villagers using their household's car for long trips; give-way at junctions and a bus
-   between stations; more incident scenes on the same dispatch (a cat up a tree, a broken-down car); a second CCTV
+6. Natural next improvements: villagers using their household's car for long trips; give-way at junctions without
+   lights, and bus stops on the bus's round; straightening roads in old saves; more incident scenes on the same dispatch (a cat up a tree, a broken-down car); a second CCTV
    viewer pinned in the room; puddles and umbrellas in the rain.

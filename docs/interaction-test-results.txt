@@ -28,6 +28,9 @@ PASS  Palette Undo restores it
 PASS  Category and item chips place a fountain from the Town set (Fountain placed; selected 13)
 PASS  Drawing with the Paths tool lays a footpath (1)
 PASS  ...and a fence
+PASS  The Road chip lays a road (Road added)
+PASS  The Bus chip puts a bus on the road (Bus on the road - off it goes)
+PASS  ...and the Road chip goes back to drawing roads
 PASS  The Life tool's chips place a hen
 PASS  The Life tool's clock chips speed the days up and stop time
 PASS  ...and let the days pass again

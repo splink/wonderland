@@ -62,6 +62,7 @@ namespace Wonderland.Editor
             }
             Object.DestroyImmediate(w.gameObject);
             BoatJourney();
+            RoadJourney();
         }
 
         /// <summary>

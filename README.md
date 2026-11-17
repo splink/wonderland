@@ -84,8 +84,19 @@ item in the row below:
 Houses get a flat pad cut into the slope. The **Station** snaps beside the railway with a platform. Homes bring their
 residents with them.
 
-**Paths.** Roads, country lanes, footpaths and hiking trails, plus fences, hedges and stone walls, all drawn with one
+**Roads** (the tool's chips: Road, Highway, Lane, Path, Trail, Fence, Hedge, Wall; and a second row of vehicles).
+Streets and highways, country lanes, footpaths and hiking trails, plus fences, hedges and stone walls, all drawn with one
 stroke:
+- **Streets and highways come out straight**, like track: the stroke is straightened, with rounded corners (a highway's
+  are wider). While you draw, a line shows what letting go will build.
+- A street is asphalt between kerbs, with white edge lines and a dashed centre line. A highway has two lanes each way
+  and a double yellow line.
+- **Junctions:** draw across a road for a crossroads, or end on one for a T-junction. Each gets a patch of plain
+  asphalt, stop lines and, where three or more roads meet, traffic lights on every arm.
+- **Cars and lorries:** pick Car, Taxi, Van, Bus, Lorry or Tanker and pull the trigger on a road. It drives off
+  wherever it is pointed and roams the town. It keeps to its lane (buses and lorries take a highway's slow lane), keeps
+  its distance and stops at red lights. Vehicles are saved with the world; the Eraser takes one away.
+- Lanes, paths and trails keep the free-hand look.
 - Start or end a stroke on another line and they join.
 - Roads and lanes smooth the ground across their width.
 - A fence drawn into a closed loop makes a pasture: animals placed inside stay inside.
@@ -163,6 +174,8 @@ where a trail meets a narrow stream.
   - They slow down behind each other, stop for people on the road, and wait at level crossings while a train passes.
   - Bicycles may use footpaths. At night everything is parked.
   - Take a road away and the traffic re-routes or goes home.
+  - At traffic lights they stop with their bumper at the stop line on red (and on amber if they can stop in time). Roads
+    facing each other share a green, and every change has a moment of all red.
 - **Emergencies.** A hospital, police station or fire station beside a road keeps an ambulance, a patrol car or a
   fire engine. Now and then (by day, one at a time) something happens: someone feels faint, smoke rises from a roof,
   a bicycle goes missing.
@@ -314,7 +327,7 @@ the ponds, without damming them; a stream from a higher pond falls into the lowe
 **Mountains.** The **Peaks** terrain mode raises craggy summits. High ground turns to scree and rock bands, with snow on
 the tops and boulders on the slopes. Ponds get sandy beaches.
 
-Palette: **Terrain · Water · Forest · Paths · Track · Train · Build · Life · Watch · Eraser** tools, an options row for the current
+Palette: **Terrain · Water · Forest · Roads · Track · Train · Build · Life · Watch · Eraser** tools, an options row for the current
 tool, and **Undo · Redo · Save · Load · Move · New · Sound · Help · Stats**. The world saves automatically when the app is paused or closed and is restored
 on the next launch.
 
@@ -329,7 +342,7 @@ shaders: no downloaded or purchased models, textures or services.
 | Trees (5 kinds, 17 variants), meadow plants, houses (cottage, townhouse, thatched, station × 4 styles), sheep, cows, villagers (6 outfits), locomotives, coaches and railcars in 6 liveries, 4 goods wagons | `Assets/Wonderland/Scripts/Assets/` |
 | Terrain field + renderer, water, streams, forest, ground cover, railway network (graph, planner, mesh with switches, signals, bridges, tunnels), trains (reservations, routing), buildings + platforms, animals, villagers, world (undo / save) | `Assets/Wonderland/Scripts/World/` |
 | Village life: the clock (`VillageClock`), needs and their daily rhythm, and intents (`Needs`), where people can walk (`WalkGrid`: regions + A* routes), choosing (`PeopleSystem.Life.cs`), jobs and produce (`PeopleSystem.Work.cs`), friendships (`PeopleSystem.Friends.cs`), plans from outside and the fête (`PeopleSystem.Plans.cs`: `IVillageDecider`), carrying out (`PeopleSystem.cs`); opening hours, jobs and goods per place in `Catalog` | `Assets/Wonderland/Scripts/World/` |
-| The livelier town: football and mishaps (`PeopleSystem.Games.cs`), road traffic on a graph derived from the roads (`TrafficSystem.cs`) and its emergencies (`TrafficSystem.Incidents.cs`), pets (`AnimalSystem`), spatial sound with a fixed voice pool (`SoundSystem.cs`; clips synthesised in `Core/SoundBank.cs`), CCTV filmed on demand (`CctvSystem.cs`), clouds (`SkySystem.cs`); new places, vehicles, a dog and a cat in `HouseFactory.Town.cs`, `VehicleFactory.cs`, `AnimalFactory.cs` | `Assets/Wonderland/Scripts/` |
+| The livelier town: football and mishaps (`PeopleSystem.Games.cs`), road traffic on a graph derived from the roads (`TrafficSystem.cs`; traffic lights and the player's roaming vehicles in `TrafficSystem.Lights.cs`; roads straightened, junctions and markings in `PathSystem.Roads.cs`) and its emergencies (`TrafficSystem.Incidents.cs`), pets (`AnimalSystem`), spatial sound with a fixed voice pool (`SoundSystem.cs`; clips synthesised in `Core/SoundBank.cs`), CCTV filmed on demand (`CctvSystem.cs`), clouds (`SkySystem.cs`); new places, vehicles, a dog and a cat in `HouseFactory.Town.cs`, `VehicleFactory.cs`, `AnimalFactory.cs` | `Assets/Wonderland/Scripts/` |
 | Palette UI, controller input, tools | `Assets/Wonderland/Scripts/Interaction/` |
 | Boot: permission, MRUK floor + free space, placement, autosave, foveation; frame-timing log (`PerfLog`) | `Assets/Wonderland/Scripts/App/` |
 | Shaders: `Wonderland/Lit` (vertex-coloured storybook shading, wind sway), `Wonderland/Terrain` (procedural grass, flowers, soil, rim fade, brush ring), `Wonderland/Water` (depth tint, ripples, glints, shore foam, flow), UI, steam | `Assets/Wonderland/Shaders/` |

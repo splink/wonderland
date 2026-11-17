@@ -108,7 +108,7 @@ namespace Wonderland
                         // Deck: clear of the highest water under it, ramping up from the banks.
                         float level = 0f;
                         for (int i = i0; i <= i1; i++) level = Mathf.Max(level, waterLevel(line.points[i]));
-                        float deck = level + (line.kind <= (int)PathKind.Lane ? 0.026f : 0.02f);
+                        float deck = level + (PathSystem.IsCarWay(line.kind) ? 0.026f : 0.02f);
                         int n = i1 - i0 + 1;
                         for (int k = 0; k < n; k++)
                         {
@@ -148,7 +148,7 @@ namespace Wonderland
                     var m = br.Members[i]; var s = br.Members[br.Spine];
                     if ((m.Track && !s.Track) || (m.Track == s.Track && m.Points.Count > s.Points.Count)) br.Spine = i;
                 }
-                foreach (var m in br.Members) { br.Rail |= m.Track; br.Road |= !m.Track && m.Kind <= (int)PathKind.Lane; }
+                foreach (var m in br.Members) { br.Rail |= m.Track; br.Road |= !m.Track && PathSystem.IsCarWay(m.Kind); }
                 var spine = br.Members[br.Spine];
                 var sum = Vector2.zero; int count = 0;
                 for (int i = 0; i < spine.Points.Count; i++) if (spine.Wet[i]) { sum += new Vector2(spine.Points[i].x, spine.Points[i].z); count++; }
@@ -227,7 +227,7 @@ namespace Wonderland
         private static BridgeStyle DefaultStyle(Bridge b)
         {
             if (b.Rail) return b.Length > 0.6f ? BridgeStyle.Truss : BridgeStyle.Stone;
-            if (b.Road) return b.Members.Exists(m => m.Kind == (int)PathKind.Road) ? BridgeStyle.Stone : BridgeStyle.Timber;
+            if (b.Road) return b.Members.Exists(m => PathSystem.IsRoad(m.Kind)) ? BridgeStyle.Stone : BridgeStyle.Timber;
             bool trail = b.Members.TrueForAll(m => m.Kind == (int)PathKind.Trail);
             return trail && b.Length <= 0.2f ? BridgeStyle.Stones : BridgeStyle.Footbridge;
         }

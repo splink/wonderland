@@ -448,6 +448,7 @@ namespace Wonderland
             public List<SignalInstance> Signals;
             public SwitchMode Mode;
             public BoatInstance[] Boats;
+            public List<TrafficSystem.PlacedVehicle> Cars;
         }
 
         private static byte[] Quantise(float[] v)
@@ -473,6 +474,7 @@ namespace Wonderland
             Streams = CopyStreams(Streams.Streams), Paths = PathSystem.Copy(Paths.Lines), Bridges = new List<BridgeChoice>(Bridges.Choices),
             Network = Track.Network.ToData(), TrainList = Trains.ToData(), Signals = new List<SignalInstance>(Track.Signals), Mode = Trains.Mode,
             Boats = Boats.Export(),
+            Cars = Traffic.ExportPlaced(),
         };
 
         private static List<StreamPath> CopyStreams(List<StreamPath> streams)
@@ -504,6 +506,7 @@ namespace Wonderland
             if (s.Bridges != null) Bridges.Choices.AddRange(s.Bridges);
             RefreshBridges();
             Boats.SetBoats(s.Boats);
+            Traffic.ImportPlaced(s.Cars);
             RebuildStations();
             Cover.MarkAllDirty();
             if (room != null) FitToRoom();
@@ -984,6 +987,15 @@ namespace Wonderland
 
         /// <summary>Puts a new train on the track at the point nearest <paramref name="local"/>, its locomotive towards
         /// <paramref name="facing"/>, and sets it running; returns an error or null.</summary>
+        /// <summary>Puts one of the player's vehicles on the road nearest <paramref name="local"/> (checkpointed); null, or why not.</summary>
+        public string PlaceVehicle(Vector3 local, VehicleKind kind, float facing, int colour)
+        {
+            Checkpoint();
+            var v = Traffic.PlaceOnRoad(kind, new Vector2(local.x, local.z), facing, colour, out string error);
+            if (v == null) Undo(false);
+            return error;
+        }
+
         public string PlaceTrain(Vector3 local, TrainKind kind, Vector3 facing, out Train train)
         {
             train = null;
@@ -1199,6 +1211,7 @@ namespace Wonderland
             int house = Buildings.Pick(origin, direction);
             if (house >= 0) { Checkpoint(); var h = Buildings.RemoveAt(house); ApplyPads(); Cover.MarkDirtyRegion(new Vector2(h.x, h.z), 0.1f); return "House removed"; }
             if (RemoveStreamAt(hit)) return "Stream removed";
+            if (Traffic.Nearest(new Vector2(hit.x, hit.z), 0.025f) is { Roams: true } car) { Checkpoint(); Traffic.RemovePlaced(car.Position, 0.001f); return car.Kind + " removed"; }
             int boat = Boats.Nearest(hit, 0.02f);
             if (boat >= 0) { Checkpoint(); var b = Boats.RemoveAt(boat); return BoatFactory.Names[b.kind] + " removed"; }
             int animal = Animals.Nearest(hit, 0.025f);
@@ -1240,6 +1253,7 @@ namespace Wonderland
             public List<SupplyInstance> supplies;      // v5: produce on the shelves, the farms and the platforms
             public List<CameraAim> cameras;            // v6: where each CCTV camera looks
             public List<BoatInstance> boats;           // v6+: boats on the ponds (older saves have none)
+            public List<TrafficSystem.PlacedVehicle> cars;   // v6+: the player's cars and lorries on the roads
             public List<Vector3> track;                // v1 / v2: the single railway and its train
             public bool trackClosed, trainPlaced, trainRunning;
             public float trainS;
@@ -1272,6 +1286,7 @@ namespace Wonderland
             supplies = new List<SupplyInstance>(People.ExportSupplies()),
             cameras = new List<CameraAim>(Cctv.Export()),
             boats = new List<BoatInstance>(Boats.Export()),
+            cars = Traffic.ExportPlaced(),
         });
 
         public void Deserialize(string json, WorldMaterials materials)
@@ -1313,6 +1328,7 @@ namespace Wonderland
                 Houses = (d.houses ?? new List<HouseInstance>()).ToArray(), Animals = (d.animals ?? new List<AnimalInstance>()).ToArray(), People = (d.people ?? new List<PersonInstance>()).ToArray(), Streams = d.streams, Paths = d.paths, Bridges = d.bridges,
                 Network = network, TrainList = trains, Signals = d.signals, Mode = (SwitchMode)Mathf.Clamp(d.switchMode, 0, 2),
                 Boats = d.boats?.ToArray(),
+                Cars = d.cars,
             });
             Terrain.CopyFrom(height, land, locks, soil, water, waterLevel);   // exact values (snapshots are quantised)
             if (d.hour >= 0f) { Clock.Hour = Mathf.Repeat(d.hour, 24f); Clock.Day = Mathf.Max(0, d.day); Clock.Mode = (ClockMode)Mathf.Clamp(d.clockMode, 0, 2); }

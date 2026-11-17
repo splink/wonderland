@@ -36,9 +36,19 @@ namespace Wonderland
             public Vector2 BasePos;
             public Rng Rng;
             public string Owner;
+            public bool Roams;                 // put on the road by the player: drives about the town for good
+            public bool AtLight;               // held by a traffic light (that wait doesn't make it edge on)
+            public int Queue;                  // how many vehicles ahead of it lead to one held at a light (0: none)
+            public readonly int Id = ++made;   // (who goes first when two are in each other's way)
+            private static int made;
+            public int Colour;
+            public readonly List<bool> Fast = new();   // per path point: on a highway (faster)
         }
 
-        private sealed class Node { public Vector2 P; public bool Car; public readonly List<int> Next = new(); }
+        [System.Serializable]
+        public struct PlacedVehicle { public int kind, colour; public float x, z, heading; }
+
+        private sealed class Node { public Vector2 P; public bool Car; public int Kind; public readonly List<int> Next = new(); }
 
         public readonly List<Vehicle> Vehicles = new();
         private readonly List<Node> graph = new();
@@ -66,6 +76,7 @@ namespace Wonderland
             checkTimer -= dt;
             if (checkTimer <= 0f) { checkTimer = 1f; Refresh(); }
             blink += dt;
+            DrawLights(dt);
             foreach (var v in Vehicles) Drive(v, dt);
             Return(dt);
             StepIncidents(dt);
@@ -87,7 +98,7 @@ namespace Wonderland
             int k = 17;
             foreach (var l in world.Paths.Lines)
             {
-                if (l.kind > (int)PathKind.Footpath || l.points.Count == 0) continue;
+                if (!(PathSystem.IsCarWay(l.kind) || l.kind == (int)PathKind.Footpath) || l.points.Count == 0) continue;
                 k = k * 31 + l.kind * 7 + l.points.Count;
                 k = k * 31 + Mathf.RoundToInt(l.points[0].x * 1000f) + Mathf.RoundToInt(l.points[^1].y * 1000f) * 3;
             }
@@ -101,16 +112,16 @@ namespace Wonderland
             graph.Clear();
             foreach (var l in world.Paths.Lines)
             {
-                if (l.kind > (int)PathKind.Footpath || l.points.Count < 2) continue;
+                if (!(PathSystem.IsCarWay(l.kind) || l.kind == (int)PathKind.Footpath) || l.points.Count < 2) continue;
                 bool car = l.kind != (int)PathKind.Footpath;
                 int first = graph.Count, prev = -1, step = Mathf.Max(1, Mathf.RoundToInt(NodeSpacing / PathSystem.Spacing));
                 for (int i = 0; i < l.points.Count; i += step)
                 {
-                    int id = Add(l.points[i], car);
+                    int id = Add(l.points[i], car, l.kind);
                     if (prev >= 0) Link(prev, id);
                     prev = id;
                 }
-                if ((l.points.Count - 1) % step != 0 && !l.closed) { int id = Add(l.points[^1], car); Link(prev, id); }
+                if ((l.points.Count - 1) % step != 0 && !l.closed) { int id = Add(l.points[^1], car, l.kind); Link(prev, id); }
                 if (l.closed && graph.Count - first > 2) Link(prev, first);
             }
             // Junctions: nodes of different ways close together are joined.
@@ -135,7 +146,7 @@ namespace Wonderland
             }
         }
 
-        private int Add(Vector2 p, bool car) { graph.Add(new Node { P = p, Car = car }); return graph.Count - 1; }
+        private int Add(Vector2 p, bool car, int kind) { graph.Add(new Node { P = p, Car = car, Kind = kind }); return graph.Count - 1; }
         private void Link(int a, int b) { if (a == b) return; graph[a].Next.Add(b); graph[b].Next.Add(a); }
 
         /// <summary>The road node nearest a point (within <paramref name="within"/>) a vehicle of this kind may use, or -1.</summary>
@@ -154,8 +165,14 @@ namespace Wonderland
         /// <summary>A route between two nodes (A*); bicycles may use footpaths, motor vehicles only roads and lanes.</summary>
         public List<Vector2> Route(int a, int z, bool car)
         {
+            var nodes = RouteNodes(a, z, car);
+            return nodes?.ConvertAll(i => graph[i].P);
+        }
+
+        private List<int> RouteNodes(int a, int z, bool car)
+        {
             if (a < 0 || z < 0) return null;
-            if (a == z) return new List<Vector2> { graph[a].P };
+            if (a == z) return new List<int> { a };
             var cost = new Dictionary<int, float> { [a] = 0f };
             var came = new Dictionary<int, int>();
             var open = new List<int> { a };
@@ -177,9 +194,9 @@ namespace Wonderland
                 }
             }
             if (!cost.ContainsKey(z)) return null;
-            var route = new List<Vector2>();
-            for (int cur = z; cur != a; cur = came[cur]) route.Add(graph[cur].P);
-            route.Add(graph[a].P);
+            var route = new List<int>();
+            for (int cur = z; cur != a; cur = came[cur]) route.Add(cur);
+            route.Add(a);
             route.Reverse();
             return route;
         }
@@ -230,7 +247,8 @@ namespace Wonderland
                 if (w.station >= 0) v.BasePos = new Vector2(houses[w.station].x, houses[w.station].z);
                 keep.Add(v);
             }
-            foreach (var v in Vehicles) if (!keep.Contains(v)) Destroy(v);
+            foreach (var v in Vehicles) if (!keep.Contains(v) && !v.Roams) Destroy(v);
+            foreach (var v in Vehicles) if (v.Roams) keep.Add(v);   // the player's own vehicles stay
             Vehicles.Clear(); Vehicles.AddRange(keep);
             foreach (var v in Vehicles) if (v.State != Mode.Parked) { if (!Reroute(v)) GoHome(v, true); }
             AbandonOrphans();
@@ -311,19 +329,31 @@ namespace Wonderland
         public bool DriveTo(Vehicle v, Vector2 target, bool home)
         {
             int a = NearestNode(v.Position, Reach + 0.04f, Car(v)), z = NearestNode(target, Reach + 0.04f, Car(v));
-            var route = Route(a, z, Car(v));
-            if (route == null || route.Count < 2) return false;
-            v.Path.Clear();
-            float lane = Lane(v);
-            for (int i = 0; i < route.Count; i++)
+            var nodes = RouteNodes(a, z, Car(v));
+            if (nodes == null || nodes.Count < 2) return false;
+            Follow(v, nodes, home);
+            return true;
+        }
+
+        /// <summary>Sets a vehicle off along graph nodes, keeping to its lane.</summary>
+        private void Follow(Vehicle v, List<int> nodes, bool home)
+        {
+            v.Path.Clear(); v.Fast.Clear();
+            bool slow = VehicleFactory.Heavy(v.Kind);
+            for (int i = 0; i < nodes.Count; i++)
             {
-                var d = (route[Mathf.Min(i + 1, route.Count - 1)] - route[Mathf.Max(i - 1, 0)]);
+                var d = (graph[nodes[Mathf.Min(i + 1, nodes.Count - 1)]].P - graph[nodes[Mathf.Max(i - 1, 0)]].P);
+                if (d.sqrMagnitude < 1e-8f && i > 0) d = graph[nodes[i]].P - graph[nodes[i - 1]].P;   // (turning round at a dead end)
                 d = d.sqrMagnitude > 1e-8f ? d.normalized : Vector2.up;
-                v.Path.Add(route[i] + new Vector2(d.y, -d.x) * lane);   // keep right
+                int kind = graph[nodes[i]].Kind;
+                // Keep right, in the lane for this road (a highway's slow lane for buses and lorries).
+                float lane = v.Kind == VehicleKind.Bicycle ? Lane(v) : PathSystem.LaneOffset(kind, slow);
+                v.Path.Add(graph[nodes[i]].P + new Vector2(d.y, -d.x) * lane);
+                v.Fast.Add(kind == (int)PathKind.Highway);
             }
+            var route = v.Path;
             v.Next = 0; v.State = Mode.Driving; v.ToHome = home; v.Waiting = 0f;
             v.Timer = 20f + route.Count * NodeSpacing / Cruise(v) * 3f;   // give up if it takes far too long
-            return true;
         }
 
         private bool Reroute(Vehicle v)
@@ -367,13 +397,14 @@ namespace Wonderland
             switch (v.State)
             {
                 case Mode.Parked:
+                    if (v.Roams) { v.Timer -= dt; if (v.Timer <= 0f) Roam(v); return; }
                     if (v.Base < 0 && !visiting.Contains(v)) ConsiderTrip(v, dt);
                     return;
                 case Mode.AtScene:
                     return;
             }
             v.Timer -= dt;
-            if (v.Timer <= 0f) { GoHome(v, true); return; }   // hopelessly stuck: back home (off-stage)
+            if (v.Timer <= 0f) { if (v.Roams) Roam(v); else GoHome(v, true); return; }   // hopelessly stuck: back home (off-stage), or somewhere else
             while (v.Next < v.Path.Count && (v.Path[v.Next] - v.Position).magnitude < 0.012f) v.Next++;
             if (v.Next >= v.Path.Count || Responding(v) && (Active.At - v.Position).magnitude < 0.06f) { Arrive(v); return; }   // (help pulls up just short of the scene)
             var target = v.Path[v.Next];
@@ -381,15 +412,18 @@ namespace Wonderland
             float want = Mathf.Atan2(to.x, to.y) * Mathf.Rad2Deg;
             v.Heading = Mathf.MoveTowardsAngle(v.Heading, want, (v.Kind == VehicleKind.Bicycle ? 260f : 200f) * dt);
             float speed = Cruise(v) * Mathf.Lerp(1f, 0.35f, Mathf.Abs(Mathf.DeltaAngle(v.Heading, want)) / 90f);   // slow into bends
-            if (v.Next >= v.Path.Count - 3) speed *= 0.6f;
+            if (v.Next >= v.Path.Count - 3 && !v.Roams) speed *= 0.6f;
+            if (v.Next < v.Fast.Count && v.Fast[v.Next]) speed *= 1.5f;   // a highway
             float limit = Obstacle(v);
             if (limit < speed) { if (v.Speed > 0.01f && limit <= 0.001f && v.Waiting == 0f) Stops++; speed = limit; }
-            v.Waiting = speed < 0.002f ? v.Waiting + dt : 0f;
+            v.Waiting = speed < 0.002f && !v.AtLight && v.Queue == 0 ? v.Waiting + dt : 0f;
             v.Pushing -= dt;
             if (v.Waiting > 4f) { v.Pushing = 1.5f; v.Waiting = 0f; }   // waited long enough: edge on for a moment
             v.Speed = Mathf.MoveTowards(v.Speed, speed, 0.12f * dt);
             var fwd = new Vector2(Mathf.Sin(v.Heading * Mathf.Deg2Rad), Mathf.Cos(v.Heading * Mathf.Deg2Rad));
+            var before = v.Position;
             v.Position += fwd * v.Speed * dt;
+            WatchStopLines(v, before);
             Pose(v, dt);
         }
 
@@ -402,16 +436,18 @@ namespace Wonderland
             var fwd = new Vector2(Mathf.Sin(v.Heading * Mathf.Deg2Rad), Mathf.Cos(v.Heading * Mathf.Deg2Rad));
             float half = VehicleFactory.Length(v.Kind) * 0.5f, limit = float.MaxValue;
             bool patient = v.Pushing <= 0f;
+            int queue = 0;
             if (patient)
                 foreach (var o in Vehicles)
                 {
-                    if (o == v || o.State != Mode.Driving && o.State != Mode.AtScene) continue;
-                    var d = o.Position - v.Position;
-                    float ahead = Vector2.Dot(d, fwd), side = Mathf.Abs(d.x * fwd.y - d.y * fwd.x);
-                    if (ahead <= 0f || side > 0.013f || ahead > 0.09f) continue;
-                    if (v.Siren && !o.Siren && ahead > half + 0.02f) continue;   // others make way for a siren
-                    float gap = ahead - half - VehicleFactory.Length(o.Kind) * 0.5f;
-                    limit = Mathf.Min(limit, gap < 0.012f ? 0f : Mathf.Max(o.Speed, (gap - 0.012f) * 1.5f));
+                    if (o == v || o.State != Mode.Driving && o.State != Mode.AtScene && !o.Roams) continue;
+                    float gap = GapTo(v, o);
+                    if (gap == float.MaxValue) continue;
+                    if (v.Siren && !o.Siren && gap > 0.02f) continue;   // others make way for a siren
+                    if (v.Id < o.Id && GapTo(o, v) < float.MaxValue) continue;   // each in the other's way (crossing paths): one goes first
+                    float allowed = gap < 0.012f ? 0f : Mathf.Max(o.Speed * Mathf.Max(0f, Mathf.Cos((o.Heading - v.Heading) * Mathf.Deg2Rad)), (gap - 0.012f) * 1.5f);
+                    if (allowed < limit && (o.AtLight || o.Queue > 0)) queue = o.AtLight ? 1 : o.Queue + 1;
+                    limit = Mathf.Min(limit, allowed);
                 }
             // People on the road just ahead.
             var look = v.Position + fwd * (half + 0.018f);
@@ -419,7 +455,31 @@ namespace Wonderland
             // A level crossing ahead with a train near it.
             var cross = v.Position + fwd * (half + 0.04f);
             if (world.Paths.NearLevelCrossing(cross, 0.05f) && !world.Paths.NearLevelCrossing(v.Position, 0.03f) && TrainNear(cross, 0.3f)) { limit = 0f; CrossingWaits++; }
+            // Traffic lights ahead (always obeyed: no edging on through a red).
+            float light = LightAhead(v, fwd, half);
+            v.AtLight = light < 0.002f;
+            v.Queue = queue > 10 ? 0 : queue;   // (a ring of vehicles queuing behind each other is no queue: let it sort itself out)
+            limit = Mathf.Min(limit, light);
             return limit;
+        }
+
+        /// <summary>
+        /// The gap from <paramref name="v"/>'s nose to <paramref name="o"/>'s body when that is in its way just ahead
+        /// (anywhere from tail to nose: a long bus turning across the lane is still in the way), else float.MaxValue.
+        /// </summary>
+        private static float GapTo(Vehicle v, Vehicle o)
+        {
+            var fwd = new Vector2(Mathf.Sin(v.Heading * Mathf.Deg2Rad), Mathf.Cos(v.Heading * Mathf.Deg2Rad));
+            var of = new Vector2(Mathf.Sin(o.Heading * Mathf.Deg2Rad), Mathf.Cos(o.Heading * Mathf.Deg2Rad));
+            float half = VehicleFactory.Length(v.Kind) * 0.5f, halfO = VehicleFactory.Length(o.Kind) * 0.5f, gap = float.MaxValue;
+            for (int k = -2; k <= 2; k++)
+            {
+                var d = o.Position + of * (halfO * k / 2f) - v.Position;
+                float ahead = Vector2.Dot(d, fwd), side = Mathf.Abs(d.x * fwd.y - d.y * fwd.x);
+                if (ahead <= 0f || side > 0.013f || ahead > 0.09f + halfO) continue;
+                gap = Mathf.Min(gap, ahead - half);
+            }
+            return gap;
         }
 
         private bool TrainNear(Vector2 p, float within)
@@ -436,6 +496,7 @@ namespace Wonderland
         private void Arrive(Vehicle v)
         {
             v.Speed = 0f;
+            if (v.Roams) { Trips++; Roam(v); return; }
             if (v.Base >= 0 && Responding(v)) { OnScene(v); return; }
             if (v.ToHome) { Trips++; GoHome(v, true); v.Timer = v.Rng.Range(20f, 60f); return; }
             // At the destination: park at the kerb a while, then home.
@@ -496,7 +557,7 @@ namespace Wonderland
         {
             float best = float.MaxValue;
             foreach (var l in world.Paths.Lines)
-                if (l.kind <= (int)PathKind.Footpath) best = Mathf.Min(best, PathSystem.Distance(l, p));
+                if (PathSystem.IsCarWay(l.kind) || l.kind == (int)PathKind.Footpath) best = Mathf.Min(best, PathSystem.Distance(l, p));
             return best;
         }
 
@@ -506,15 +567,110 @@ namespace Wonderland
             string what = v.Kind switch
             {
                 VehicleKind.Car => "A car", VehicleKind.Motorbike => "A motorbike", VehicleKind.Bicycle => "A bicycle",
-                VehicleKind.Ambulance => "The ambulance", VehicleKind.Police => "The police car", _ => "The fire engine",
+                VehicleKind.Ambulance => "The ambulance", VehicleKind.Police => "The police car", VehicleKind.FireEngine => "The fire engine",
+                VehicleKind.Taxi => "A taxi", VehicleKind.Van => "A delivery van", VehicleKind.Bus => "The town bus", VehicleKind.Truck => "A lorry", _ => "A tanker",
             };
             string doing = v.State switch
             {
                 Mode.Parked => v.Base >= 0 ? "waiting at the station" : v.ToHome ? "parked while its driver is out" : "parked at home",
                 Mode.AtScene => "at the scene",
-                _ => v.Siren ? "on a call, lights flashing" : v.ToHome ? "heading home" : "out on an errand",
+                _ => v.Siren ? "on a call, lights flashing" : v.Roams ? (v.Speed < 0.003f ? "waiting at the lights" : "driving about town") : v.ToHome ? "heading home" : "out on an errand",
             };
             return $"{what} - {doing}";
+        }
+
+        // ------------------------------------------------------------------ the player's own vehicles
+
+        /// <summary>
+        /// Drives on about the town: on along the road it is facing, a random way onward at every junction (never straight
+        /// back the way it came, unless the road ends), for a couple of metres; then on again from there.
+        /// </summary>
+        private void Roam(Vehicle v)
+        {
+            var fwd = new Vector2(Mathf.Sin(v.Heading * Mathf.Deg2Rad), Mathf.Cos(v.Heading * Mathf.Deg2Rad));
+            int cur = NearestNode(v.Position + fwd * 0.015f, 0.06f, true);
+            if (cur < 0) { v.State = Mode.Parked; v.Speed = 0f; v.Timer = 2f; return; }   // off the roads (they were erased): wait
+            var nodes = new List<int> { cur };
+            var seen = new HashSet<int> { cur };
+            var dir = fwd;
+            int prev = -1;
+            for (int step = 0; step < 70; step++)
+            {
+                var options = new List<int>();
+                var node = graph[cur];
+                // Onward: not back the way it came, not a sharp turn about.
+                foreach (int nx in node.Next)
+                {
+                    if (!graph[nx].Car || nx == prev || seen.Contains(nx)) continue;
+                    var d = graph[nx].P - node.P;
+                    if (d.sqrMagnitude < 1e-8f || Vector2.Dot(d.normalized, dir) > -0.3f) options.Add(nx);
+                }
+                if (options.Count == 0)
+                {
+                    // The road ends: turn round.
+                    if (prev >= 0) options.Add(prev);
+                    else foreach (int nx in node.Next) if (graph[nx].Car) options.Add(nx);
+                    if (options.Count == 0) break;
+                    seen.Clear();
+                }
+                int next = options[v.Rng.Range(0, options.Count)];
+                var along = graph[next].P - node.P;
+                if (along.sqrMagnitude > 0.0001f) dir = along.normalized;   // (short hops between a junction's nodes keep the old direction)
+                prev = cur; cur = next;
+                nodes.Add(cur); seen.Add(cur);
+            }
+            if (nodes.Count < 3) { v.State = Mode.Parked; v.Speed = 0f; v.Timer = 2f; return; }
+            Follow(v, nodes, false);
+        }
+
+        /// <summary>Puts a vehicle on the road at the point nearest <paramref name="at"/>, facing along it; null with the reason if it can't.</summary>
+        public Vehicle PlaceOnRoad(VehicleKind kind, Vector2 at, float facing, int colour, out string error, bool restoring = false)
+        {
+            error = null;
+            if (graph.Count == 0) Refresh(true);
+            int n = NearestNode(at, 0.05f, true);
+            if (n < 0) { error = "Put it on a road"; return null; }
+            if (!restoring) foreach (var o in Vehicles) if ((o.Position - graph[n].P).magnitude < (VehicleFactory.Length(o.Kind) + VehicleFactory.Length(kind)) * 0.5f) { error = "Another vehicle is in the way"; return null; }
+            var go = new GameObject(kind.ToString());
+            go.layer = WonderlandWorld.MiniatureLayer;
+            go.transform.SetParent(transform, false);
+            go.AddComponent<MeshFilter>().sharedMesh = VehicleFactory.Get(kind, colour);
+            var r = go.AddComponent<MeshRenderer>();
+            r.sharedMaterial = material; r.shadowCastingMode = ShadowCastingMode.On;
+            var v = new Vehicle { Kind = kind, Root = go.transform, Beacons = System.Array.Empty<Transform>(), Home = graph[n].P, Roams = true, Colour = colour, Rng = new Rng(Mathf.RoundToInt(at.x * 9973f + at.y * 7717f) + Vehicles.Count) };
+            // Facing the way it was pointed along the road, in the right-hand lane.
+            var d = Direction(n);
+            if (Mathf.Cos((facing - Mathf.Atan2(d.x, d.y) * Mathf.Rad2Deg) * Mathf.Deg2Rad) < 0f) d = -d;
+            if (restoring) Place(v, at, facing);   // just where it was
+            else Place(v, graph[n].P + new Vector2(d.y, -d.x) * PathSystem.LaneOffset(graph[n].Kind, VehicleFactory.Heavy(kind)), Mathf.Atan2(d.x, d.y) * Mathf.Rad2Deg);
+            v.State = Mode.Parked;
+            Vehicles.Add(v);
+            Roam(v);
+            return v;
+        }
+
+        public List<PlacedVehicle> ExportPlaced()
+        {
+            var list = new List<PlacedVehicle>();
+            foreach (var v in Vehicles) if (v.Roams) list.Add(new PlacedVehicle { kind = (int)v.Kind, colour = v.Colour, x = v.Position.x, z = v.Position.y, heading = v.Heading });
+            return list;
+        }
+
+        public void ImportPlaced(IEnumerable<PlacedVehicle> list)
+        {
+            for (int i = Vehicles.Count - 1; i >= 0; i--) if (Vehicles[i].Roams) { Destroy(Vehicles[i]); Vehicles.RemoveAt(i); }
+            if (list == null) return;
+            Refresh(true);
+            foreach (var p in list) PlaceOnRoad((VehicleKind)p.kind, new Vector2(p.x, p.z), p.heading, p.colour, out _, true);
+        }
+
+        /// <summary>Takes away one of the player's vehicles near a point (true if there was one).</summary>
+        public bool RemovePlaced(Vector2 p, float within)
+        {
+            var v = Nearest(p, within);
+            if (v == null || !v.Roams) return false;
+            Destroy(v); Vehicles.Remove(v);
+            return true;
         }
 
         /// <summary>The vehicle nearest a point within <paramref name="within"/>, or null.</summary>

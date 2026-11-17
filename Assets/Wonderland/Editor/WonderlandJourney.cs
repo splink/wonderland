@@ -58,6 +58,18 @@ namespace Wonderland.Editor
             if (Application.isBatchMode) EditorApplication.Exit(failures == 0 ? 0 : 1);
         }
 
+        /// <summary>Just the roads and the player's traffic: Logs/roads-results.txt.</summary>
+        public static void TestRoads()
+        {
+            Report.Clear(); failures = 0;
+            try { RoadJourney(); }
+            catch (Exception e) { Fail("Exception: " + e); }
+            Report.AppendLine(failures == 0 ? "RESULT: PASS" : $"RESULT: FAIL ({failures})");
+            File.WriteAllText("Logs/roads-results.txt", Report.ToString());
+            Debug.Log("Wonderland roads test\n" + Report);
+            if (Application.isBatchMode) EditorApplication.Exit(failures == 0 ? 0 : 1);
+        }
+
         private static void Check(bool ok, string what)
         {
             Report.AppendLine((ok ? "PASS  " : "FAIL  ") + what);

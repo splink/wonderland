@@ -237,13 +237,25 @@ namespace Wonderland.Editor
             Check(world.Buildings.Houses.Count == housesBefore + 1 && world.Buildings.Houses[^1].variant == Catalog.Fountain, $"Category and item chips place a fountain from the Town set ({tools.LastMessage}; selected {tools.HouseVariant})");
 
             // Paths: draw a footpath; draw a fence.
-            ClickButton(hand, "Paths");
+            ClickButton(hand, "Roads");
             ClickButton(hand, "Path");
             HoldPath(hand, new Vector3(-0.3f, 0f, -0.02f), new Vector3(-0.05f, 0f, 0.05f), 1f);
             Check(world.Paths.Lines.Count == 1 && world.Paths.Lines[0].kind == (int)PathKind.Footpath, $"Drawing with the Paths tool lays a footpath ({world.Paths.Lines.Count})");
             ClickButton(hand, "Fence");
             HoldPath(hand, new Vector3(-0.3f, 0f, -0.2f), new Vector3(-0.1f, 0f, -0.25f), 1f);
             Check(world.Paths.Lines.Count == 2 && world.Paths.Lines[1].kind == (int)PathKind.Fence, "...and a fence");
+            // Roads: a wobbly stroke comes out straight; a bus chip puts a bus on it that drives off.
+            ClickButton(hand, "Road");
+            HoldPath(hand, new Vector3(-0.35f, 0f, 0.14f), new Vector3(0.25f, 0f, 0.16f), 1.2f);
+            var road = world.Paths.Lines[^1];
+            Check(world.Paths.Lines.Count == 3 && road.kind == (int)PathKind.Road, $"The Road chip lays a road ({tools.LastMessage})");
+            ClickButton(hand, "Bus");
+            var stop = world.transform.TransformPoint(new Vector3(0f, world.Terrain.SurfaceAt(0f, 0.15f), 0.15f));
+            Frame(hand, stop, true); Frame(hand, stop, false);
+            var bus = world.Traffic.Vehicles.Find(v => v.Roams);
+            Check(bus != null && bus.Kind == VehicleKind.Bus, $"The Bus chip puts a bus on the road ({tools.LastMessage})");
+            ClickButton(hand, "Road");
+            Check(tools.PlacingVehicle == null, "...and the Road chip goes back to drawing roads");
 
             // Life: a hen on the grass.
             ClickButton(hand, "Life");
@@ -354,7 +366,7 @@ namespace Wonderland.Editor
             Frame(hand, atWho, false, grip: true); Frame(hand, atWho, false);
             Check(palette.CardShown && named.Contains(world.People.NameOf(pick)) && tools.Tool == Tool.Houses, $"With any tool, pointing at a villager names them and grip opens their card (\"{named}\")");
             // A building's card: grip on it (here with the Build tool's neighbour, the Paths tool).
-            ClickButton(hand, "Paths");
+            ClickButton(hand, "Roads");
             int someHouse = world.Buildings.Houses.Count - 1;
             if (someHouse >= 0)
             {

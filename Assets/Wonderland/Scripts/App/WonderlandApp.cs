@@ -125,6 +125,7 @@ namespace Wonderland
             Anchor.Floor = ScannedFloor;
             Anchor.Holding = () => Tools.PlacingWorld;
             Tools.WorldPlaced = Anchor.Pin;
+            if (System.IO.File.Exists(PerfBench.Trigger)) { var bench = gameObject.AddComponent<PerfBench>(); bench.World = World; bench.Anchor = Anchor; bench.Materials = Materials; }
             yield return Anchor.Restore();
             if (Anchor.Status.StartsWith("back")) roomNote = null;
             else if (Anchor.Status.StartsWith("the saved spot")) roomNote = "Your world's saved spot wasn't found in this room - use Move to put it back";
@@ -145,7 +146,7 @@ namespace Wonderland
         /// <summary>Leaving the app: the world is saved for next time, and into its named world if it has one.</summary>
         private void OnApplicationPause(bool paused)
         {
-            if (!paused || World == null || World.Terrain == null) return;
+            if (!paused || World == null || World.Terrain == null || PerfBench.Running) return;
             try { World.Save(); if (WonderlandWorld.CurrentSlot > 0) World.Save(WonderlandWorld.SlotPath(WonderlandWorld.CurrentSlot)); }
             catch (System.Exception) { /* best effort */ }
         }

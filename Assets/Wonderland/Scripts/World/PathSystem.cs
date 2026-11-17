@@ -5,7 +5,7 @@ using UnityEngine.Rendering;
 
 namespace Wonderland
 {
-    public enum PathKind { Road = 0, Lane = 1, Footpath = 2, Trail = 3, Fence = 4, Hedge = 5, Wall = 6 }
+    public enum PathKind { Road = 0, Lane = 1, Footpath = 2, Trail = 3, Fence = 4, Hedge = 5, Wall = 6, Highway = 7 }
 
     [Serializable]
     public sealed class PathLine
@@ -23,9 +23,9 @@ namespace Wonderland
     /// the only place villagers cross the rails. Roads and lanes grade the ground smooth across their width. The ways
     /// form a walking graph villagers use to get about.
     /// </summary>
-    public sealed class PathSystem : MonoBehaviour
+    public sealed partial class PathSystem : MonoBehaviour
     {
-        public static readonly string[] Names = { "Road", "Lane", "Path", "Trail", "Fence", "Hedge", "Wall" };
+        public static readonly string[] Names = { "Road", "Lane", "Path", "Trail", "Fence", "Hedge", "Wall", "Highway" };
         public const float Spacing = 0.01f, Snap = 0.045f;
         public readonly List<PathLine> Lines = new();
         /// <summary>Level crossings: centre and the way's direction there.</summary>
@@ -43,9 +43,13 @@ namespace Wonderland
         private const float CellSize = 0.05f;
         private static long CellKey(int x, int z) => ((long)x << 32) ^ (uint)z;
 
-        public static bool IsWay(int kind) => kind <= (int)PathKind.Trail;
-        public static bool IsBarrier(int kind) => kind >= (int)PathKind.Fence;
-        public static float HalfWidth(int kind) => kind switch { 0 => 0.026f, 1 => 0.02f, 2 => 0.012f, 3 => 0.008f, 4 => 0.003f, 5 => 0.007f, _ => 0.006f };
+        public static bool IsWay(int kind) => kind <= (int)PathKind.Trail || kind == (int)PathKind.Highway;
+        public static bool IsBarrier(int kind) => kind >= (int)PathKind.Fence && kind <= (int)PathKind.Wall;
+        /// <summary>Asphalt roads with lanes and markings (a street, a highway): drawn straight with rounded corners, with junctions and traffic lights.</summary>
+        public static bool IsRoad(int kind) => kind == (int)PathKind.Road || kind == (int)PathKind.Highway;
+        /// <summary>Ways cars drive on.</summary>
+        public static bool IsCarWay(int kind) => IsRoad(kind) || kind == (int)PathKind.Lane;
+        public static float HalfWidth(int kind) => kind switch { 0 => 0.03f, 1 => 0.02f, 2 => 0.012f, 3 => 0.008f, 4 => 0.003f, 5 => 0.007f, 7 => 0.046f, _ => 0.006f };
 
         public void Init(TerrainField field, Material lit, Func<TrackNetwork> railway)
         {
@@ -94,6 +98,7 @@ namespace Wonderland
             for (int i = 1; i < raw.Count; i++) length += (raw[i] - raw[i - 1]).magnitude;
             if (raw.Count < 2 || length < 0.06f) { error = "Draw a little longer"; return null; }
             bool closed = length > 0.25f && (raw[^1] - raw[0]).magnitude < 0.05f;
+            if (IsRoad(kind)) return PlanRoad(raw, kind, closed, out error);
             // Snap the ends onto existing lines of the same family.
             if (!closed)
             {
@@ -265,7 +270,7 @@ namespace Wonderland
         /// <summary>Roads and lanes smooth the ground across their width (following the land along it).</summary>
         public RectInt Grade(PathLine l)
         {
-            if (l.kind > (int)PathKind.Lane) return new RectInt(0, 0, 0, 0);
+            if (!IsCarWay(l.kind)) return new RectInt(0, 0, 0, 0);
             int n = l.points.Count;
             var h = new float[n];
             for (int i = 0; i < n; i++) h[i] = terrain.SurfaceAt(l.points[i].x, l.points[i].y);
@@ -352,8 +357,10 @@ namespace Wonderland
             Index();
             var ground = new MeshBuilder(); var barriers = new MeshBuilder();
             // Ways in a fixed order, widest first, each kind a hair higher, so junctions overlap cleanly.
-            for (int kind = 0; kind <= (int)PathKind.Trail; kind++)
-                foreach (var l in Lines) if (l.kind == kind) Way(ground, barriers, l);
+            FindJunctions();
+            foreach (var kind in new[] { PathKind.Highway, PathKind.Road, PathKind.Lane, PathKind.Footpath, PathKind.Trail })
+                foreach (var l in Lines) if (l.kind == (int)kind) { if (IsRoad(l.kind)) RoadSurface(ground, barriers, l); else Way(ground, barriers, l); }
+            JunctionSurfaces(ground, barriers);
             foreach (var l in Lines) if (IsBarrier(l.kind)) Barrier(barriers, l);
             FindLevelCrossings(barriers);
             ground.ToMesh("Ways", groundMesh); groundMesh.RecalculateBounds();
@@ -534,7 +541,7 @@ namespace Wonderland
                             b.AddBox(Vector3.zero, new Vector3(0.005f, 0.0012f, 0.05f), Pal.Shade(Pal.Hex("#8A6A4A"), 0.9f + 0.15f * Noise.Hash(Mathf.RoundToInt(off * 1000f), i, 3)));
                             b.Pop();
                         }
-                        if (l.kind <= (int)PathKind.Lane)
+                        if (IsCarWay(l.kind))
                             foreach (int side in new[] { -1, 1 })
                             {
                                 // A crossbuck sign on each side, facing the way.

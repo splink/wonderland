@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace Wonderland
 {
-    public enum VehicleKind { Car = 0, Motorbike = 1, Bicycle = 2, Ambulance = 3, Police = 4, FireEngine = 5 }
+    public enum VehicleKind { Car = 0, Motorbike = 1, Bicycle = 2, Ambulance = 3, Police = 4, FireEngine = 5, Taxi = 6, Van = 7, Bus = 8, Truck = 9, Tanker = 10 }
 
     /// <summary>
     /// Storybook road vehicles at the villagers' scale (a car is 5 cm long): rounded cars in four colours, a motorbike and
@@ -11,17 +11,24 @@ namespace Wonderland
     /// </summary>
     public static class VehicleFactory
     {
-        private static readonly Mesh[] meshes = new Mesh[24];   // four colours of each kind
+        private static readonly Mesh[] meshes = new Mesh[64];   // four colours of each kind
+
+        /// <summary>The vehicles a player can put on the road (they drive about the town).</summary>
+        public static readonly VehicleKind[] Placeable = { VehicleKind.Car, VehicleKind.Taxi, VehicleKind.Van, VehicleKind.Bus, VehicleKind.Truck, VehicleKind.Tanker };
+
+        /// <summary>Big vehicles keep to the slow lane of a highway.</summary>
+        public static bool Heavy(VehicleKind k) => k is VehicleKind.Bus or VehicleKind.Truck or VehicleKind.Tanker or VehicleKind.FireEngine;
         private static Mesh beacon;
 
         public static float Length(VehicleKind k) => k switch
         {
-            VehicleKind.Motorbike => 0.026f, VehicleKind.Bicycle => 0.022f, VehicleKind.FireEngine => 0.075f, VehicleKind.Ambulance => 0.058f, _ => 0.05f,
+            VehicleKind.Motorbike => 0.026f, VehicleKind.Bicycle => 0.022f, VehicleKind.FireEngine => 0.075f, VehicleKind.Ambulance => 0.058f,
+            VehicleKind.Van => 0.056f, VehicleKind.Bus => 0.1f, VehicleKind.Truck => 0.088f, VehicleKind.Tanker => 0.088f, _ => 0.05f,
         };
 
         public static Mesh Get(VehicleKind k, int colour = 0)
         {
-            int key = (int)k * 4 + (k == VehicleKind.Car ? colour % 4 : 0);
+            int key = (int)k * 4 + (k is VehicleKind.Car or VehicleKind.Van or VehicleKind.Truck ? colour % 4 : 0);
             return meshes[key] ??= Build(k, colour % 4);
         }
 
@@ -54,6 +61,11 @@ namespace Wonderland
                 case VehicleKind.Ambulance: Van(b, Pal.Hex("#F4F2EC"), Pal.Hex("#E0352B"), 0.058f, false); break;
                 case VehicleKind.FireEngine: Van(b, Pal.Hex("#D7382E"), Pal.Hex("#F7F1E6"), 0.075f, true); break;
                 case VehicleKind.Motorbike: Bike(b, true); break;
+                case VehicleKind.Taxi: Car(b, Pal.Hex("#F2C12E"), Pal.TrainBlack); TaxiSign(b); break;
+                case VehicleKind.Van: Van(b, Pal.Hex("#F4F2EC"), CarColours[colour], 0.056f, false, false); break;
+                case VehicleKind.Bus: Bus(b); break;
+                case VehicleKind.Truck: Lorry(b, CarColours[colour], false); break;
+                case VehicleKind.Tanker: Lorry(b, Pal.Hex("#3E6FB0"), true); break;
                 default: Bike(b, false); break;
             }
             return b.ToMesh(k + "_" + colour);
@@ -102,7 +114,7 @@ namespace Wonderland
             }
         }
 
-        private static void Van(MeshBuilder b, Color body, Color trim, float L, bool fire)
+        private static void Van(MeshBuilder b, Color body, Color trim, float L, bool fire, bool cross = true)
         {
             const float W = 0.024f;
             var glass = Pal.Hex("#5A7090");
@@ -127,7 +139,7 @@ namespace Wonderland
                     b.Pop();
                 }
             }
-            else
+            else if (cross)
             {
                 // A red cross on the side and back.
                 foreach (int s in new[] { -1, 1 })
@@ -135,6 +147,62 @@ namespace Wonderland
                     b.AddBox(new Vector3(s * (W / 2 + 0.0005f), 0.02f, -0.008f), new Vector3(0.0006f, 0.0026f, 0.008f), trim);
                     b.AddBox(new Vector3(s * (W / 2 + 0.0005f), 0.02f, -0.008f), new Vector3(0.0006f, 0.008f, 0.0026f), trim);
                 }
+            }
+        }
+
+        private static void TaxiSign(MeshBuilder b)
+        {
+            b.AddBox(new Vector3(0f, 0.0232f, -0.004f), new Vector3(0.011f, 0.004f, 0.0035f), Pal.Hex("#FFF7D6"));
+            foreach (int s in new[] { -1, 1 }) Lettering.Add(b, "TAXI", new Vector3(0f, 0.0232f, -0.004f + s * 0.0018f), new Vector3(0f, 0f, s), 0.0026f, 0.0003f, Pal.Glow(Pal.Hex("#2A2A2A")));
+            // Chequers along the side.
+            for (int i = 0; i < 8; i++) foreach (int s in new[] { -1, 1 })
+                b.AddBox(new Vector3(s * 0.0107f, 0.0112f + (i % 2) * 0.0012f, -0.017f + i * 0.0045f), new Vector3(0.0004f, 0.0012f, 0.0022f), Pal.TrainBlack);
+        }
+
+        /// <summary>A single-deck town bus: long, red, windows all along, a destination board.</summary>
+        private static void Bus(MeshBuilder b)
+        {
+            const float L = 0.1f, W = 0.026f, H = 0.03f;
+            var red = Pal.Hex("#C8352B"); var glass = Pal.Hex("#5A7090"); var cream = Pal.Hex("#F3E9D2");
+            Wheels(b, W / 2 - 0.0012f, new[] { -0.032f, 0.03f }, 0.0055f);
+            b.AddBox(new Vector3(0f, 0.005f + H / 2, 0f), new Vector3(W, H, L), red, Pal.Hex("#D9D2C6"), Pal.Shade(red, 0.7f));
+            foreach (int s in new[] { -1, 1 })
+            {
+                b.AddBox(new Vector3(s * (W / 2 + 0.0002f), 0.0235f, 0f), new Vector3(0.0006f, 0.008f, L - 0.012f), glass);
+                for (int i = 0; i < 9; i++) b.AddBox(new Vector3(s * (W / 2 + 0.0005f), 0.0235f, -L / 2 + 0.008f + i * 0.0105f), new Vector3(0.0004f, 0.0085f, 0.0012f), red);   // window pillars
+                b.AddBox(new Vector3(s * (W / 2 + 0.0004f), 0.0145f, 0f), new Vector3(0.0005f, 0.0025f, L - 0.006f), cream);
+            }
+            b.AddBox(new Vector3(0f, 0.022f, L / 2 + 0.0002f), new Vector3(W - 0.003f, 0.013f, 0.0006f), glass);
+            b.AddBox(new Vector3(0f, 0.0315f, L / 2 + 0.0003f), new Vector3(W - 0.006f, 0.004f, 0.0008f), Pal.TrainBlack);
+            Lettering.Add(b, "TOWN", new Vector3(0f, 0.0315f, L / 2 + 0.0008f), Vector3.forward, 0.0026f, 0.0003f, Pal.Glow(Pal.Hex("#FFB840")));
+            Lights(b, W / 2, 0.009f, L / 2 + 0.0004f, -L / 2 - 0.0004f);
+        }
+
+        /// <summary>A lorry: a cab and a box body (or a tank) on a long chassis.</summary>
+        private static void Lorry(MeshBuilder b, Color body, bool tank)
+        {
+            const float L = 0.088f, W = 0.025f;
+            var glass = Pal.Hex("#5A7090"); var chassis = Pal.Hex("#2E2E34");
+            Wheels(b, W / 2 - 0.0012f, new[] { -0.03f, -0.019f, 0.03f }, 0.0055f);
+            b.AddBox(new Vector3(0f, 0.0065f, 0f), new Vector3(W - 0.006f, 0.004f, L - 0.004f), chassis);
+            // The cab at the front.
+            b.AddBox(new Vector3(0f, 0.017f, L / 2 - 0.009f), new Vector3(W, 0.02f, 0.018f), body, Pal.Shade(body, 1.1f), Pal.Shade(body, 0.7f));
+            b.AddBox(new Vector3(0f, 0.021f, L / 2 + 0.0002f), new Vector3(W - 0.004f, 0.007f, 0.0008f), glass);
+            foreach (int s in new[] { -1, 1 }) b.AddBox(new Vector3(s * (W / 2 + 0.0002f), 0.021f, L / 2 - 0.007f), new Vector3(0.0006f, 0.006f, 0.008f), glass);
+            Lights(b, W / 2, 0.01f, L / 2 + 0.0004f, -L / 2 - 0.0004f);
+            if (tank)
+            {
+                b.Push(new Vector3(0f, 0.019f, -0.012f), Quaternion.Euler(90f, 0f, 0f));
+                b.AddCylinder(new Vector3(0f, -0.029f, 0f), 0.0105f, 0.0105f, 0.058f, 14, Pal.Hex("#D9DDE2"), Pal.Hex("#F2F4F6"), true, true);
+                b.Pop();
+                b.AddBox(new Vector3(0f, 0.0292f, -0.012f), new Vector3(0.0016f, 0.0016f, 0.05f), Pal.Hex("#9AA0A8"));   // walkway on top
+                foreach (int s in new[] { -1, 1 }) b.AddBox(new Vector3(s * 0.0106f, 0.019f, -0.012f), new Vector3(0.0004f, 0.0035f, 0.048f), body);
+            }
+            else
+            {
+                var box = Pal.Hex("#F2EFE8");
+                b.AddBox(new Vector3(0f, 0.0215f, -0.011f), new Vector3(W + 0.001f, 0.026f, 0.064f), box, box, Pal.Shade(box, 0.8f));
+                foreach (int s in new[] { -1, 1 }) b.AddBox(new Vector3(s * (W / 2 + 0.0008f), 0.0215f, -0.011f), new Vector3(0.0004f, 0.008f, 0.05f), body);   // a coloured band
             }
         }
 

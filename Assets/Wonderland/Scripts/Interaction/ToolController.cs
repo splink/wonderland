@@ -352,10 +352,16 @@ namespace Wonderland
                     break;
                 }
                 case Tool.Paths:
-                    for (int k = 0; k < PathSystem.Names.Length; k++)
+                    foreach (var kind in WayOrder)
                     {
-                        var kind = (PathKind)k;
-                        o.Add(new PaletteUI.Option(PathSystem.Names[k], PathKind == kind, () => { PathKind = kind; RefreshOptions(); }));
+                        var k = kind;
+                        o.Add(new PaletteUI.Option(PathSystem.Names[(int)k], PathKind == k && PlacingVehicle == null, () => { PathKind = k; PlacingVehicle = null; RefreshOptions(); }));
+                    }
+                    // The second row: cars and lorries to put on the roads.
+                    foreach (var vk in VehicleFactory.Placeable)
+                    {
+                        var k = vk;
+                        items.Add(new PaletteUI.Option(VehicleName(k), PlacingVehicle == k, () => { PlacingVehicle = PlacingVehicle == k ? null : k; RefreshOptions(); Say(PlacingVehicle != null ? $"Point at a road and pull the trigger: a {VehicleName(k).ToLower()} drives off about the town" : "Draw roads"); }));
                     }
                     break;
                 case Tool.Eraser:
@@ -420,7 +426,9 @@ namespace Wonderland
             Tool.Train => !World.Track.HasTrack ? "Draw a railway first (Track tool)"
                 : hoveredTrain != null ? $"{World.Trains.Describe(hoveredTrain)}  ·  trigger: stop / go  ·  stick up-down: speed, left-right: carriages  ·  grip: move it"
                 : "Trigger on the track: add a train  ·  tap a switch or signal to change it  ·  A: start / stop all",
-            Tool.Paths => PathSystem.IsWay((int)PathKind) ? $"Draw a {PathSystem.Names[(int)PathKind].ToLower()} - across water it gets a bridge (tap a bridge to change it); start on another way to join  ·  A: next"
+            Tool.Paths => PlacingVehicle is { } pv ? $"Trigger on a road: a {VehicleName(pv).ToLower()} - it drives about the town, keeps to its lane and stops at red lights  ·  the way you point is the way it faces"
+                : PathSystem.IsRoad((int)PathKind) ? $"Draw a {PathSystem.Names[(int)PathKind].ToLower()}: it comes out straight with rounded corners; draw across another road for a crossroads with traffic lights, end on one for a T-junction  ·  A: next"
+                : PathSystem.IsWay((int)PathKind) ? $"Draw a {PathSystem.Names[(int)PathKind].ToLower()} - across water it gets a bridge (tap a bridge to change it); start on another way to join  ·  A: next"
                 : $"Draw a {PathSystem.Names[(int)PathKind].ToLower()} - close it into a loop for a pasture that keeps animals in  ·  A: next",
             Tool.Houses => pickedHover >= 0 && !carrying && pickedHover < World.Buildings.Houses.Count ? World.People.DescribePlace(pickedHover) + "  ·  trigger: move it"
                 : Catalog.IsStation(HouseVariant) ? "Point beside the railway: the station snaps to it and the train will stop there"
@@ -558,7 +566,7 @@ namespace Wonderland
                     if (!Draining && !StreamMode) StreamMode = true; else if (StreamMode) { StreamMode = false; Draining = true; } else Draining = false;
                     Say(StreamMode ? "Stream" : Draining ? "Drain" : "Pond"); break;
                 case Tool.Decor: DecorKind = (DecorKind + 1) % (AnimalFactory.KindCount + 1); Say(DecorKind == Villager ? "People" : AnimalFactory.Names[DecorKind]); break;
-                case Tool.Paths: PathKind = (PathKind)(((int)PathKind + 1) % PathSystem.Names.Length); Say(PathSystem.Names[(int)PathKind]); break;
+                case Tool.Paths: PathKind = WayOrder[(System.Array.IndexOf(WayOrder, PathKind) + 1) % WayOrder.Length]; PlacingVehicle = null; Say(PathSystem.Names[(int)PathKind]); RefreshOptions(); break;
                 case Tool.Houses:
                 {
                     var ids = Catalog.InCategory(BuildCategory);
@@ -695,9 +703,34 @@ namespace Wonderland
         }
 
         /// <summary>Draws roads, lanes, paths, trails, fences, hedges and walls - the same gesture as the railway and streams.</summary>
+        /// <summary>The order of the Roads tool's chips: roads first, then country ways, then fences.</summary>
+        private static readonly PathKind[] WayOrder = { PathKind.Road, PathKind.Highway, PathKind.Lane, PathKind.Footpath, PathKind.Trail, PathKind.Fence, PathKind.Hedge, PathKind.Wall };
+
+        /// <summary>A vehicle chosen to put on the road (null: drawing roads).</summary>
+        public VehicleKind? PlacingVehicle { get; private set; }
+        private int vehicleColour;
+        private float nextRoadPlan;
+        private int roadPlanCount;
+
+        private static string VehicleName(VehicleKind k) => k switch { VehicleKind.Truck => "Lorry", _ => k.ToString() };
+
         private void PathTool(PointerInput input, bool hit, Vector3 local, ref Color colour)
         {
             colour = new Color(0.95f, 0.85f, 0.65f, 0.85f);
+            if (PlacingVehicle is { } placing)
+            {
+                bool onRoad = hit && World.Traffic.NearestNode(new Vector2(local.x, local.z), 0.05f, true) >= 0;
+                if (hit) World.TerrainView.SetBrush(local, 0.025f, onRoad ? new Color(0.6f, 0.95f, 0.6f) : new Color(1f, 0.45f, 0.4f), 0.9f); else World.TerrainView.HideBrush();
+                if (input.TriggerDown && hit)
+                {
+                    var f = input.Ray.direction;
+                    float yaw = Mathf.Atan2(f.x, f.z) * Mathf.Rad2Deg - World.transform.eulerAngles.y;
+                    string error = World.PlaceVehicle(local, placing, yaw, vehicleColour++ % 4);
+                    if (error == null) { Say($"{VehicleName(placing)} on the road - off it goes"); Haptic(0.5f, 0.05f); }
+                    else { Say(error); Haptic(0.7f, 0.1f); }
+                }
+                return;
+            }
             float width = Mathf.Max(PathSystem.HalfWidth((int)PathKind), 0.008f);
             if (drawn.Count == 0)
             {
@@ -709,7 +742,26 @@ namespace Wonderland
             if (input.Trigger && drawn.Count > 0 && hit)
             {
                 var last = drawn[^1];
-                if (new Vector2(local.x - last.x, local.z - last.z).magnitude > 0.01f) { drawn.Add(local); World.Track.ShowPreview(drawn, false, false); }
+                if (new Vector2(local.x - last.x, local.z - last.z).magnitude > 0.01f) drawn.Add(local);
+                // Roads: show what letting go builds (straightened, corners rounded) while drawing.
+                if (PathSystem.IsRoad((int)PathKind) && drawn.Count > 3)
+                {
+                    if (Time.time >= nextRoadPlan && drawn.Count != roadPlanCount)
+                    {
+                        nextRoadPlan = Time.time + 0.15f; roadPlanCount = drawn.Count;
+                        var plan = World.Paths.Plan(drawn, (int)PathKind, out string why);
+                        if (plan != null)
+                        {
+                            var line = new List<Vector3>();
+                            for (int k = 0; k < plan.points.Count; k += 2) { var q = plan.points[k]; line.Add(new Vector3(q.x, World.Terrain.SurfaceAt(q.x, q.y) + 0.004f, q.y)); }
+                            if (plan.closed) line.Add(line[0]);
+                            World.Track.ShowPreview(line, false, false, null, null, true);
+                            Say("Let go to build this " + PathSystem.Names[(int)PathKind].ToLower(), 1f);
+                        }
+                        else { World.Track.ShowPreview(drawn, false, why != "Draw a little longer"); Say(why == "Draw a little longer" ? "Keep drawing..." : "Can't build this: " + why, 1f); }
+                    }
+                }
+                else World.Track.ShowPreview(drawn, false, false);
             }
             if ((input.TriggerUp || !input.Trigger) && drawn.Count > 0)
             {

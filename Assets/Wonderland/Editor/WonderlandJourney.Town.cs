@@ -24,8 +24,9 @@ namespace Wonderland.Editor
                 if (HouseFactory.Get(id).vertexCount > 50) built++;
             int vehicles = 0;
             foreach (VehicleKind k in Enum.GetValues(typeof(VehicleKind))) if (VehicleFactory.Get(k).vertexCount > 50) vehicles++;
-            Check(built == 11 && vehicles == 6 && AnimalFactory.Body(AnimalKind.Dog).vertexCount > 50 && AnimalFactory.Body(AnimalKind.Cat).vertexCount > 50,
-                $"New places ({built}/11), vehicles ({vehicles}/6), a dog and a cat are generated");
+            int kinds = Enum.GetValues(typeof(VehicleKind)).Length;
+            Check(built == 11 && vehicles == kinds && AnimalFactory.Body(AnimalKind.Dog).vertexCount > 50 && AnimalFactory.Body(AnimalKind.Cat).vertexCount > 50,
+                $"New places ({built}/11), vehicles ({vehicles}/{kinds}), a dog and a cat are generated");
             Check(Catalog.Get(Catalog.Disco).OpenAt(23.5f) && Catalog.Get(Catalog.Disco).OpenAt(1f) && !Catalog.Get(Catalog.Disco).OpenAt(15f) && Needs.Appeal(Catalog.Get(Catalog.Restaurant), 20f) > Needs.Appeal(Catalog.Get(Catalog.Restaurant), 16f),
                 "The disco opens at eight and dances past midnight; the restaurant is busiest at supper");
             var bank = 0;

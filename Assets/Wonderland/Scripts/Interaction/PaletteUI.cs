@@ -67,7 +67,7 @@ namespace Wonderland
         public PaletteButton Hovered { get; private set; }
         public event Action<Tool> ToolSelected;
 
-        public static readonly string[] ToolNames = { "Terrain", "Water", "Forest", "Paths", "Track", "Train", "Build", "Life", "Watch", "Eraser" };
+        public static readonly string[] ToolNames = { "Terrain", "Water", "Forest", "Roads", "Track", "Train", "Build", "Life", "Watch", "Eraser" };
         private MeshRenderer viewer;
 
         /// <summary>The CCTV viewer: a little monitor above the palette showing a live feed (null hides it).</summary>
