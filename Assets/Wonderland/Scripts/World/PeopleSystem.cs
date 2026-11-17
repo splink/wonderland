@@ -58,6 +58,7 @@ namespace Wonderland
             public Vector2 GroundPos = new(float.NaN, 0f);   // where Ground was last looked up (Smart scheduling)
             public float Ground, Chosen = float.NaN, ChosenWant;
             public int Style, Level;   // their outfit, and the level of detail they are drawn at
+            public float Pending;      // time not yet thought through (coarse scheduling)
             public float Heading, Timer, Phase, Height, Cooldown, Ride, WaveHeading, ResumeTimer;
             public Activity State, Resume;
             public bool ToStation, Cheering, Hidden;
@@ -432,6 +433,7 @@ namespace Wonderland
             bool smart = PerfSettings.SmartVillagers;
             FindLocos();
             var eye = Camera.main != null ? (Vector3?)transform.InverseTransformPoint(Camera.main.transform.position) : null;
+            var viewDir = Camera.main != null ? transform.InverseTransformDirection(Camera.main.transform.forward) : Vector3.forward;
             float drawn = WonderlandWorld.MiniatureCullDistance / Mathf.Max(transform.lossyScale.x, 1e-3f) + 0.1f;
             Grid.Update(placesBuilt ? 2f : 6f);
             RefreshPlaces();
@@ -446,8 +448,20 @@ namespace Wonderland
             double decideBefore = decideTotal;
             foreach (var a in agents)
             {
-                for (int n = 0; n < Needs.Count; n++) a.Need[n] = Mathf.Min(1f, a.Need[n] + Needs.GrowthOf((Need)n) * hours);
-                a.Timer -= dt; a.Cooldown -= dt;
+                // Coarse (Smart): behind the player or beyond drawing distance, a villager thinks every fourth frame,
+                // catching up the time in between - nothing goes slower, it just goes in bigger steps nobody sees.
+                float dtA = dt, hoursA = hours;
+                if (smart && eye.HasValue)
+                {
+                    var rel = new Vector3(a.Position.x, a.Height, a.Position.y) - eye.Value;
+                    bool coarse = rel.sqrMagnitude > drawn * drawn || Vector3.Dot(rel, viewDir) < -0.05f;
+                    a.Pending += dt;
+                    if (coarse && ((tick + a.Index) & 3) != 0) continue;
+                    dtA = a.Pending; a.Pending = 0f;
+                    hoursA = hours * dtA / Mathf.Max(dt, 1e-5f);
+                }
+                for (int n = 0; n < Needs.Count; n++) a.Need[n] = Mathf.Min(1f, a.Need[n] + Needs.GrowthOf((Need)n) * hoursA);
+                a.Timer -= dtA; a.Cooldown -= dtA;
                 if (a.State == Activity.Sleeping) { StepSleeping(a); continue; }
                 if (a.State == Activity.Inside)
                 {
@@ -456,7 +470,7 @@ namespace Wonderland
                     if (a.Timer <= 0f || !SpotStillThere(a) || (!atHome && (Closed(a) || SlotOver(a)))) EndActivity(a);
                     continue;
                 }
-                if (a.State == Activity.Riding) { StepRiding(a, dt); continue; }
+                if (a.State == Activity.Riding) { StepRiding(a, dtA); continue; }
                 if (a.State == Activity.OnRide) { StepRide(a); continue; }
                 int beat = tick + a.Index;   // (Smart: the occasional checks spread over the frames)
                 if ((!smart || (beat & 7) == 0) && !Walkable(a.Position) && a.State != Activity.Sitting && a.State != Activity.Unwell)   // the world changed under them
@@ -475,33 +489,33 @@ namespace Wonderland
                 {
                     case Activity.Idle:
                     case Activity.Chatting:
-                        if (a.State == Activity.Idle) a.Heading += Mathf.Sin(clock * 0.7f + a.Home.x * 90f) * 12f * dt;   // looking about
+                        if (a.State == Activity.Idle) a.Heading += Mathf.Sin(clock * 0.7f + a.Home.x * 90f) * 12f * dtA;   // looking about
                         if (a.Timer <= 0f) { if (a.State == Activity.Chatting) Satisfy(a, 0.3f); Decide(a); }
                         break;
                     case Activity.Unwell:
-                        a.Heading = Mathf.MoveTowardsAngle(a.Heading, a.SpotYaw, 60f * dt);
+                        a.Heading = Mathf.MoveTowardsAngle(a.Heading, a.SpotYaw, 60f * dtA);
                         break;
                     case Activity.Walking:
                         if (a.Plan.What == Intent.Kind.Gather && Deciders.Count == 0) { Stop(a); break; }   // the occasion is over
                         if (a.Plan.What == Intent.Kind.Home && Bedtime(a, Clock.Hour)) a.Plan.What = Intent.Kind.Sleep;   // on the way home anyway: straight to bed
                         else if (a.Plan.What is Intent.Kind.Spot or Intent.Kind.Neighbour or Intent.Kind.Gather && (Bedtime(a, Clock.Hour) || Closed(a))) { Stop(a, 0.3f); break; }   // too late now (or it has shut): home instead
-                        Walk(a, dt);
+                        Walk(a, dtA);
                         break;
                     case Activity.Waiting:
-                        a.Heading = Mathf.MoveTowardsAngle(a.Heading, FacingTrack(a), 90f * dt);
+                        a.Heading = Mathf.MoveTowardsAngle(a.Heading, FacingTrack(a), 90f * dtA);
                         var here = world.Trains.Near(new Vector3(a.Position.x, 0f, a.Position.y), 0.17f);
                         if (here != null && here.Dwell > 0f && here.Kind != TrainKind.Goods && Bound(a, here))
                         { a.State = Activity.Riding; a.Riding = here; a.Ride = 0f; a.Changing = false; a.LastCall = here.AtStation; Hide(a, true); }
                         else if (a.Timer <= 0f || !TrainRunning || Bedtime(a, Clock.Hour) && a.Plan.What is not (Intent.Kind.Sleep or Intent.Kind.Home)) { a.ToStation = false; Decide(a); }
                         break;
                     case Activity.Waving:
-                        a.Heading = Mathf.MoveTowardsAngle(a.Heading, a.WaveHeading, 240f * dt);
+                        a.Heading = Mathf.MoveTowardsAngle(a.Heading, a.WaveHeading, 240f * dtA);
                         if (TrainPassing(a, out var t)) a.WaveHeading = Mathf.Atan2(t.x, t.y) * Mathf.Rad2Deg;
                         if (a.Timer <= 0f) { a.State = a.Resume; a.Timer = Mathf.Max(a.ResumeTimer, 0.5f); }
                         break;
                     case Activity.Working:
-                        a.Heading = Mathf.MoveTowardsAngle(a.Heading, a.SpotYaw, 200f * dt);
-                        Grow(a, hours);
+                        a.Heading = Mathf.MoveTowardsAngle(a.Heading, a.SpotYaw, 200f * dtA);
+                        Grow(a, hoursA);
                         if (a.Timer <= 0f || !SpotStillThere(a) || !Catalog.Get(world.Buildings.Houses[a.SpotHouse].variant).OnShift(Clock.Hour)) EndActivity(a);
                         break;
                     case Activity.Sitting:
@@ -509,15 +523,15 @@ namespace Wonderland
                     case Activity.Playing:
                     case Activity.Watching:
                     case Activity.Browsing:
-                        if (a.State == Activity.Playing && Pitch(a) is { } pitch) StepPlayer(a, pitch, dt);
+                        if (a.State == Activity.Playing && Pitch(a) is { } pitch) StepPlayer(a, pitch, dtA);
                         if ((Bedtime(a, Clock.Hour) || HeadHome(a, Clock.Hour) || Closed(a) || SlotOver(a) || (a.Plan.What == Intent.Kind.Gather && Deciders.Count == 0)) && a.Timer > 1.5f) a.Timer = a.Rng.Range(0.5f, 2.5f);   // time to wrap up and go
-                        a.Heading = Mathf.MoveTowardsAngle(a.Heading, a.SpotYaw + (a.State == Activity.Watching ? Mathf.Sin(clock * 0.4f + a.Home.x * 30f) * 25f : 0f), 200f * dt);
+                        a.Heading = Mathf.MoveTowardsAngle(a.Heading, a.SpotYaw + (a.State == Activity.Watching ? Mathf.Sin(clock * 0.4f + a.Home.x * 30f) * 25f : 0f), 200f * dtA);
                         if (a.Timer <= 0f || (a.SpotHouse >= 0 && !SpotStillThere(a))) EndActivity(a);
                         break;
                 }
                 // The ground under them: looked up again once they have moved (or now and then: the land may change).
                 if (!smart || (beat & 7) == 0 || !((a.Position - a.GroundPos).sqrMagnitude < 0.0015f * 0.0015f)) { a.Ground = GroundAt(a.Position); a.GroundPos = a.Position; }
-                a.Height = Mathf.MoveTowards(a.Height, a.Ground + (a.State == Activity.Watching ? a.SpotLift : 0f), (a.SpotLift > 0f ? 0.4f : 0.12f) * dt);
+                a.Height = Mathf.MoveTowards(a.Height, a.Ground + (a.State == Activity.Watching ? a.SpotLift : 0f), (a.SpotLift > 0f ? 0.4f : 0.12f) * dtA);
                 if (eye.HasValue && (beat & 7) == 0) Detail(a, (new Vector3(a.Position.x, a.Height, a.Position.y) - eye.Value).magnitude * transform.lossyScale.x);
                 // Beyond the distance figures are drawn at, nobody sees them move: posed only now and then.
                 if (smart && eye.HasValue && (beat & 7) != 0 && (new Vector3(a.Position.x, a.Height, a.Position.y) - eye.Value).sqrMagnitude > drawn * drawn) continue;

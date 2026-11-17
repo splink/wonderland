@@ -118,8 +118,13 @@ namespace Wonderland.Editor
             var w = new GameObject("Profile").AddComponent<WonderlandWorld>();
             w.Deserialize(System.IO.File.ReadAllText(System.Environment.GetEnvironmentVariable("WL_SAVE") ?? "Tests/Saves/headset-wonderland-world.json"), Materials());
             w.People.Grid.Complete();
+            // A player at the near edge of the land, looking across it (what is behind them or beyond 3 m thinks coarsely).
+            var land = w.Terrain.LandBounds();
+            var eye = new GameObject("Player") { tag = "MainCamera" }.AddComponent<Camera>();
+            eye.transform.position = w.transform.TransformPoint(new Vector3(land.center.x, 0.6f, land.yMin - 0.4f));
+            eye.transform.LookAt(w.transform.TransformPoint(new Vector3(land.center.x, 0f, land.center.y)));
             for (float s = 0f; s < 10f; s += Dt) { w.Clock.Tick(Dt); w.People.Step(Dt); w.Animals.Step(Dt); w.Trains.Step(Dt); }
-            var sb = new System.Text.StringBuilder();
+            var sb = new System.Text.StringBuilder($"a player at the near edge of {land.width:0.0} x {land.height:0.0} m of land, looking across it\n");
             foreach (int mode in new[] { 1, 0 })
             {
                 PerfSettings.Villagers.Value = mode;
@@ -138,6 +143,7 @@ namespace Wonderland.Editor
                 sb.AppendLine("  " + w.People.Diagnostics);
             }
             PerfSettings.ResetAll();
+            Object.DestroyImmediate(eye.gameObject);
             System.IO.File.WriteAllText("Logs/simprofile-results.txt", sb.ToString());
             Debug.Log(sb.ToString());
             Object.DestroyImmediate(w.gameObject);

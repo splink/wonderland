@@ -49,6 +49,7 @@ namespace Wonderland
             public Vector2 Home, Position, Target;
             public float Heading, Timer, Bob, Pitch, Speed;
             public int Index, Level;   // (Level: the level of detail it is drawn at)
+            public float Pending;      // time not yet moved through (coarse scheduling)
             public Vector2 GroundPos = new(float.NaN, 0f);   // where Ground and Normal were last looked up (Smart scheduling)
             public float Ground;
             public Vector3 Normal = Vector3.up;
@@ -171,6 +172,7 @@ namespace Wonderland
             tick++;
             bool smart = PerfSettings.SmartVillagers;
             var eye = Camera.main != null ? (Vector3?)transform.InverseTransformPoint(Camera.main.transform.position) : null;
+            var viewDir = Camera.main != null ? transform.InverseTransformDirection(Camera.main.transform.forward) : Vector3.forward;
             float drawn = WonderlandWorld.MiniatureCullDistance / Mathf.Max(transform.lossyScale.x, 1e-3f) + 0.1f;
             for (int i = 0; i < agents.Count; i++)
             {
@@ -178,12 +180,22 @@ namespace Wonderland
                 a.Index = i;
                 int beat = tick + i;
                 var t = Of(a.Kind);
-                a.Timer -= dt;
+                // Coarse (Smart): behind the player or beyond drawing distance, it moves every fourth frame, catching up the
+                // time in between.
+                float dtA = dt;
+                if (smart && eye.HasValue)
+                {
+                    var rel = new Vector3(a.Position.x, a.Ground, a.Position.y) - eye.Value;
+                    a.Pending += dt;
+                    if ((rel.sqrMagnitude > drawn * drawn || Vector3.Dot(rel, viewDir) < -0.05f) && (beat & 3) != 0) continue;
+                    dtA = a.Pending; a.Pending = 0f;
+                }
+                a.Timer -= dtA;
                 if (eye.HasValue && (beat & 7) == 0) Detail(a, (new Vector3(a.Position.x, a.Ground, a.Position.y) - eye.Value).magnitude * transform.lossyScale.x);
                 // Beyond the distance figures are drawn at, nobody sees them: posed only now and then.
                 bool unseen = smart && eye.HasValue && (beat & 7) != 0 && (new Vector3(a.Position.x, a.Ground, a.Position.y) - eye.Value).sqrMagnitude > drawn * drawn;
-                if (a.Kind == AnimalKind.Dog) { StepDog(a, dt); if (!unseen) Pose(a); continue; }
-                if (a.Kind == AnimalKind.Cat) { StepCat(a, dt); if (!unseen) Pose(a); continue; }
+                if (a.Kind == AnimalKind.Dog) { StepDog(a, dtA); if (!unseen) Pose(a); continue; }
+                if (a.Kind == AnimalKind.Cat) { StepCat(a, dtA); if (!unseen) Pose(a); continue; }
                 // Deer: something close? Bolt away from it.
                 if (a.Kind == AnimalKind.Deer && threat != null && !a.Fleeing && (!smart || beat % 6 == 0))
                 {
@@ -204,7 +216,7 @@ namespace Wonderland
                 if (!a.Walking)
                 {
                     bool resting = Resting != null && Resting();
-                    a.Pitch = Mathf.MoveTowards(a.Pitch, resting ? t.GrazePitch * 0.5f : a.Kind == AnimalKind.Deer && a.Timer % 3f < 1f ? -12f : t.GrazePitch, 60f * dt);   // head down, nibbling (deer look up now and then)
+                    a.Pitch = Mathf.MoveTowards(a.Pitch, resting ? t.GrazePitch * 0.5f : a.Kind == AnimalKind.Deer && a.Timer % 3f < 1f ? -12f : t.GrazePitch, 60f * dtA);   // head down, nibbling (deer look up now and then)
                     if (resting) { if (a.Timer <= 0f) a.Timer = a.Rng.Range(2f, 5f); }
                     else if (a.Timer <= 0f && PickTarget(a, t)) { a.Walking = true; a.Timer = 12f; }
                     else if (a.Timer <= 0f) a.Timer = a.Rng.Range(1f, 3f);
@@ -212,18 +224,18 @@ namespace Wonderland
                 else
                 {
                     float speed = t.Speed * (a.Fleeing ? 3.5f : 1f);
-                    a.Pitch = Mathf.MoveTowards(a.Pitch, a.Fleeing ? -20f : 0f, 120f * dt);
+                    a.Pitch = Mathf.MoveTowards(a.Pitch, a.Fleeing ? -20f : 0f, 120f * dtA);
                     var to = a.Target - a.Position;
                     float want = Mathf.Atan2(to.x, to.y) * Mathf.Rad2Deg;
-                    a.Heading = Mathf.MoveTowardsAngle(a.Heading, want, t.TurnRate * (a.Fleeing ? 3f : 1f) * dt);
+                    a.Heading = Mathf.MoveTowardsAngle(a.Heading, want, t.TurnRate * (a.Fleeing ? 3f : 1f) * dtA);
                     if (Mathf.Abs(Mathf.DeltaAngle(a.Heading, want)) < 25f)
                     {
                         var fwd = new Vector2(Mathf.Sin(a.Heading * Mathf.Deg2Rad), Mathf.Cos(a.Heading * Mathf.Deg2Rad));
-                        var next = a.Position + fwd * Mathf.Min(speed * dt, to.magnitude);
+                        var next = a.Position + fwd * Mathf.Min(speed * dtA, to.magnitude);
                         // Smart: the ground and fences ahead are checked every fourth frame, looking far enough ahead to cover them
                         // (the way to the target was checked when it was picked).
-                        bool free = smart && (beat & 3) != 0 || Suits(a, next) && (blocked == null || !blocked(a.Position, next + fwd * (0.004f + (smart ? speed * dt * 4f : 0f))));
-                        if (free) { a.Position = next; a.Bob += dt * (a.Kind == AnimalKind.Chicken ? 30f : 14f) * (a.Fleeing ? 2f : 1f); }
+                        bool free = smart && (beat & 3) != 0 || Suits(a, next) && (blocked == null || !blocked(a.Position, next + fwd * (0.004f + (smart ? speed * dtA * 4f : 0f))));
+                        if (free) { a.Position = next; a.Bob += dtA * (a.Kind == AnimalKind.Chicken ? 30f : 14f) * (a.Fleeing ? 2f : 1f); }
                         else a.Timer = 0f;   // blocked: stop and graze
                     }
                     if (to.magnitude < 0.004f || a.Timer <= 0f) { a.Walking = false; a.Fleeing = false; a.Timer = a.Kind == AnimalKind.Chicken ? a.Rng.Range(0.6f, 2f) : a.Rng.Range(2.5f, 7f); }
