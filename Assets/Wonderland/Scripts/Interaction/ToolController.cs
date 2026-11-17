@@ -471,6 +471,7 @@ namespace Wonderland
                     ghost.gameObject.SetActive(false);
                     if (button != null && input.TriggerDown && button.Enabled && button.OnClick != null) { button.OnClick(); Haptic(0.4f, 0.02f); }
                     pointerOnPalette = true;
+                    ShowRailMarks(Tool == Tool.Track && !SignalMode, false, default);
                     DrawPointer(ray, uiDistance, new Color(1f, 0.9f, 0.6f, 0.9f), true);
                     return;
                 }
@@ -575,6 +576,7 @@ namespace Wonderland
             if (Tool != Tool.Track || drawn.Count == 0) HideEntryArrows();
             if (Tool != Tool.Train) { hoveredTrain = null; if (World.Trains.Highlighted != null) World.Trains.Highlighted = null; }
             floorRing.gameObject.SetActive(LandMode && hit);
+            ShowRailMarks(Tool == Tool.Track && !SignalMode, hit, local);
             if (meeting && !stroking) colour = new Color(1f, 0.85f, 0.3f, 0.85f);   // (the pointer turns gold over something to meet)
             DrawPointer(ray, rayLength, colour, hit);
         }

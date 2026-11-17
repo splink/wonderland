@@ -41,6 +41,7 @@ PASS  Select: trigger on a camera - its card and its live picture over the palet
 PASS  Close puts the picture away
 PASS  Grip on the track bends it in any tool (label: "<b><color=#FFE3A8>Railway · trains run the way the arrows point</color></b> / <color=#FFD27A><b>Trigger</b></color>  its card / <color=#FFD27A><b>Grip</b></color>  bend it") - Track reshaped
 PASS  Pointing at a switch, the label says what it is and what the trigger does ("<b><color=#FFE3A8>Switch · set: trains always go the way it points</color></b> / <color=#FFD27A><b>Trigger</b></color>  its card - choose which way trains go")
+PASS  The Track tool rings every free end and switch (2: 1 ends, 1 switches); Select doesn't
 PASS  Select a switch: its card says where each way leads, and Always left / Always right / Trains choose set it [card True, pinned True, free True]
 PASS  Select the track: its card's Bend button bends it, the trigger puts it down [card True, bending1 True] - Track reshaped
 PASS  A building's card has Remove; B brings it back [card True, removed True, back True]

@@ -360,6 +360,14 @@ namespace Wonderland.Editor
                     Check((tools.PointerLabel ?? "").Contains("Switch"), $"Pointing at a switch, the label says what it is and what the trigger does (\"{(tools.PointerLabel ?? "").Replace("\n", " / ")}\")");
                 }
                 world.Undo();
+                // The Track tool rings every free end and switch; other tools don't.
+                ClickButton(hand, "Track");
+                Frame(hand, midW, false);
+                int marks = tools.RailMarksShown;
+                int ends = 0; foreach (var ed in world.Track.Network.Edges) if (!ed.Closed) for (int k = 0; k < 2; k++) if (ed.Joint[k] < 0) ends++;
+                ClickButton(hand, "Select");
+                Frame(hand, midW, false);
+                Check(marks == ends + world.Track.Network.Joints.Count && tools.RailMarksShown == 0, $"The Track tool rings every free end and switch ({marks}: {ends} ends, {world.Track.Network.Joints.Count} switches); Select doesn't");
                 // Cards with buttons: a switch's card chooses which way trains go; a piece of track's card bends it.
                 if (world.Track.Network.Joints.Count > 0)
                 {
@@ -701,6 +709,21 @@ namespace Wonderland.Editor
             cam.transform.rotation = Quaternion.LookRotation(at + new Vector3(0.03f, 0.02f, 0f) - cam.transform.position);
             Frame(hand, at, false); Frame(hand, at, false);
             WonderlandRenders.Capture(cam, "editor-label-villager.png", 1600, 1000);
+            // The Track tool: free ends (blue) and switches (orange) ringed; pointing at a free end, the label says so.
+            var line = new System.Collections.Generic.List<Vector3>();
+            for (int k = 0; k <= 12; k++) line.Add(t.PointAt(-0.55f + k * 0.08f, -0.42f + 0.04f * Mathf.Sin(k * 0.5f)));
+            var laid = world.BuildTrack(line);
+            var branch = new System.Collections.Generic.List<Vector3>();
+            for (int k = 0; k <= 6; k++) branch.Add(t.PointAt(-0.1f + k * 0.05f, -0.4f - k * k * 0.006f - k * 0.01f));
+            var branched = world.BuildTrack(branch);
+            Debug.Log($"Wonderland renders: track {laid.Ok} {laid.Error}, branch {branched.Ok} {branched.Error}, switches {world.Track.Network.Joints.Count}");
+            tools.SelectTool(Tool.Track);
+            var endW = world.transform.TransformPoint(line[^1]);
+            cam.transform.position = endW + new Vector3(-0.25f, 0.35f, -0.25f);
+            cam.transform.rotation = Quaternion.LookRotation(endW + new Vector3(-0.2f, 0f, 0f) - cam.transform.position);
+            Frame(hand, endW, false); Frame(hand, endW, false);
+            Debug.Log($"Wonderland renders: rail marks {tools.RailMarksShown}, label \"{tools.PointerLabel}\"");
+            WonderlandRenders.Capture(cam, "editor-track-marks.png", 1600, 1000);
             Debug.Log("Card renders written");
             if (Application.isBatchMode) EditorApplication.Exit(0);
         }

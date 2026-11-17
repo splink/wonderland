@@ -343,7 +343,7 @@ namespace Wonderland
                 {
                     float a0 = k * Mathf.PI * 2f / seg, a1 = (k + 1) * Mathf.PI * 2f / seg;
                     Vector3 P(float a, float rr) => new(Mathf.Cos(a) * rr, 0f, Mathf.Sin(a) * rr);
-                    b.AddQuad(P(a0, 0.86f), P(a0, 1f), P(a1, 1f), P(a1, 0.86f), glow);
+                    b.AddQuad(P(a0, 0.86f), P(a1, 0.86f), P(a1, 1f), P(a0, 1f), glow);   // (wound to face up)
                 }
                 var go = new GameObject("Target ring");
                 go.AddComponent<MeshFilter>().sharedMesh = b.ToMesh("Target ring");
