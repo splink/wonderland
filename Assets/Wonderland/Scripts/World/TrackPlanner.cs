@@ -236,6 +236,9 @@ namespace Wonderland
             List<Vector2> path;
             if (closed) path = raw.GetRange(from, to - from + 1);
             else path = raw;
+            // The hand's wobble out first: the fewest points within 1.5 cm of the stroke, re-filled every 1 cm - so the
+            // track is shaped from the line meant, not the jitter (no little S-bends where it leaves or meets a track).
+            if (!OldShaping) path = Steady(path, closed);
 
             List<Vector2> pts = null;
             float radius = 0f;
@@ -250,12 +253,23 @@ namespace Wonderland
                     if (best == null || r > bestR) { best = shaped; bestR = r; }
                     if (bestR >= MinRadius * 0.95f) break;
                 }
-                // An attached stroke whose drawn line can't be bent to meet the track (a short extension, a line from one
-                // track to another): fit the smoothest curve that leaves (and meets) each attachment along the track.
-                if (attached && !closed && (best == null || bestR < MinRadius * 0.95f))
+                // An attached stroke: the simplest curve that leaves (and meets) each attachment along the track - one or
+                // two gentle Béziers - is preferred whenever it is drivable and stays near what was drawn; and it is the
+                // fallback when the drawn line can't be bent to meet the track at all (a short extension, a link).
+                if (attached && !closed && OldShaping && (best == null || bestR < MinRadius * 0.95f))
                 {
                     var fit = Fit(path, start, finish);
                     if (fit != null) { float r = MinRadiusOf(fit, false); if (best == null || r > bestR) { best = fit; bestR = r; } }
+                }
+                else if (attached && !closed)
+                {
+                    var fit = Fit(path, start, finish);
+                    if (fit != null)
+                    {
+                        float r = MinRadiusOf(fit, false);
+                        bool simpleAndClose = r >= MinRadius * 0.95f && MeanDistance(path, fit) < 0.06f;
+                        if (simpleAndClose || best == null || bestR < MinRadius * 0.95f && r > bestR) { best = fit; bestR = r; }
+                    }
                 }
             }
             ShapeWith(plan.Start, plan.Finish, out pts, out radius);
@@ -279,6 +293,17 @@ namespace Wonderland
             var dense = CatmullRom(pts, Spacing, closed);
             if (plan.Start.Kind != AttachKind.None) dense[0] = plan.Start.Point;
             if (plan.Finish.Kind != AttachKind.None) dense[^1] = plan.Finish.Point;
+            // The spline can overshoot a little where a straight meets a curve (a tiny S-bend next to a switch): smooth
+            // the centre line out, keeping each end's first centimetres - and so the way it leaves the track - in place.
+            if (!OldShaping && !closed && dense.Count > 12)
+            {
+                var keepA = dense.GetRange(0, 3); var keepB = dense.GetRange(dense.Count - 3, 3);
+                for (int iter = 0; iter < 30; iter++)
+                {
+                    Taubin(dense, false);
+                    for (int k = 0; k < 3; k++) { dense[k] = keepA[k]; dense[dense.Count - 3 + k] = keepB[k]; }
+                }
+            }
             string error = CheckCrossings(dense, closed, network, plan) ?? CheckClearance(dense, closed, network, plan);
             if (error != null) { plan.Error = error; return plan; }
 
@@ -345,6 +370,67 @@ namespace Wonderland
                 }
             }
             return best;
+        }
+
+        /// <summary>Diagnostics: shape track the way it was before strokes were steadied and simple fits preferred.</summary>
+        public static bool OldShaping;
+
+        /// <summary>
+        /// A line's tiny curves: bends that change side again within 8 cm (wiggles, not a deliberate S), and how much it
+        /// turns beyond what it needs (total turning minus the net change of direction, in degrees).
+        /// </summary>
+        public static readonly List<float> WiggleAt = new();   // (diagnostics: how far from the nearer end each wiggle was)
+        public static (int wiggles, float excess) Wiggles(IReadOnlyList<Vector3> line)
+        {
+            var p = new List<Vector2>(); foreach (var q in line) p.Add(new Vector2(q.x, q.z));
+            p = Resample(p, 0.01f, false);
+            int wiggles = 0, last = 0; float sinceChange = 0f, total = 0f;
+            for (int i = 1; i + 1 < p.Count; i++)
+            {
+                var a = p[i] - p[i - 1]; var b = p[i + 1] - p[i];
+                float angle = Vector2.SignedAngle(a, b);
+                total += Mathf.Abs(angle);
+                sinceChange += a.magnitude;
+                if (Mathf.Abs(angle) < 0.15f) continue;   // (about straight)
+                int side = angle > 0 ? 1 : -1;
+                if (last != 0 && side != last) { if (sinceChange < 0.08f) { wiggles++; float along = i * 0.01f; WiggleAt.Add(along < (p.Count - 1) * 0.01f - along ? along : -((p.Count - 1) * 0.01f - along)); } sinceChange = 0f; }
+                last = side;
+            }
+            float net = p.Count > 2 ? Mathf.Abs(Vector2.SignedAngle(p[1] - p[0], p[^1] - p[^2])) : 0f;
+            return (wiggles, Mathf.Max(0f, total - net));
+        }
+
+        /// <summary>How far a stroke strays from a curve on average.</summary>
+        private static float MeanDistance(List<Vector2> stroke, List<Vector2> curve)
+        {
+            float sum = 0f;
+            foreach (var q in stroke) { float d = float.MaxValue; foreach (var c in curve) d = Mathf.Min(d, (c - q).sqrMagnitude); sum += Mathf.Sqrt(d); }
+            return sum / Mathf.Max(1, stroke.Count);
+        }
+
+        /// <summary>A stroke without the hand's wobble: Douglas-Peucker to 1.5 cm, then points every 1 cm again.</summary>
+        private static List<Vector2> Steady(List<Vector2> p, bool closed)
+        {
+            if (p.Count < 4) return p;
+            var keep = new bool[p.Count]; keep[0] = keep[^1] = true;
+            var stack = new Stack<(int a, int b)>(); stack.Push((0, p.Count - 1));
+            while (stack.Count > 0)
+            {
+                var (a, b) = stack.Pop();
+                float worst = 0f; int at = -1;
+                var ab = p[b] - p[a];
+                for (int i = a + 1; i < b; i++)
+                {
+                    float t = Mathf.Clamp01(Vector2.Dot(p[i] - p[a], ab) / Mathf.Max(ab.sqrMagnitude, 1e-9f));
+                    float d = (p[i] - (p[a] + ab * t)).magnitude;
+                    if (d > worst) { worst = d; at = i; }
+                }
+                if (at >= 0 && worst > 0.015f) { keep[at] = true; stack.Push((a, at)); stack.Push((at, b)); }
+            }
+            var corners = new List<Vector2>();
+            for (int i = 0; i < p.Count; i++) if (keep[i]) corners.Add(p[i]);
+            if (corners.Count < (closed ? 4 : 2)) return p;
+            return corners.Count < 3 ? Resample(corners, 0.01f, closed) : CatmullRom(corners, 0.01f, closed);   // (a smooth line through them, no kinks)
         }
 
         private static List<Vector2> Bezier(Vector2 p0, Vector2 p1, Vector2 p2, Vector2 p3)

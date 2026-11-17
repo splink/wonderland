@@ -842,8 +842,23 @@ namespace Wonderland
                     var real = net.FreeEndAt(startAt, 0.002f, startEnds);
                     if (real.Edge >= 0) startEnds[i] = real;
                 }
-            if (startEnds != null) pts[0] = startAt;
-            if (finishEnds != null) pts[^1] = finishAt;
+            // The switch lands on the existing track's own point (it is split there), a few millimetres from the planned
+            // one: move the new piece's first (last) 5 cm with it, fading out - so it leaves the track smoothly instead of
+            // with a kink, a little wiggle, on a curve.
+            void Ease(Vector3 to, bool atStart)
+            {
+                var from = atStart ? pts[0] : pts[^1];
+                var shift = new Vector3(to.x - from.x, 0f, to.z - from.z);
+                for (int k = 0; k < pts.Count && k <= 5; k++)
+                {
+                    int i = atStart ? k : pts.Count - 1 - k;
+                    float w = 1f - k / 5f;
+                    pts[i] = new Vector3(pts[i].x + shift.x * w, pts[i].y, pts[i].z + shift.z * w);
+                }
+                if (atStart) pts[0] = to; else pts[^1] = to;
+            }
+            if (startEnds != null) Ease(startAt, true);
+            if (finishEnds != null) Ease(finishAt, false);
             int e = net.AddEdge(new TrackLayout(pts, false));
             if (startEnds != null) { startEnds.Add(new EdgeEnd(e, 0)); net.Join(startAt, startEnds.ToArray()); }
             if (finishEnds != null) { finishEnds.Add(new EdgeEnd(e, 1)); net.Join(finishAt, finishEnds.ToArray()); }

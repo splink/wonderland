@@ -333,6 +333,144 @@ namespace Wonderland.Editor
             return $" ({bestJ * 100f:0} cm from a switch, {bestC * 100f:0} cm from a crossing)";
         }
 
+        /// <summary>
+        /// Connections, old shaping vs new (Logs/trackshape-results.txt): branches off a loop, links between two loops,
+        /// extensions - hand-drawn with a wobble - and how many S-bends the built pieces have.
+        /// </summary>
+        private static readonly List<string> WiggleWhere = new();
+
+        /// <summary>Six connections drawn by hand onto loops, old shaping (left) and new (right), seen from above.</summary>
+        public static void TrackShapeRenders()
+        {
+            ShaderUtil.allowAsyncCompilation = false;
+            UnityEditor.SceneManagement.EditorSceneManager.NewScene(UnityEditor.SceneManagement.NewSceneSetup.EmptyScene, UnityEditor.SceneManagement.NewSceneMode.Single);
+            WonderlandLighting.CreateKeyLight();
+            System.IO.Directory.CreateDirectory(WonderlandRenders.Output);
+            var cam = WonderlandRenders.CreateCamera(new Vector3(0f, 2f, 0f), Vector3.zero, 40f);
+            WonderlandRenders.Capture(cam, "warmup.png", 64, 64);
+            System.IO.File.Delete(System.IO.Path.Combine(WonderlandRenders.Output, "warmup.png"));
+            foreach (bool old in new[] { true, false })
+            {
+                TrackPlanner.OldShaping = old;
+                for (int trial = 0; trial < 6; trial++)
+                {
+                    var w = Scratch("Shape " + trial, 800f + trial * 4f + (old ? 0f : 40f));
+                    w.Sky.Shown = false;
+                    var t = w.Terrain;
+                    var rng = new Rng(100 + trial);
+                    w.BuildTrack(Loop(t, 0.42f, 0.3f, 0.97f, false));
+                    float a0 = rng.Range(0f, Mathf.PI * 2f);
+                    var start = new Vector2(Mathf.Cos(a0) * 0.42f, Mathf.Sin(a0) * 0.3f);
+                    var out1 = start * rng.Range(1.6f, 2.2f) + new Vector2(rng.Range(-0.2f, 0.2f), rng.Range(-0.2f, 0.2f));
+                    var stroke = new List<Vector3>();
+                    for (int i = 0; i <= 40; i++)
+                    {
+                        float u = i / 40f;
+                        var q = Vector2.Lerp(start, out1, u) + new Vector2(rng.Range(-0.006f, 0.006f), rng.Range(-0.006f, 0.006f));
+                        stroke.Add(t.PointAt(q.x, q.y));
+                    }
+                    w.BuildTrack(stroke);
+                    var c = w.transform.TransformPoint(new Vector3(start.x, 0f, start.y));
+                    cam.transform.position = c + new Vector3(0f, 0.55f, 0f); cam.transform.LookAt(c); cam.fieldOfView = 40f;
+                    WonderlandRenders.Capture(cam, $"editor-trackshape-{trial}-{(old ? "old" : "new")}.png", 600, 600);
+                    Object.DestroyImmediate(w.gameObject);
+                }
+            }
+            TrackPlanner.OldShaping = false;
+            if (Application.isBatchMode) EditorApplication.Exit(0);
+        }
+
+        public static void TrackShape()
+        {
+            var report = new System.Text.StringBuilder();
+            foreach (bool old in new[] { true, false })
+            {
+                TrackPlanner.OldShaping = old;
+                TrackPlanner.WiggleAt.Clear(); WiggleWhere.Clear();
+                int built = 0, wiggles = 0, pieces = 0; float excess = 0f;
+                for (int trial = 0; trial < 24; trial++)
+                {
+                    var w = Scratch("Shapes", 700f);
+                    var t = w.Terrain;
+                    var rng = new Rng(100 + trial);
+                    w.BuildTrack(Loop(t, 0.42f, 0.3f, 0.97f, false));
+                    if (trial % 3 == 1)
+                    {
+                        var second = new List<Vector3>();
+                        for (int i = 0; i <= 90; i++) { float a = i / 90f * Mathf.PI * 2f * 0.97f; second.Add(t.PointAt(Mathf.Cos(a) * 0.3f, 0.95f + Mathf.Sin(a) * 0.22f)); }
+                        w.BuildTrack(second);
+                    }
+                    int before = w.Track.Network.Edges.Count;
+                    var stroke = new List<Vector3>();
+                    float a0 = rng.Range(0f, Mathf.PI * 2f);
+                    var start = new Vector2(Mathf.Cos(a0) * 0.42f, Mathf.Sin(a0) * 0.3f);
+                    var out1 = start * rng.Range(1.6f, 2.2f) + new Vector2(rng.Range(-0.2f, 0.2f), rng.Range(-0.2f, 0.2f));
+                    var end = trial % 3 == 1 ? new Vector2(rng.Range(-0.2f, 0.2f), 0.7f) : out1;
+                    for (int i = 0; i <= 40; i++)
+                    {
+                        float u = i / 40f;
+                        var q = Vector2.Lerp(Vector2.Lerp(start, out1, u), Vector2.Lerp(out1, end, u), u) + new Vector2(rng.Range(-0.006f, 0.006f), rng.Range(-0.006f, 0.006f));
+                        stroke.Add(t.PointAt(q.x, q.y));
+                    }
+                    var r = w.BuildTrack(stroke);
+                    if (r.Ok)
+                    {
+                        built++;
+                        var net = w.Track.Network;
+                        for (int e = 0; e < net.Edges.Count; e++)
+                        {
+                            if (net.Edges[e].Closed) continue;
+                            if (net.Edges[e].Layout.Length > 1.6f) continue;   // (the new connector, not the loops)
+                            int seen = TrackPlanner.WiggleAt.Count;
+                            var (wg, ex) = TrackPlanner.Wiggles(net.Edges[e].Layout.Points); wiggles += wg; excess += ex; pieces++;
+                            bool isNew = net.Edges[e].Joint[0] < 0 || net.Edges[e].Joint[1] < 0 || trial % 3 == 1 && net.Edges[e].Layout.Length < 1.2f;
+                            for (int k = seen; k < TrackPlanner.WiggleAt.Count; k++)
+                            {
+                                bool atStart = TrackPlanner.WiggleAt[k] >= 0f;
+                                bool switchEnd = net.Edges[e].Joint[atStart ? 0 : 1] >= 0;
+                                WiggleWhere.Add((isNew ? "new piece" : "old track") + (switchEnd ? " by the switch" : " by its free end"));
+                                TrackPlanner.WiggleAt[k] = Mathf.Abs(TrackPlanner.WiggleAt[k]);
+                            }
+                        }
+                    }
+                    Object.DestroyImmediate(w.gameObject);
+                }
+                report.AppendLine($"{(old ? "old shaping" : "new shaping")}: {built}/24 built; {wiggles} wiggles on {pieces} new pieces; turning beyond what they need: {excess / Mathf.Max(1, pieces):0} degrees each; wiggles at {string.Join(", ", TrackPlanner.WiggleAt.ConvertAll(x => (x * 100f).ToString("0")))} cm from an end, on: {string.Join(", ", WiggleWhere)}");
+            }
+            TrackPlanner.OldShaping = false;
+            // One branch off a straight line, in detail: the bend of the first 10 cm, planned and as built.
+            {
+                var w = Scratch("Branch", 700f);
+                var t = w.Terrain;
+                w.BuildTrack(Line(t, new Vector2(-0.8f, 0f), new Vector2(0.8f, 0f)));
+                var stroke = new List<Vector3>();
+                for (int i = 0; i <= 30; i++) { float u = i / 30f; stroke.Add(t.PointAt(-0.2f + u * 0.5f, u * u * 0.45f)); }
+                var plan = TrackPlanner.Plan(stroke, t, w.Track.Network);
+                string Bends(IReadOnlyList<Vector3> pts, bool fromJoint)
+                {
+                    var q = new List<Vector2>(); foreach (var v in pts) q.Add(new Vector2(v.x, v.z));
+                    if (!fromJoint) q.Reverse();
+                    q = TrackPlanner.Resample(q, 0.01f, false);
+                    var sb = new System.Text.StringBuilder();
+                    for (int i = 1; i + 1 < q.Count && i < 12; i++) sb.Append($"{Vector2.SignedAngle(q[i] - q[i - 1], q[i + 1] - q[i]):0.0} ");
+                    return sb.ToString();
+                }
+                if (plan.Path != null) report.AppendLine($"branch planned, first cm bends (deg/cm): {Bends(plan.Path.ConvertAll(v => new Vector3(v.x, 0f, v.y)), true)}");
+                var r = w.BuildTrack(stroke);
+                var net = w.Track.Network;
+                for (int e = 0; e < net.Edges.Count; e++)
+                {
+                    var l = net.Edges[e].Layout;
+                    bool fromJoint = net.Edges[e].Joint[0] >= 0;
+                    report.AppendLine($"piece {e} ({l.Length:0.00} m, joints {net.Edges[e].Joint[0]}/{net.Edges[e].Joint[1]}): first cm bends from its switch end: {Bends(l.Points, fromJoint)}");
+                }
+                Object.DestroyImmediate(w.gameObject);
+            }
+            System.IO.File.WriteAllText("Logs/trackshape-results.txt", report.ToString());
+            Debug.Log(report.ToString());
+            if (Application.isBatchMode) EditorApplication.Exit(0);
+        }
+
         /// <summary>The player's world in each terrain shading mode (Full, Light, Simple), from where they would stand.</summary>
         public static void TerrainModeRenders()
         {

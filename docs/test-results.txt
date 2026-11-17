@@ -19,14 +19,14 @@ PASS  A too-short stroke is refused ("Draw a longer track")
 PASS  Rejected strokes leave the world unchanged
 PASS  Hand-drawn loop accepted
 PASS  Loop closed automatically (end drawn 17 cm from start)
-PASS  Curves smoothed to a drivable radius (min 20 cm, limit 18 cm), length 3.39 m
+PASS  Curves smoothed to a drivable radius (min 20 cm, limit 18 cm), length 3.43 m
 PASS  Grades limited (max 9.1 %)
 PASS  Trees cleared from the corridor (151 -> 131)
 PASS  Terrain graded to the track bed (embankments / cuttings)
-PASS  Loop drawn past its start closes (2.79 m)
-PASS  Loop with an accidental kink loop closes (2.79 m)
-PASS  Loop ending 25 cm short of the start closes (2.79 m)
-PASS  Loop drawn half over bare floor closes and grows land under it (5.30 m, land 3.4 -> 3.8 m2)
+PASS  Loop drawn past its start closes (2.81 m)
+PASS  Loop with an accidental kink loop closes (2.82 m)
+PASS  Loop ending 25 cm short of the start closes (2.82 m)
+PASS  Loop drawn half over bare floor closes and grows land under it (5.32 m, land 3.4 -> 3.9 m2)
 PASS  A figure 8 becomes a loop with a diamond crossing (1 crossing)
 PASS  Both tracks meet at the same height at the crossing (0.0 mm)
 PASS  The train runs the figure 8 through its crossing (5.1 m, worst offset 0.0 mm)
@@ -36,32 +36,32 @@ PASS  The train waits at the red signal (moved 0.0 cm in 8 s)
 PASS  Green: the train goes on
 PASS  The eraser takes the signal away
 PASS  Drawing from the loop outwards branches off with a switch to a dead end (1 switch, 2 pieces)
-PASS  The branch leaves the loop smoothly, like a real switch (1 degrees apart at the switch)
+PASS  The branch leaves the loop smoothly, like a real switch (7 degrees apart at the switch)
 PASS  The train is still on the track after the switch went in
 PASS  Manual switches: a switch set for the loop keeps the train on it
 PASS  One way: the train keeps to the line it can run round and off the dead-end branch (branch False, reversed False)
-PASS  Drawing on from the buffers extends the line (3.40 -> 3.72 m)
+PASS  Drawing on from the buffers extends the line (3.41 -> 3.72 m)
 PASS  Drawing from the end back onto the loop joins it with a second switch (2 switches, 3 pieces)
 PASS  A goods train and a railcar join the steam train (3 trains)
 PASS  Every train gets its own colours
-PASS  Trains sharing the network never touch (closest 7.0 cm between cars in 3 minutes)
-PASS  All trains keep running (no jams) (41.4, 23.2, 20.5 m)
+PASS  Trains sharing the network never touch (closest 7.9 cm between cars in 3 minutes)
+PASS  All trains keep running (no jams) (41.5, 23.2, 20.4 m)
 PASS  Every train stays on the rails through the switches (worst offset 0.0 mm)
 PASS  Speed setting: half speed is half speed (6.5 cm/s)
 PASS  A tapped switch stays where it was set ("Switch set - trains will keep this way")
 PASS  Grip and drag bends a piece of track (moved 12 cm, track within 1.1 cm of the hand)
 PASS  The trains stay on the bent track (3/3)
-PASS  Trains run on over the bent track (closest 6.6 cm)
+PASS  Trains run on over the bent track (closest 6.7 cm)
 PASS  A bend that would squeeze into other track is refused ("That bend is too tight for the train")
 PASS  Save/load keeps the network (3 pieces, 2 switches, 3 trains)
 PASS  The eraser takes away one piece of track ("Track removed": 0 switches, 1 pieces left)
 PASS  Undo puts the piece back
 PASS  A line drawn across the loop crosses it with two diamond crossings (2)
-PASS  Trains take turns at the crossings (closest 16.7 cm)
+PASS  Trains take turns at the crossings (closest 17.4 cm)
 PASS  The railcar runs along its line the way the arrows point and stops at the buffers - it never reverses (1.6 m)
 PASS  An open line with buffers at both ends
-PASS  Put on a single line facing each other, both run the way the arrows point - no head-on, nobody reverses (closest 6.6 cm)
-PASS  They run on to the buffers (0.8 m, 0.1 m)
+PASS  Put on a single line facing each other, both run the way the arrows point - no head-on, nobody reverses (closest 7.3 cm)
+PASS  They run on to the buffers (0.9 m, 0.1 m)
 PASS  Every one of the 57 library objects builds (largest: Wheat field, 16552 vertices)
 PASS  Library objects stay within the vertex budget
 PASS  A village square goes up (9/9 places)
@@ -117,7 +117,7 @@ PASS  The village clock runs a day in 7.6 minutes (360 s of daylight, 97 s of ni
 PASS  The daily rhythm: shops in the morning, lunch at midday, the fair in the afternoon, the square in the evening
 PASS  A railway loop divides the land
 PASS  A village goes up around the railway (13/13 places, 8 residents moved in)
-PASS  The walk grid sees the railway as a divide (2 regions over 6972 cells, built in 42 ms)
+PASS  The walk grid sees the railway as a divide (2 regions over 6972 cells, built in 23 ms)
 PASS  Every resident knows their home (8/8; 2 live inside the loop)
 PASS  The baker lives over the bakery
 PASS  At two in the morning everyone is asleep at home (8/8)
@@ -140,8 +140,8 @@ PASS  ...get off at the far station and walk on to where they were going
 PASS  A lane with a level crossing joins the two sides (1 regions)
 PASS  ...and people from inside the loop walk over it to the village
 PASS  Save/load keeps the time (10:00), the clock speed, needs and homes (8/8)
-PASS  40 villagers: 0.26 ms per frame on average, worst 2.8 ms, 1.5 decisions/s, slowest decision 2.5 ms, places directory 0.4 ms (editor timing)
-PASS  After an edit the walk grid rebuilds over 32 frames (61 ms of work, worst frame 3.2 ms)
+PASS  40 villagers: 0.29 ms per frame on average, worst 5.9 ms, 1.5 decisions/s, slowest decision 2.4 ms, places directory 3.1 ms (editor timing)
+PASS  After an edit the walk grid rebuilds over 33 frames (62 ms of work, worst frame 3.2 ms)
 PASS  With no places at all, villagers wander by day and sleep under the stars at night
 PASS  A working village goes up (15/15 places, 10 villagers)
 PASS  Opening hours: the bakery opens at half six and shuts at six, the carousel stops in the evening, the fountain never closes
@@ -160,7 +160,7 @@ PASS  A decider from outside fills the café (4 of 5 spots, asked 6 times); one 
 PASS  Deciders that are done are dropped
 PASS  A farm inside a railway loop, a bakery outside, two stations and a goods train (6/6 places; farmer Greta)
 PASS  The farmer carries crates to the station for the goods train (up to 2 waiting on the platform)
-PASS  The goods train loads them and unloads at the far station (2 aboard, 2 unloaded)
+PASS  The goods train loads them and unloads at the far station (2 aboard, 4 unloaded)
 PASS  ...where the shopkeeper fetches them ("Finn brought the first goods to the bakery")
 PASS  A loop with a branch line, a station on each and a train (1 switch)
 PASS  The destination board follows the switches: set for the loop the train won't call at the branch station; set for the branch it will
@@ -201,9 +201,9 @@ PASS  Save and load keep where the cameras look (71 / 15 degrees; loaded 71 / 15
 PASS  Erasing a camera leaves the other selected, still aimed where it was
 PASS  Sound: 2 sources near the crossroads (at most 8); off means silent; five barks in a row play once; a meow out of earshot isn't played
 PASS  Taking a road away re-routes or parks the traffic (worst 1.4 cm off the remaining roads)
-PASS  A busy town (40 villagers, 8 vehicles, 2 animals, sound and a camera feed): 0.28 ms per frame on average, worst 6.8 ms (editor timing, simulation only)
+PASS  A busy town (40 villagers, 8 vehicles, 2 animals, sound and a camera feed): 0.26 ms per frame on average, worst 5.9 ms (editor timing, simulation only)
 PASS  A road crosses the railway at a level crossing; homes on both sides have vehicles (5 places, 4 vehicles)
-PASS  Vehicles wait at the level crossing while a train goes by (793 waits, 7 trips), and are never on it with the train
+PASS  Vehicles wait at the level crossing while a train goes by (245 waits, 7 trips), and are never on it with the train
 PASS  A loop drawn in two halves closes (1 pieces, 0 dead ends)
 PASS  Branches drawn off a loop at any angle from 20 to 90 degrees are built (44/44; refused: )
 PASS  Two loops are joined by a line drawn from one to the other (2 switches, 0 dead ends)
@@ -225,18 +225,18 @@ PASS  A loop with a branch, a signal, a station and two trains
 PASS  Carriages couple on behind the engine (41 -> 67 cm, engine still); more than the most is refused ("That's as long as this train gets (6 carriages)")
 PASS  Wagons uncouple (Goods train, 1 wagon - running at 100 %, next stop Hazelbank)
 PASS  The automatic signal turns red as a train passes and green once the line is clear
-PASS  Two trains share the network without touching (closest 9.8 cm), and keep off the dead-end branch (one way, they couldn't come back out)
-PASS  Pointing at a train says what it is doing ("Steam train, 4 carriages - running at 100 %, next stop Hazelbank")
-PASS  Held at red, the signal stops a train, and the train says so ("Steam train, 4 carriages - waiting at a red signal (tap it for automatic), next stop Hazelbank")
+PASS  Two trains share the network without touching (closest 10.1 cm), and keep off the dead-end branch (one way, they couldn't come back out)
+PASS  Pointing at a train says what it is doing ("Steam train, 4 carriages - at Hazelbank station")
+PASS  Held at red, the signal stops a train, and the train says so ("Goods train, 1 wagon - waiting at a red signal (tap it for automatic), next stop Hazelbank")
 PASS  Save and load keep the network (2 pieces, 1 switch), the held signal, the station (Hazelbank) and each train's carriages
-INFO  Joining two loops: 56/60 built; 2x "Tracks must cross at a wider angle"; 2x "Too close to the other track - leave a little gap"
+INFO  Joining two loops: 54/60 built; 4x "Tracks must cross at a wider angle"; 2x "Too close to the other track - leave a little gap"
 PASS  What the drawing shows while the trigger is held is what letting go builds (60/60 agree)
-PASS  Most hand-drawn links between two loops can be built (56/60)
+PASS  Most hand-drawn links between two loops can be built (54/60)
 PASS  A station and a country halt beside the line (2 stops)
 PASS  An express (faster) and a tank engine (slower) join the steam train (Express, 4 carriages - running at 130 %, next stop Willowmere; Tank engine, 2 carriages - running at 80 %, next stop Orchard End)
-PASS  Every train runs one way round the network, never backing up or meeting another (closest 6.5 cm, 0 reversals)
-PASS  Trains share both loops rather than piling into one (50% of train-time in the quieter loop)
-PASS  Trains call at the country halt (111 calls)
+PASS  Every train runs one way round the network, never backing up or meeting another (closest 6.3 cm, 0 reversals)
+PASS  Trains share both loops rather than piling into one (49% of train-time in the quieter loop)
+PASS  Trains call at the country halt (121 calls)
 PASS  A shower: rain falls from the clouds over the land (369 drops)
 PASS  Villagers know it is raining: the park is out, the museum is in
 PASS  14 clouds drift on the wind
@@ -277,8 +277,8 @@ PASS  With the grid off the stroke keeps its angle
 PASS  A railway under a big hill becomes a tunnel (hill 29 cm, 30 cm of tunnel, hill kept above it)
 PASS  The train runs into the tunnel (steam off underground)
 PASS  Railway across a pond rises onto a bridge and the water stays
-PASS  Raising the ground under the railway lifts the track (7.8 -> 10.4 cm)
-PASS  The bed is regraded under the lifted track (tunnel 33 cm)
+PASS  Raising the ground under the railway lifts the track (7.9 -> 10.4 cm)
+PASS  The bed is regraded under the lifted track (tunnel 34 cm)
 PASS  Lifted track keeps its grade limit (max 9.1 %)
 PASS  Place Cottage
 PASS  Place Townhouse
@@ -291,8 +291,8 @@ PASS  Pointer ray picks the house below it
 PASS  House repositioned and rotated
 PASS  Train placed on the railway
 PASS  Train runs continuously (1.44 m in 12 s)
-PASS  Locomotive stays on the rails (worst offset 4.2 mm)
-PASS  Locomotive follows the curves (worst alignment 0.999)
+PASS  Locomotive stays on the rails (worst offset 3.6 mm)
+PASS  Locomotive follows the curves (worst alignment 1.000)
 PASS  Train stops smoothly
 PASS  Station snaps to the railway
 PASS  Station placed beside the rails with a platform
@@ -305,7 +305,7 @@ PASS  Animals wander and graze (up to 21 cm from home in a minute)
 PASS  Animals stay on free grass near home
 PASS  Eraser removes an animal ("Sheep removed")
 PASS  Stream drawn
-PASS  Stream level only falls downstream (5.0 -> 1.4 cm)
+PASS  Stream level only falls downstream (4.8 -> 1.4 cm)
 PASS  Stream carves a channel below its water
 PASS  No trees standing in the stream
 PASS  The railway bridges the stream (clearance 32 mm)
@@ -342,6 +342,6 @@ PASS  Bad room data does not block growth ("room (room scan) sizes the start; la
 PASS  Land still grows with bad room data
 PASS  Trimmed land grows back (1.19 -> 1.04 -> 1.16 m2)
 INFO  terrain: 6 chunk meshes, 17 k triangles, land 3.49 m2 of a 4.8 x 4.8 m grid
-INFO  static budget of this world: 346 mesh renderers (~draw calls per eye pass before batching, excl. shadows/UI), 1160 k triangles, ground cover 5538 tufts
-INFO  trees 131, forest chunks 30, houses 3, track 3.40 m, undo depth 9, journey simulated in 77.2 s wall time
+INFO  static budget of this world: 346 mesh renderers (~draw calls per eye pass before batching, excl. shadows/UI), 1166 k triangles, ground cover 5538 tufts
+INFO  trees 131, forest chunks 30, houses 3, track 3.43 m, undo depth 9, journey simulated in 77.2 s wall time
 RESULT: PASS
