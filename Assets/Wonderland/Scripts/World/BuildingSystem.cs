@@ -221,7 +221,7 @@ namespace Wonderland
             r.sharedMaterial = material; r.shadowCastingMode = ShadowCastingMode.On;
             // Far away (and for its shadow) a simple stand-in in the same colours - unless it is too small to matter.
             if (!Catalog.Get(h.variant).Small && Catalog.BoatOf(h.variant) < 0)
-                MeshProxy.Attach(r, MeshProxy.Building(mesh, HouseFactory.SignMesh(h.variant)), Mathf.Max(mesh.bounds.size.x, mesh.bounds.size.y, mesh.bounds.size.z));
+                MeshProxy.Shadow(r, MeshProxy.Building(mesh, HouseFactory.SignMesh(h.variant)));
             return r;
         }
 

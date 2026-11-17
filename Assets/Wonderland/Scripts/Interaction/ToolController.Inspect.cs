@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -49,7 +50,7 @@ namespace Wonderland
         private int followSeed, followKind;          // kind: 0 nobody, 1 a villager, 2 an animal, 3 a building
         private Vector2 followHouse;                 // the building's position (buildings are kept by where they stand)
         private float cardTimer, infoTimer;
-        private int infoMode;                        // 0 closed, 1 stats, 2 help
+        private int infoMode;                        // 0 closed, 1 stats, 2 help, 3 performance
         private Transform followMarker, homePin, workPin;
         private LineRenderer routeLine;
         private readonly List<Vector3> route = new();
@@ -101,7 +102,7 @@ namespace Wonderland
 
         private void UpdateInspection(float dt)
         {
-            if (infoMode != 0) { infoTimer -= dt; if (infoTimer <= 0f) { infoTimer = 0.5f; if (infoMode == 1) ShowStats(); } }
+            if (infoMode != 0) { infoTimer -= dt; if (infoTimer <= 0f) { infoTimer = 0.5f; if (infoMode == 1) ShowStats(); else if (infoMode == 3) ShowPerf(); } }
             if (followKind == 0) return;
             int i = Followed();
             if (i < 0) { Say(followKind == 1 ? "They have left the world" : followKind == 3 ? "It was taken down" : "It has gone"); CloseCard(); return; }
@@ -236,14 +237,106 @@ namespace Wonderland
         // ------------------------------------------------------------------ stats and help
 
         /// <summary>The Stats button: frame rate and the world's numbers (again: closes).</summary>
-        public void ToggleStats() { infoMode = infoMode == 1 ? 0 : 1; infoTimer = 0f; if (infoMode == 0) Palette.ShowInfo(null, null, null); else ShowStats(); }
+        public void ToggleStats() { infoMode = infoMode is 1 or 3 ? 0 : 1; infoTimer = 0f; if (infoMode == 0) Palette.ShowInfo(null, null, null); else ShowStats(); }
 
         /// <summary>The Help button: the controls of the tool in hand (again: closes).</summary>
-        public void ToggleHelp() { infoMode = infoMode == 2 ? 0 : 2; if (infoMode == 0) Palette.ShowInfo(null, null, null); else ShowHelp(); }
+        public void ToggleHelp() { infoMode = infoMode == 2 ? 0 : 2; if (infoMode == 0) Palette.ShowInfo(null, null, null); else { ShowHelp(); Palette.SetInfoButtons(null); } }
 
         private void CloseInfo() { infoMode = 0; Palette.ShowInfo(null, null, null); }
 
-        private void ShowStats() => Palette.ShowInfo("Stats", $"{World.Clock.Label} · day {World.Clock.Day + 1}", StatsText(), CloseInfo);
+        private void ShowStats()
+        {
+            Palette.ShowInfo("Stats", $"{World.Clock.Label} · day {World.Clock.Day + 1}", StatsText(), CloseInfo);
+            Palette.SetInfoButtons(new[] { new PaletteUI.Option("Performance", false, () => { infoMode = 3; ShowPerf(); }) });
+        }
+
+        // ------------------------------------------------------------------ the performance panel
+
+        /// <summary>Opens the performance panel (live numbers, the settings, Measure).</summary>
+        public void ShowPerformance() { infoMode = 3; ShowPerf(); }
+
+        private bool measuring;
+        private string measuringWhat;
+        private readonly List<PerfBench.Result> measured = new();
+
+        private void ShowPerf()
+        {
+            Palette.ShowInfo("Performance", measuring ? $"Measuring {measuringWhat} - keep still" : "Tap a setting to change it and watch the numbers", PerfText(), CloseInfo);
+            var buttons = new List<PaletteUI.Option>();
+            foreach (var s in PerfSettings.All)
+            {
+                var setting = s;
+                buttons.Add(new PaletteUI.Option(s.Label, s.Value != s.Default, () => { setting.Next(); Say($"{setting.Label} - {setting.Help}"); ShowPerf(); }, !measuring));
+            }
+            buttons.Add(new PaletteUI.Option(measuring ? "Measuring..." : "Measure", measuring, StartMeasure, !measuring));
+            buttons.Add(new PaletteUI.Option("Defaults", false, () => { PerfSettings.ResetAll(); Say("Performance settings back to their defaults"); ShowPerf(); }, !measuring));
+            buttons.Add(new PaletteUI.Option("World stats", false, () => { infoMode = 1; ShowStats(); }));
+            Palette.SetInfoButtons(buttons);
+        }
+
+        /// <summary>The live numbers: frame rate, the headset's GPU and CPU time per frame, and the simulation by system.</summary>
+        public string PerfText()
+        {
+            var t = new CardText(30);
+            if (Perf == null || Perf.FrameMs <= 0f) { t.Line("Measuring...", true); return t.ToString(); }
+            float budget = 1000f / Perf.Refresh;
+            var light = Health(out _);
+            string colour = light == Green ? CardText.Good : light == Orange ? CardText.Warn : CardText.Bad;
+            t.Row("Frame rate", $"{Perf.Fps:0} fps of {Perf.Refresh:0}", colour);
+            float gpu = Perf.AppGpuMs > 0f ? Perf.AppGpuMs : Perf.GpuMs;
+            string busy = Perf.GpuUtil >= 0f ? $" · {Perf.GpuUtil * 100f:0}% busy" : "";
+            t.Row("GPU", gpu > 0f ? $"{gpu:0.0} ms of {budget:0.0}{busy}" : busy.Length > 0 ? busy.Substring(3) : "not reported", gpu > budget ? CardText.Bad : gpu > budget * 0.85f ? CardText.Warn : null);
+            t.Row("CPU", Perf.CpuMs > 0f ? $"main {Perf.CpuMs:0.0} ms" + (Perf.AppCpuMs > 0f ? $" · app {Perf.AppCpuMs:0.0} ms" : "") : "not reported", Perf.CpuMs > budget * 0.85f ? CardText.Warn : null);
+            var costs = new List<(float ms, string name)>();
+            for (int k = 0; k < SimCost.Count; k++) if (SimCost.Ms[k] >= 0.05f) costs.Add((SimCost.Ms[k], SimCost.Names[k]));
+            costs.Sort((a, b) => b.ms.CompareTo(a.ms));
+            var top = new StringBuilder($"{SimCost.Total:0.0} ms");
+            for (int k = 0; k < costs.Count && k < 3; k++) top.Append(k == 0 ? ": " : ", ").Append($"{costs[k].name} {costs[k].ms:0.0}");
+            t.Row("Simulation", top.ToString());
+            return t.ToString();
+        }
+
+        /// <summary>
+        /// Measure: switches each part of the world off for a moment, on the view as it is, and shows on the card what
+        /// each one costs (GPU and CPU time it saves), biggest first.
+        /// </summary>
+        private void StartMeasure()
+        {
+            if (measuring) return;
+            StartCoroutine(Measure());
+        }
+
+        private IEnumerator Measure()
+        {
+            measuring = true; measured.Clear();
+            Say("Measuring for about 40 seconds - keep the view still", 4f);
+            yield return PerfBench.Sweep(World, 1f, 1.6f, (what, i, n) => { measuringWhat = $"{what} ({i + 1}/{n})"; if (infoMode == 3) ShowPerf(); }, r => measured.Add(r));
+            measuring = false;
+            Palette.ShowCard("What it costs", "time each part takes per frame, biggest first", MeasureText(), null, () => Palette.HideCard());
+            if (infoMode == 3) ShowPerf();
+            Say("Measured - the card on the left shows what each part costs");
+        }
+
+        public string MeasureText()
+        {
+            var t = new CardText(26);
+            if (measured.Count < 2) { t.Line("Nothing measured", true); return t.ToString(); }
+            var a = measured[0]; var z = measured[^1];
+            float gpu = (a.GpuMs + z.GpuMs) / 2f, cpu = (a.CpuMs + z.CpuMs) / 2f;
+            t.Row("Now", gpu > 0f ? $"GPU {gpu:0.0} ms · CPU {cpu:0.0} ms" : $"{(a.Fps + z.Fps) / 2f:0} fps");
+            var rows = new List<(float gpu, float cpu, string name)>();
+            for (int i = 1; i < measured.Count - 1; i++) rows.Add((gpu - measured[i].GpuMs, cpu - measured[i].CpuMs, measured[i].Name));
+            rows.Sort((x, y) => (y.gpu + y.cpu * 0.5f).CompareTo(x.gpu + x.cpu * 0.5f));
+            t.Section("Switched off, it saves");
+            foreach (var (g, c, name) in rows)
+            {
+                if (gpu <= 0f) { t.Row(name, "-"); continue; }
+                string text = $"GPU {Signed(g)}" + (Mathf.Abs(c) >= 0.3f ? $" · CPU {Signed(c)}" : "");
+                t.Row(name, text, g >= 2f ? CardText.Bad : g >= 1f ? CardText.Warn : null);
+            }
+            return t.ToString();
+            static string Signed(float ms) => Mathf.Abs(ms) < 0.15f ? "~0" : $"{ms:0.0} ms";
+        }
 
         public string StatsText()
         {

@@ -33,7 +33,12 @@ namespace Wonderland
             for (int k = 0; k < meshes.Length; k++) meshes[k] = new MeshData(Detail(k));
             Scatter();
             MarkAllDirty();
+            PerfSettings.Changed -= OnSetting; PerfSettings.Changed += OnSetting;
         }
+
+        // The Grass setting: fewer tufts (or none), re-scattered at once.
+        private void OnSetting(PerfSettings.Setting s) { if (s == PerfSettings.Grass && this != null && terrain != null) Scatter(); }
+        private void OnDestroy() => PerfSettings.Changed -= OnSetting;
 
         /// <summary>
         /// Candidate positions on a global 4.2 cm lattice, each seeded by its lattice index: the same tufts appear in the
@@ -44,11 +49,13 @@ namespace Wonderland
             foreach (var k in chunks.Keys) dirty.Add(k);
             tufts.Clear(); count = 0;
             const float spacing = 0.05f;   // (was 0.042: 30 % fewer tufts - the grass reads the same from a step away)
+            float share = PerfSettings.GrassShare;
             int ix0 = Mathf.FloorToInt(terrain.X0 / spacing), ix1 = Mathf.CeilToInt(terrain.XMax / spacing);
             int iz0 = Mathf.FloorToInt(terrain.Z0 / spacing), iz1 = Mathf.CeilToInt(terrain.ZMax / spacing);
             for (int iz = iz0; iz <= iz1; iz++)
             for (int ix = ix0; ix <= ix1; ix++)
             {
+                if (share < 1f && Noise.Hash(ix, iz, seed + 7) >= share) continue;   // (the Grass setting)
                 var rng = new Rng((int)(Noise.Hash(ix, iz, seed) * 16777215f) + 1);
                 var p = new Vector2((ix + rng.Range(-0.45f, 0.45f)) * spacing, (iz + rng.Range(-0.45f, 0.45f)) * spacing);
                 float meadow = Noise.Fbm2(p.x * 3f + seed, p.y * 3f, 2);

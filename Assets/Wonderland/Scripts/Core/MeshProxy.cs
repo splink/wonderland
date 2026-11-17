@@ -6,8 +6,8 @@ namespace Wonderland
     /// <summary>
     /// Simple stand-ins for detailed meshes, made from the meshes themselves: a building becomes a box in its wall colour
     /// with a gabled (or flat) roof in its roof colour and a band of lit windows; a tree becomes a trunk and a canopy in
-    /// its own colours. A few dozen triangles instead of thousands - drawn for buildings and trees far from the eyes, and
-    /// for everyone's shadows (a shadow doesn't show the chimney pots).
+    /// its own colours. A few dozen triangles instead of thousands - they cast the shadows (a shadow doesn't show the
+    /// chimney pots); they are never drawn themselves.
     /// </summary>
     public static class MeshProxy
     {
@@ -133,25 +133,14 @@ namespace Wonderland
             return mesh;
         }
 
-        /// <summary>Distance from the eyes beyond which the stand-ins are drawn instead of the detail.</summary>
-        public const float DetailDistance = 2.2f;
-
         /// <summary>
-        /// Puts a renderer's stand-in in place: the detail close up, the stand-in beyond <see cref="DetailDistance"/>
-        /// (a level-of-detail group sized like a building or tree, so the switch happens at about that distance whatever
-        /// the group's bounds), and the stand-in's shadow always (the detail casts none).
+        /// The stand-in casts the shadow of a detailed renderer (the detail casts none): a shadow on the grass doesn't
+        /// show the chimney pots, and it costs a few dozen triangles instead of thousands. The stand-in is never seen.
         /// </summary>
-        public static void Attach(MeshRenderer detail, Mesh proxy, float size)
+        public static void Shadow(MeshRenderer detail, Mesh proxy)
         {
             detail.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            var go = detail.gameObject;
-            var far = Child(go.transform, "Proxy", proxy, detail.sharedMaterial, UnityEngine.Rendering.ShadowCastingMode.Off);
-            Child(go.transform, "Shadow", proxy, detail.sharedMaterial, UnityEngine.Rendering.ShadowCastingMode.ShadowsOnly);
-            if (!go.TryGetComponent<LODGroup>(out var lod)) lod = go.AddComponent<LODGroup>();
-            float height = size / (2f * DetailDistance * Mathf.Tan(48f * Mathf.Deg2Rad)) * QualitySettings.lodBias;   // (a Quest eye's ~96 degree field)
-            lod.SetLODs(new[] { new LOD(height, new Renderer[] { detail }), new LOD(0.0005f, new Renderer[] { far }) });
-            lod.size = size;
-            lod.fadeMode = LODFadeMode.None;
+            Child(detail.transform, "Shadow", proxy, detail.sharedMaterial, UnityEngine.Rendering.ShadowCastingMode.ShadowsOnly);
         }
 
         private static MeshRenderer Child(Transform parent, string name, Mesh mesh, Material material, UnityEngine.Rendering.ShadowCastingMode shadows)

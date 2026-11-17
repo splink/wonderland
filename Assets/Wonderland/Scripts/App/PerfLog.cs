@@ -28,6 +28,9 @@ namespace Wonderland
         public float CpuMs { get; private set; }
         public float GpuMs { get; private set; }
         public float GpuUtil { get; private set; } = -1f;
+        /// <summary>The headset's own figures for this app (0: not reported, as in the editor): GPU and CPU time per frame.</summary>
+        public float AppGpuMs { get; private set; }
+        public float AppCpuMs { get; private set; }
         public float Refresh { get; private set; } = 72f;
         private float utilTimer;
 
@@ -38,6 +41,17 @@ namespace Wonderland
             Fps = FrameMs > 0.01f ? 1000f / FrameMs : 0f;
             if (timings[0].cpuMainThreadFrameTime > 0) CpuMs += ((float)timings[0].cpuMainThreadFrameTime - CpuMs) * k;
             if (timings[0].gpuFrameTime > 0) GpuMs += ((float)timings[0].gpuFrameTime - GpuMs) * k;
+#if !UNITY_EDITOR
+            try
+            {
+                // (seconds, from the runtime: Unity's own GPU timing reads 0 on the Quest)
+                var g = OVRPlugin.GetPerfMetricsFloat(OVRPlugin.PerfMetrics.App_GpuTime_Float);
+                var c = OVRPlugin.GetPerfMetricsFloat(OVRPlugin.PerfMetrics.App_CpuTime_Float);
+                if (g.HasValue && g.Value > 0f) AppGpuMs += (g.Value * 1000f - AppGpuMs) * k;
+                if (c.HasValue && c.Value > 0f) AppCpuMs += (c.Value * 1000f - AppCpuMs) * k;
+            }
+            catch (System.Exception) { }
+#endif
             utilTimer -= dt;
             if (utilTimer > 0f) return;
             utilTimer = 1f;
@@ -80,7 +94,7 @@ namespace Wonderland
             foreach (float s in sorted) { sum += s; if (s > budget * 1.25f) over++; }
             var sb = new StringBuilder("Wonderland perf: ");
             sb.Append($"{count / elapsed:0.0} fps (target {refresh:0}), frame avg {sum / count * 1000f:0.0} ms, p95 {sorted[(int)(count * 0.95f)] * 1000f:0.0} ms, worst {sorted[count - 1] * 1000f:0.0} ms, {over * 100f / count:0.0}% over budget");
-            if (timingFrames > 0) sb.Append($"; cpu main {cpuMain / timingFrames:0.0} ms, render {cpuRender / timingFrames:0.0} ms, gpu {gpu / timingFrames:0.0} ms");
+            if (timingFrames > 0) sb.Append($"; cpu main {cpuMain / timingFrames:0.0} ms, app gpu {AppGpuMs:0.0} ms, app cpu {AppCpuMs:0.0} ms, gpu busy {GpuUtil * 100f:0}%");
             if (Context != null) sb.Append("; ").Append(Context());
             Debug.Log(sb.ToString());
         }

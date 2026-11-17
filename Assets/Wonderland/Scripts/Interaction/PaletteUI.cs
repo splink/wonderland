@@ -279,7 +279,7 @@ namespace Wonderland
 
         public void ShowInfo(string title, string subtitle, string body, Action close)
         {
-            if (body == null) { if (info != null) info.Root.gameObject.SetActive(false); return; }
+            if (body == null) { if (info != null) info.Root.gameObject.SetActive(false); SetInfoButtons(null); return; }
             info ??= MakePanel("Info", Width / 2 + InfoWidth / 2 + 0.006f, InfoWidth, false);
             info.Root.gameObject.SetActive(true);
             info.Title.text = title; info.Subtitle.text = subtitle ?? ""; info.Body.text = body;
@@ -287,6 +287,43 @@ namespace Wonderland
         }
 
         public bool InfoShown => info != null && info.Root.gameObject.activeSelf;
+
+        private readonly List<PaletteButton> infoButtons = new();
+
+        /// <summary>
+        /// Buttons along the bottom of the right-hand panel, two to a row (the Perf panel's settings); the body text
+        /// shrinks to the space above them. Null or empty removes them. Call after <see cref="ShowInfo(string, string, string, Action)"/>.
+        /// </summary>
+        public void SetInfoButtons(IReadOnlyList<Option> list)
+        {
+            list ??= new List<Option>();
+            if (info == null) { if (list.Count == 0) return; info = MakePanel("Info", Width / 2 + InfoWidth / 2 + 0.006f, InfoWidth, false); }
+            while (infoButtons.Count > list.Count)
+            {
+                if (Application.isPlaying) Destroy(infoButtons[^1].gameObject); else DestroyImmediate(infoButtons[^1].gameObject);
+                infoButtons.RemoveAt(infoButtons.Count - 1);
+            }
+            const float h = 0.0155f, gap = 0.003f;
+            float w = (InfoWidth - 0.016f - gap) / 2f, bottom = -PanelHeight / 2 + 0.008f;
+            int rows = (list.Count + 1) / 2;
+            for (int i = 0; i < list.Count; i++)
+            {
+                if (i >= infoButtons.Count) infoButtons.Add(Button("Setting", info.Root, Vector3.zero, new Vector2(w, h), "", false));
+                var b = infoButtons[i];
+                int row = i / 2, col = i % 2;
+                b.transform.localPosition = new Vector3(-w / 2 - gap / 2 + col * (w + gap), bottom + (rows - 1 - row) * (h + gap) + h / 2, 0f);
+                b.Label.text = list[i].Label;
+                b.Selected = list[i].Selected; b.Enabled = list[i].Enabled;
+                b.OnClick = list[i].OnClick;
+                b.ApplyVisuals();
+            }
+            // The body fills what is left between the header and the buttons.
+            float top = PanelHeight / 2 - 0.004f - 0.046f - 0.008f, low = rows > 0 ? bottom + rows * (h + gap) + 0.002f : -PanelHeight / 2 + 0.008f;
+            info.Body.rectTransform.localPosition = new Vector3(0f, (top + low) / 2, -0.002f);
+            info.Body.rectTransform.sizeDelta = new Vector2(InfoWidth - 0.022f, top - low);
+        }
+
+        public IReadOnlyList<PaletteButton> InfoButtons => infoButtons;
 
         private void Update()
         {

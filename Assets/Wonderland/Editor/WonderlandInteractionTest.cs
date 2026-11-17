@@ -343,8 +343,21 @@ namespace Wonderland.Editor
             ClickButton(hand, "Stats");
             string stats = tools.StatsText();
             bool statsTrue = palette.InfoShown && stats.Contains($"{world.People.People.Count} people") && stats.Contains($"{world.Buildings.Houses.Count} buildings");
+            // The performance panel: from Stats; a setting cycles when tapped and takes effect; Defaults puts it back.
+            PerfSettings.ResetAll();
+            ClickButton(hand, "Performance");
+            bool perfOpen = palette.InfoShown && Find("Grass: Full") != null && Find("Measure") != null;
+            int tufts = world.Cover.Count;
+            ClickButton(hand, "Grass: Full"); ClickButton(hand, "Grass: Half"); world.Cover.RebuildDirty();
+            bool grassOff = PerfSettings.Grass.Value == 2 && world.Cover.Count == 0 && Find("Grass: Off") != null;
+            ClickButton(hand, "Defaults");
+            Check(perfOpen && grassOff && PerfSettings.Grass.Value == 0 && world.Cover.Count == tufts, $"Stats opens the performance panel; Grass cycles to Off (no tufts) and Defaults brings them back ({tufts} tufts)");
+            ClickButton(hand, "World stats");
             ClickButton(hand, "Stats");
             Check(helpOpen && statsTrue && !palette.InfoShown, "Help and Stats open beside the palette (with the world's own numbers) and close again");
+            bool standIns = false;
+            foreach (var r in world.GetComponentsInChildren<Renderer>(true)) if (r.name == "Proxy" || (r.TryGetComponent<LODGroup>(out var g) && g.lodCount > 1)) standIns = true;
+            Check(!standIns, "No blocky stand-ins are drawn anywhere (they only cast the shadows)");
 
             // The card: trigger on a villager with the Life tool opens theirs, and follows them.
             ClickButton(hand, "Life");

@@ -113,7 +113,7 @@ namespace Wonderland
                 }
                 builder.ToMesh(chunk.go.name, chunk.mesh);
                 chunk.mesh.RecalculateBounds();
-                // The same trees as simple stand-ins: drawn far away, and for the shadows.
+                // The same trees as simple stand-ins, for the shadows.
                 proxyBuilder.Clear();
                 foreach (var t in list)
                 {
@@ -123,7 +123,7 @@ namespace Wonderland
                 if (!proxyMeshes.TryGetValue(k, out var proxy)) proxyMeshes[k] = proxy = new Mesh { name = chunk.go.name + " proxy" };
                 proxyBuilder.ToMesh(proxy.name, proxy);
                 proxy.RecalculateBounds();
-                MeshProxy.Attach(chunk.go.GetComponent<MeshRenderer>(), proxy, 0.09f);
+                MeshProxy.Shadow(chunk.go.GetComponent<MeshRenderer>(), proxy);
             }
         }
 

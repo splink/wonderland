@@ -125,6 +125,10 @@ namespace Wonderland
             Anchor.Floor = ScannedFloor;
             Anchor.Holding = () => Tools.PlacingWorld;
             Tools.WorldPlaced = Anchor.Pin;
+            // The Perf panel's settings: applied now, and whenever one changes.
+            Light Sun() { foreach (var l in FindObjectsByType<Light>(FindObjectsSortMode.None)) if (l.type == LightType.Directional) return l; return null; }
+            PerfSettings.Apply(Sun());
+            PerfSettings.Changed += _ => PerfSettings.Apply(Sun());
             if (System.IO.File.Exists(PerfBench.Trigger)) { var bench = gameObject.AddComponent<PerfBench>(); bench.World = World; bench.Anchor = Anchor; bench.Materials = Materials; }
             yield return Anchor.Restore();
             if (Anchor.Status.StartsWith("back")) roomNote = null;

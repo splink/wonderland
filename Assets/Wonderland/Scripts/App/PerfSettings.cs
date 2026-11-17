@@ -1,0 +1,82 @@
+using System;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.Rendering.Universal;
+
+namespace Wonderland
+{
+    /// <summary>
+    /// The performance switches in the Perf panel: each a named setting with a few values, remembered between sessions
+    /// (PlayerPrefs) and applied the moment it changes, so the live numbers beside it show what it costs. The systems
+    /// read the values here (ground cover density, the terrain shader, distant detail, villager scheduling); the
+    /// headset settings (MSAA, resolution, foveation, shadows) are applied by <see cref="Apply"/>.
+    /// </summary>
+    public static class PerfSettings
+    {
+        public sealed class Setting
+        {
+            public string Name, Key;
+            public string[] Values;
+            public int Default;
+            public string Help;
+            public int Value
+            {
+                get => Mathf.Clamp(PlayerPrefs.GetInt(Key, Default), 0, Values.Length - 1);
+                set { PlayerPrefs.SetInt(Key, Mathf.Clamp(value, 0, Values.Length - 1)); PlayerPrefs.Save(); Changed?.Invoke(this); }
+            }
+            public string Label => $"{Name}: {Values[Value]}";
+            public void Next() => Value = (Value + 1) % Values.Length;
+        }
+
+        private static Setting Make(string name, string key, int def, string help, params string[] values)
+        {
+            var s = new Setting { Name = name, Key = "wonderland.perf." + key, Values = values, Default = def, Help = help };
+            All.Add(s);
+            return s;
+        }
+
+        public static readonly List<Setting> All = new();
+        /// <summary>Raised when any setting changes (after it is stored).</summary>
+        public static event Action<Setting> Changed;
+
+        public static readonly Setting Terrain = Make("Terrain", "terrain", 0, "how the land is shaded: full detail, the same look from a noise texture, or plain colours", "Full", "Light", "Simple");
+        public static readonly Setting Msaa = Make("Edges", "msaa", 0, "anti-aliasing: smooth edges cost GPU time on every pixel", "MSAA 4x", "MSAA 2x", "Off");
+        public static readonly Setting Shadows = Make("Shadows", "shadows", 0, "the sun's shadows", "On", "Off");
+        public static readonly Setting Grass = Make("Grass", "grass", 0, "the tufts, flowers and pebbles on the meadows", "Full", "Half", "Off");
+        public static readonly Setting Detail = Make("Distance", "detail", 0, "simpler (but recognisable) buildings, trees and figures further away", "Reduced", "Full");
+        public static readonly Setting Villagers = Make("Villagers", "villagers", 0, "villagers and animals think on a schedule instead of every frame", "Smart", "Every frame");
+        public static readonly Setting Resolution = Make("Resolution", "resolution", 0, "the eye buffers' resolution", "100%", "90%", "80%", "70%");
+        public static readonly Setting Foveation = Make("Foveation", "foveation", 0, "the edges of the view drawn at lower resolution", "High", "Highest", "Medium", "Off");
+
+        public static bool SmartVillagers => Villagers.Value == 0;
+        public static bool ReducedDetail => Detail.Value == 0;
+        public static float GrassShare => Grass.Value switch { 0 => 1f, 1 => 0.5f, _ => 0f };
+
+        public static void ResetAll() { foreach (var s in All) s.Value = s.Default; }
+
+        /// <summary>Applies the headset settings (the systems pick up theirs from <see cref="Changed"/>).</summary>
+        public static void Apply(Light sun)
+        {
+            if (sun != null) sun.shadows = Shadows.Value == 0 ? LightShadows.Soft : LightShadows.None;
+            Shader.SetGlobalFloat("_WLTerrainMode", Terrain.Value);
+            if (Application.isEditor) return;   // (in the editor these would be written into the project's assets)
+            var urp = UniversalRenderPipeline.asset;
+            if (urp != null)
+            {
+                urp.msaaSampleCount = Msaa.Value switch { 0 => 4, 1 => 2, _ => 1 };
+                urp.renderScale = Resolution.Value switch { 0 => 1f, 1 => 0.9f, 2 => 0.8f, _ => 0.7f };
+            }
+            UnityEngine.XR.XRSettings.eyeTextureResolutionScale = Resolution.Value switch { 0 => 1f, 1 => 0.9f, 2 => 0.8f, _ => 0.7f };
+            try
+            {
+                OVRManager.foveatedRenderingLevel = Foveation.Value switch
+                {
+                    0 => OVRManager.FoveatedRenderingLevel.High, 1 => OVRManager.FoveatedRenderingLevel.HighTop,
+                    2 => OVRManager.FoveatedRenderingLevel.Medium, _ => OVRManager.FoveatedRenderingLevel.Off,
+                };
+                OVRManager.useDynamicFoveatedRendering = Foveation.Value != 3;
+            }
+            catch (Exception) { }
+        }
+    }
+}
