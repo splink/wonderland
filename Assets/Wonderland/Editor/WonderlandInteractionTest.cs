@@ -198,7 +198,7 @@ namespace Wonderland.Editor
             for (int i = 0; i < 20; i++) Frame(hand, spot, false, stick: new Vector2(1f, 0f));
             Frame(hand, spot, true); Frame(hand, spot, false);
             Check(world.Buildings.Houses.Count == 1, "Trigger places a house where the pointer is");
-            Check(world.Buildings.Houses.Count == 1 && Mathf.Abs(world.Buildings.Houses[0].rotation - 15f) < 0.01f, $"A flick of the stick turns the house 15 degrees before placing ({(world.Buildings.Houses.Count > 0 ? world.Buildings.Houses[0].rotation : 0f):0}°)");
+            Check(world.Buildings.Houses.Count == 1 && Mathf.Abs(world.Buildings.Houses[0].rotation - 90f) < 0.01f && Mathf.Abs(world.Buildings.Houses[0].x / BuildGrid.Size - Mathf.Round(world.Buildings.Houses[0].x / BuildGrid.Size)) < 0.01f, $"On the grid a flick of the stick turns the house a quarter turn, and it sits on a grid point ({(world.Buildings.Houses.Count > 0 ? world.Buildings.Houses[0].rotation : 0f):0}°)");
             ClickButton(hand, "Thatch");
             var spot2 = world.transform.TransformPoint(new Vector3(0.18f, world.Terrain.SurfaceAt(0.18f, -0.12f), -0.12f));
             Frame(hand, spot2, true); Frame(hand, spot2, false);

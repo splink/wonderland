@@ -61,16 +61,29 @@ namespace Wonderland
         private PathLine PlanRoad(List<Vector2> raw, int kind, bool closed, out string error)
         {
             error = null;
+            bool joinA = false, joinB = false;
             if (!closed)
             {
-                if (SnapRoad(raw[0], out var a)) raw[0] = a;
-                if (SnapRoad(raw[^1], out var b)) raw[^1] = b;
+                if (joinA = SnapRoad(raw[0], out var a)) raw[0] = a;
+                if (joinB = SnapRoad(raw[^1], out var b)) raw[^1] = b;
             }
             float tolerance = kind == (int)PathKind.Highway ? 0.03f : 0.018f;
             var corners = closed ? ClosedSimplify(raw, tolerance) : Simplify(raw, tolerance);
             // Corners closer together than a road's width are hand jitter: merge them.
             for (int i = corners.Count - 2; i >= 1; i--)
                 if ((corners[i] - corners[i - 1]).magnitude < 0.04f && corners.Count > (closed ? 3 : 2)) corners.RemoveAt(i);
+            if (BuildGrid.Snap)
+            {
+                // On the grid: corners (and free ends) on its points - near-straight strokes come out exactly straight,
+                // and roads drawn side by side parallel. Ends that join another road stay where they join it.
+                for (int i = 0; i < corners.Count; i++)
+                    if (closed || !(i == 0 && joinA || i == corners.Count - 1 && joinB)) corners[i] = BuildGrid.Point(corners[i]);
+                for (int i = corners.Count - 1; i >= 1; i--) if ((corners[i] - corners[i - 1]).sqrMagnitude < 1e-8f) corners.RemoveAt(i);
+                for (int i = corners.Count - 2; i >= 1; i--)
+                    if (Vector2.Angle(corners[i] - corners[i - 1], corners[i + 1] - corners[i]) < 1f) corners.RemoveAt(i);   // (now in line)
+                if (corners.Count < 2) { error = "Draw a little longer"; return null; }
+                if (!closed) { raw[0] = corners[0]; raw[^1] = corners[^1]; }
+            }
             if (closed && corners.Count < 3) { error = "Draw a bigger ring road"; return null; }
             var pts = Fillet(corners, closed, kind == (int)PathKind.Highway ? HighwayRadius : StreetRadius);
             pts = TrackPlanner.Resample(pts, Spacing, closed);
@@ -78,6 +91,32 @@ namespace Wonderland
             foreach (var p in pts)
                 if (terrain.EdgeAt(p.x, p.y) < 0.35f) { error = "Keep the road on the land"; return null; }
             return new PathLine { kind = kind, points = pts, closed = closed };
+        }
+
+        /// <summary>
+        /// Where a building of half-depth <paramref name="depth"/> goes beside the road nearest <paramref name="p"/>
+        /// (within reach): just behind the kerb on the pointer's side, its front (-Z) facing the road, stepped along it on
+        /// the grid. False when no road (or lane) is near.
+        /// </summary>
+        public bool AlongRoad(Vector2 p, float depth, out Vector2 at, out float yaw)
+        {
+            at = p; yaw = 0f;
+            float d = Query(p, 0.16f, k => IsCarWay(Lines[k].kind), out int li);
+            if (li < 0) return false;
+            var l = Lines[li];
+            float hw = HalfWidth(l.kind);
+            if (d > hw + depth * 2f + 0.03f) return false;
+            int best = 0; float bestD = float.MaxValue;
+            for (int i = 0; i < l.points.Count; i++) { float q2 = (l.points[i] - p).sqrMagnitude; if (q2 < bestD) { bestD = q2; best = i; } }
+            var t = Tangent(l, best);
+            var q = l.points[best] + t * Vector2.Dot(p - l.points[best], t);
+            var right = new Vector2(t.y, -t.x);
+            var normal = Vector2.Dot(p - q, right) >= 0f ? right : -right;
+            float s = Vector2.Dot(q, t);
+            q += t * (Mathf.Round(s / BuildGrid.Size) * BuildGrid.Size - s);
+            at = q + normal * (hw + depth + 0.006f);
+            yaw = Mathf.Atan2(normal.x, normal.y) * Mathf.Rad2Deg;   // (a building's front is its -Z: it looks back along -normal, at the road)
+            return true;
         }
 
         /// <summary>An end near a road: onto its end (to carry it on) or onto its middle (a junction).</summary>
@@ -253,6 +292,9 @@ namespace Wonderland
             at = a + r * t;
             return true;
         }
+
+        /// <summary>Whether a point is in (or within <paramref name="margin"/> of) a junction where three or more roads meet.</summary>
+        public bool NearJunction(Vector2 p, float margin) => InJunction(p, margin);
 
         /// <summary>How far a point is inside the nearest junction's patch (0 outside), for leaving out markings and kerbs.</summary>
         private bool InJunction(Vector2 p, float margin)

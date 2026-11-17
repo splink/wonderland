@@ -14,6 +14,8 @@ namespace Wonderland.Editor
         /// </summary>
         private static void RoadJourney()
         {
+            bool gridWas = BuildGrid.Snap;
+            BuildGrid.Snap = true;
             var w = Scratch("Roads", 500f);
             var t = w.Terrain;
             var rng = new Rng(5);
@@ -92,6 +94,21 @@ namespace Wonderland.Editor
             w.Undo();
             int back = w.Traffic.Vehicles.FindAll(v => v.Roams).Count;
             Check(after == before2 - 1 && back == before2, $"The eraser takes a vehicle away (\"{erased}\") and Undo brings it back");
+            // The grid: an askew stroke comes out straight and on the grid; a building beside it faces it; off, as drawn.
+            string e6 = w.BuildPath(Wobbly(new Vector2(-0.7f, 0.33f), new Vector2(-0.25f, 0.355f)), PathKind.Road);
+            var gridRoad = w.Paths.Lines[^1];
+            float skew = 0f; foreach (var p in gridRoad.points) skew = Mathf.Max(skew, Mathf.Abs(p.y - gridRoad.points[0].y));
+            bool onGrid = Mathf.Abs(gridRoad.points[0].y / BuildGrid.Size - Mathf.Round(gridRoad.points[0].y / BuildGrid.Size)) < 0.01f;
+            Check(e6 == null && skew < 0.0005f && onGrid, $"On the grid an askew stroke comes out straight, on a grid line ({skew * 1000f:0.0} mm off straight)");
+            bool beside = w.Paths.AlongRoad(new Vector2(-0.45f, 0.42f), Catalog.Get(Catalog.Bakery).Half.y, out var at, out float yaw);
+            var front = new Vector2(-Mathf.Sin(yaw * Mathf.Deg2Rad), -Mathf.Cos(yaw * Mathf.Deg2Rad));   // (a building's front is its -Z)
+            Check(beside && Vector2.Dot(front, new Vector2(at.x, 0.35f) - at) > 0.07f && at.y > 0.36f && at.y < 0.45f, $"A building beside it faces the road from just behind the kerb (facing {yaw:0}°, at {at.y * 100f:0.0} cm)");
+            w.Undo();
+            BuildGrid.Snap = false;
+            string e7 = w.BuildPath(Wobbly(new Vector2(-0.7f, 0.33f), new Vector2(-0.25f, 0.355f)), PathKind.Road);
+            var free = w.Paths.Lines[^1];
+            Check(e7 == null && Mathf.Abs(free.points[^1].y - free.points[0].y) > 0.015f, "With the grid off the stroke keeps its angle");
+            BuildGrid.Snap = gridWas;
             Object.DestroyImmediate(w.gameObject);
         }
 
@@ -204,6 +221,15 @@ namespace Wonderland.Editor
             WonderlandRenders.Capture(cam, "editor-roads-highway.png", 1920, 1200);
             cam.transform.position = c + new Vector3(-0.3f, 0.16f, -0.52f); cam.transform.LookAt(c + new Vector3(-0.47f, 0.0f, -0.33f)); cam.fieldOfView = 40f;
             WonderlandRenders.Capture(cam, "editor-roads-bend.png", 1920, 1200);
+            // The grid around the pointer, and a row of shops placed beside the road the way the Build tool places them.
+            foreach (var (id, x) in new[] { (Catalog.Townhouse, -0.62f), (Catalog.Bakery, -0.48f), (Catalog.Grocer, -0.34f) })
+                if (w.Paths.AlongRoad(new Vector2(x, -0.12f), Catalog.Get(id).Half.y, out var at, out float yaw))
+                    w.PlaceHouse(new HouseInstance { x = at.x, z = at.y, rotation = yaw, variant = id });
+            BuildGrid.Show(true);
+            w.TerrainView.SetBrush(new Vector3(-0.4f, w.Terrain.SurfaceAt(-0.4f, -0.2f), -0.2f), 0.03f, new Color(0.6f, 1f, 0.5f), 0.6f);
+            cam.transform.position = c + new Vector3(-0.45f, 0.3f, -0.62f); cam.transform.LookAt(c + new Vector3(-0.47f, 0.0f, -0.12f)); cam.fieldOfView = 44f;
+            WonderlandRenders.Capture(cam, "editor-grid.png", 1920, 1200);
+            BuildGrid.Show(false);
             Debug.Log($"Road renders: {w.Paths.Lines.Count} roads, {w.Paths.Junctions.Count} junctions, {w.Traffic.Vehicles.Count} vehicles, {w.Traffic.LightStops} stops at lights, {w.Traffic.RedRuns} red runs");
             Object.DestroyImmediate(w.gameObject);
             if (Application.isBatchMode) EditorApplication.Exit(0);

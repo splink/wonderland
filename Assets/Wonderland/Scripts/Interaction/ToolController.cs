@@ -314,6 +314,7 @@ namespace Wonderland
                         var cat = (PlaceCategory)c;
                         o.Add(new PaletteUI.Option(Catalog.CategoryNames[c], BuildCategory == cat, () => SelectCategory(cat)));
                     }
+                    o.Add(GridChip());
                     foreach (int id in Catalog.InCategory(BuildCategory))
                     {
                         int v = id;
@@ -357,6 +358,7 @@ namespace Wonderland
                         var k = kind;
                         o.Add(new PaletteUI.Option(PathSystem.Names[(int)k], PathKind == k && PlacingVehicle == null, () => { PathKind = k; PlacingVehicle = null; RefreshOptions(); }));
                     }
+                    o.Add(GridChip());
                     // The second row: cars and lorries to put on the roads.
                     foreach (var vk in VehicleFactory.Placeable)
                     {
@@ -501,10 +503,12 @@ namespace Wonderland
             var stick = input.Stick;
             if (Tool == Tool.Houses)
             {
-                // Turning what is being placed: a flick turns it 15 degrees; holding the stick over turns it smoothly.
+                // Turning what is being placed: a flick turns it 15 degrees (on the grid: a quarter turn); holding the stick
+                // over turns it smoothly (off the grid).
                 if (Mathf.Abs(stick.x) > 0.6f)
                 {
-                    if (turnHeld == 0f) houseRotation = Mathf.Round((houseRotation + Mathf.Sign(stick.x) * 15f) / 15f) * 15f;
+                    if (BuildGrid.Snap) { if (turnHeld == 0f) houseRotation = BuildGrid.Quarter(houseRotation + Mathf.Sign(stick.x) * 90f); }
+                    else if (turnHeld == 0f) houseRotation = Mathf.Round((houseRotation + Mathf.Sign(stick.x) * 15f) / 15f) * 15f;
                     else if (turnHeld > 0.45f) houseRotation += stick.x * 60f * dt;
                     turnHeld += dt;
                 }
@@ -547,6 +551,7 @@ namespace Wonderland
                 case Tool.Eraser: EraserTool(input, hit, local, localOrigin, localDir, dt, ref colour); break;
             }
             if (Tool != Tool.Houses) ghost.gameObject.SetActive(false);
+            BuildGrid.Show(Tool == Tool.Houses || Tool == Tool.Paths && PlacingVehicle == null && PathSystem.IsRoad((int)PathKind));
             if (facing != null && (Tool != Tool.Houses || !ghost.gameObject.activeSelf)) facing.enabled = false;
             if (Tool != Tool.Track || drawn.Count == 0) HideEntryArrows();
             if (Tool != Tool.Train) { hoveredTrain = null; if (World.Trains.Highlighted != null) World.Trains.Highlighted = null; }
@@ -703,6 +708,14 @@ namespace Wonderland
         }
 
         /// <summary>Draws roads, lanes, paths, trails, fences, hedges and walls - the same gesture as the railway and streams.</summary>
+        /// <summary>The Grid chip (Roads and Build tools): snapping to the building grid on or off.</summary>
+        private PaletteUI.Option GridChip() => new(BuildGrid.Snap ? "Grid" : "No grid", BuildGrid.Snap, () =>
+        {
+            BuildGrid.Snap = !BuildGrid.Snap;
+            Say(BuildGrid.Snap ? "Grid on: roads come out straight and square, buildings line up along the roads" : "Grid off: draw and place freely");
+            RefreshOptions();
+        });
+
         /// <summary>The order of the Roads tool's chips: roads first, then country ways, then fences.</summary>
         private static readonly PathKind[] WayOrder = { PathKind.Road, PathKind.Highway, PathKind.Lane, PathKind.Footpath, PathKind.Trail, PathKind.Fence, PathKind.Hedge, PathKind.Wall };
 
@@ -1071,6 +1084,15 @@ namespace Wonderland
                 }
             }
             if (!hit) { ghost.gameObject.SetActive(false); World.TerrainView.HideBrush(); return; }
+            if (BuildGrid.Snap && !Catalog.IsStation(HouseVariant))
+            {
+                // On the grid: beside a road, facing it and lined up along it; elsewhere on the grid, in quarter turns.
+                var bp = Catalog.Get(HouseVariant);
+                var p2 = new Vector2(local.x, local.z);
+                if (!bp.Small && World.Paths.AlongRoad(p2, bp.Half.y, out var beside, out float facingRoad)) { p2 = beside; houseRotation = facingRoad; }
+                else { p2 = BuildGrid.Point(p2); houseRotation = BuildGrid.Quarter(houseRotation); }
+                local = new Vector3(p2.x, World.Terrain.SurfaceAt(p2.x, p2.y), p2.y);
+            }
             var candidate = new HouseInstance { x = local.x, z = local.z, rotation = houseRotation, variant = HouseVariant, style = houseStyle };
             string error;
             if (Catalog.IsStation(HouseVariant))

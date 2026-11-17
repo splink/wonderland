@@ -24,9 +24,10 @@ namespace Wonderland.Editor
 
         public static void Test()
         {
-            Report.Clear(); failures = 0;
+            Report.Clear(); failures = 0; BuildGrid.Snap = false;   // (journeys drawn by hand; the road journey checks the grid)
             try { Run(out _); }
             catch (Exception e) { Fail("Exception: " + e); }
+            BuildGrid.Snap = true;
             Report.AppendLine(failures == 0 ? "RESULT: PASS" : $"RESULT: FAIL ({failures})");
             Directory.CreateDirectory("docs");
             File.WriteAllText("docs/test-results.txt", Report.ToString());
@@ -37,9 +38,10 @@ namespace Wonderland.Editor
         /// <summary>Just the village's life and work (a quicker loop while working on them): Logs/village-results.txt.</summary>
         public static void TestVillage()
         {
-            Report.Clear(); failures = 0;
+            Report.Clear(); failures = 0; BuildGrid.Snap = false;   // (journeys drawn by hand; the road journey checks the grid)
             try { VillageLifeJourney(); VillageWorkJourney(); DayJourney(); }
             catch (Exception e) { Fail("Exception: " + e); }
+            BuildGrid.Snap = true;
             Report.AppendLine(failures == 0 ? "RESULT: PASS" : $"RESULT: FAIL ({failures})");
             File.WriteAllText("Logs/village-results.txt", Report.ToString());
             Debug.Log("Wonderland village test\n" + Report);
@@ -49,9 +51,10 @@ namespace Wonderland.Editor
         /// <summary>Just the livelier town (traffic, emergencies, pets, CCTV, sound...): Logs/town-results.txt.</summary>
         public static void TestTown()
         {
-            Report.Clear(); failures = 0;
+            Report.Clear(); failures = 0; BuildGrid.Snap = false;   // (journeys drawn by hand; the road journey checks the grid)
             try { TownJourney(); WeatherJourney(); }
             catch (Exception e) { Fail("Exception: " + e); }
+            BuildGrid.Snap = true;
             Report.AppendLine(failures == 0 ? "RESULT: PASS" : $"RESULT: FAIL ({failures})");
             File.WriteAllText("Logs/town-results.txt", Report.ToString());
             Debug.Log("Wonderland town test\n" + Report);
@@ -61,9 +64,10 @@ namespace Wonderland.Editor
         /// <summary>Just the roads and the player's traffic: Logs/roads-results.txt.</summary>
         public static void TestRoads()
         {
-            Report.Clear(); failures = 0;
+            Report.Clear(); failures = 0; BuildGrid.Snap = false;   // (journeys drawn by hand; the road journey checks the grid)
             try { RoadJourney(); }
             catch (Exception e) { Fail("Exception: " + e); }
+            BuildGrid.Snap = true;
             Report.AppendLine(failures == 0 ? "RESULT: PASS" : $"RESULT: FAIL ({failures})");
             File.WriteAllText("Logs/roads-results.txt", Report.ToString());
             Debug.Log("Wonderland roads test\n" + Report);
@@ -1272,7 +1276,7 @@ namespace Wonderland.Editor
         public static void Renders()
         {
             ShaderUtil.allowAsyncCompilation = false;
-            Report.Clear(); failures = 0;
+            Report.Clear(); failures = 0; BuildGrid.Snap = false;   // (journeys drawn by hand; the road journey checks the grid)
             var world = Run(out _);
             world.Forest.RebuildDirty();
             world.Cover.RebuildDirty();

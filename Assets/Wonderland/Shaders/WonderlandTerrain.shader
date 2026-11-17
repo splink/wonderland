@@ -41,6 +41,7 @@ Shader "Wonderland/Terrain"
             #pragma multi_compile_fragment _ _WL_TERRAIN_LIGHT _WL_TERRAIN_SIMPLE
 
             TEXTURE2D(_WLNoiseTex); SAMPLER(sampler_WLNoiseTex);
+            float4 _WLGrid;   // the building grid: x = cell size, y = strength (0: hidden)
             #pragma multi_compile_instancing
 
             struct Attributes
@@ -180,6 +181,15 @@ Shader "Wonderland/Terrain"
                 half3 colour = WL_Shade(linearAlbedo, i.positionWS, normalize(i.normalWS));
 
                 // Brush: glowing ring with a soft inner fill and halo.
+                // The building grid, faintly, around the pointer while roads or buildings are being placed.
+                if (_WLGrid.y > 0.001)
+                {
+                    float2 g = abs(frac(p / _WLGrid.x + 0.5) - 0.5) * _WLGrid.x;
+                    float gridLine = 1.0 - smoothstep(0.0003, 0.0008, min(g.x, g.y));
+                    float near = 1.0 - smoothstep(0.12, 0.4, distance(p, _BrushPos.xz));
+                    colour = lerp(colour, colour * 1.35 + 0.035, gridLine * near * _WLGrid.y * 0.55);
+                }
+
                 if (_BrushColor.a > 0.001)
                 {
                     float d = distance(p, _BrushPos.xz);

@@ -20,7 +20,7 @@ PASS  Turn round moves the engine to the other end of its train (25 cm)
 PASS  Stop all stops the trains
 PASS  Start all sets them running again
 PASS  Trigger places a house where the pointer is
-PASS  A flick of the stick turns the house 15 degrees before placing (15°)
+PASS  On the grid a flick of the stick turns the house a quarter turn, and it sits on a grid point (90°)
 PASS  House type chips choose the variant
 PASS  B undoes the last house
 PASS  Eraser tap removes the house under the pointer
@@ -42,8 +42,8 @@ PASS  Save and Load keep several worlds: saved as World 2 and World 3, and World
 PASS  Stats opens the performance panel; Grass cycles to Off (no tufts) and Defaults brings them back (5538 tufts)
 PASS  Help and Stats open beside the palette (with the world's own numbers) and close again
 PASS  No blocky stand-ins anywhere: further away the same buildings and trees are drawn with less detail (22 simpler levels)
-PASS  Trigger on a villager opens their card instead of placing another (Milo)
-PASS  With any tool, pointing at a villager names them and grip opens their card ("Milo, between jobs - looking about - no home yet  ·  grip: their card")
+PASS  Trigger on a villager opens their card instead of placing another (Hugo)
+PASS  With any tool, pointing at a villager names them and grip opens their card ("Hugo, child - looking about - no home yet  ·  grip: their card")
 PASS  Grip on a building opens its card ("CCTV camera")
 PASS  The village clock is always shown (15:00)
 PASS  Undo takes a step back and Redo puts it back

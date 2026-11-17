@@ -437,14 +437,15 @@ namespace Wonderland
             float half = VehicleFactory.Length(v.Kind) * 0.5f, limit = float.MaxValue;
             bool patient = v.Pushing <= 0f;
             int queue = 0;
+            bool crossing = world.Paths.NearJunction(v.Position, 0.02f);   // (in a junction paths cross at angles: look wider)
             if (patient)
                 foreach (var o in Vehicles)
                 {
                     if (o == v || o.State != Mode.Driving && o.State != Mode.AtScene && !o.Roams) continue;
-                    float gap = GapTo(v, o);
+                    float gap = GapTo(v, o, crossing);
                     if (gap == float.MaxValue) continue;
                     if (v.Siren && !o.Siren && gap > 0.02f) continue;   // others make way for a siren
-                    if (v.Id < o.Id && GapTo(o, v) < float.MaxValue) continue;   // each in the other's way (crossing paths): one goes first
+                    if (v.Id < o.Id && GapTo(o, v, crossing) < float.MaxValue) continue;   // each in the other's way (crossing paths): one goes first
                     float allowed = gap < 0.012f ? 0f : Mathf.Max(o.Speed * Mathf.Max(0f, Mathf.Cos((o.Heading - v.Heading) * Mathf.Deg2Rad)), (gap - 0.012f) * 1.5f);
                     if (allowed < limit && (o.AtLight || o.Queue > 0)) queue = o.AtLight ? 1 : o.Queue + 1;
                     limit = Mathf.Min(limit, allowed);
@@ -467,8 +468,9 @@ namespace Wonderland
         /// The gap from <paramref name="v"/>'s nose to <paramref name="o"/>'s body when that is in its way just ahead
         /// (anywhere from tail to nose: a long bus turning across the lane is still in the way), else float.MaxValue.
         /// </summary>
-        private static float GapTo(Vehicle v, Vehicle o)
+        private static float GapTo(Vehicle v, Vehicle o, bool crossing)
         {
+            float wide = crossing ? 0.019f : 0.013f;
             var fwd = new Vector2(Mathf.Sin(v.Heading * Mathf.Deg2Rad), Mathf.Cos(v.Heading * Mathf.Deg2Rad));
             var of = new Vector2(Mathf.Sin(o.Heading * Mathf.Deg2Rad), Mathf.Cos(o.Heading * Mathf.Deg2Rad));
             float half = VehicleFactory.Length(v.Kind) * 0.5f, halfO = VehicleFactory.Length(o.Kind) * 0.5f, gap = float.MaxValue;
@@ -476,7 +478,7 @@ namespace Wonderland
             {
                 var d = o.Position + of * (halfO * k / 2f) - v.Position;
                 float ahead = Vector2.Dot(d, fwd), side = Mathf.Abs(d.x * fwd.y - d.y * fwd.x);
-                if (ahead <= 0f || side > 0.013f || ahead > 0.09f + halfO) continue;
+                if (ahead <= 0f || side > wide || ahead > 0.09f + halfO) continue;
                 gap = Mathf.Min(gap, ahead - half);
             }
             return gap;
