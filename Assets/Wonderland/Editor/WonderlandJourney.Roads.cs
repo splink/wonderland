@@ -202,6 +202,8 @@ namespace Wonderland.Editor
             WonderlandRenders.Capture(cam, "editor-roads-crossroads.png", 1920, 1200);
             cam.transform.position = c + new Vector3(-0.2f, 0.14f, 0.3f); cam.transform.LookAt(c + new Vector3(0.05f, 0.01f, 0.56f)); cam.fieldOfView = 44f;
             WonderlandRenders.Capture(cam, "editor-roads-highway.png", 1920, 1200);
+            cam.transform.position = c + new Vector3(-0.3f, 0.16f, -0.52f); cam.transform.LookAt(c + new Vector3(-0.47f, 0.0f, -0.33f)); cam.fieldOfView = 40f;
+            WonderlandRenders.Capture(cam, "editor-roads-bend.png", 1920, 1200);
             Debug.Log($"Road renders: {w.Paths.Lines.Count} roads, {w.Paths.Junctions.Count} junctions, {w.Traffic.Vehicles.Count} vehicles, {w.Traffic.LightStops} stops at lights, {w.Traffic.RedRuns} red runs");
             Object.DestroyImmediate(w.gameObject);
             if (Application.isBatchMode) EditorApplication.Exit(0);

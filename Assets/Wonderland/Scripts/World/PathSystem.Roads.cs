@@ -272,70 +272,138 @@ namespace Wonderland
             return onDeck ? deck : terrain.SurfaceAt(q.x, q.y);
         }
 
-        /// <summary>A road's surface: asphalt between kerbs, edge lines and a centre line (left out inside junctions).</summary>
+        /// <summary>A point along a road for its mesh: where, which way, how high the (flat) road surface is there, how far along.</summary>
+        private struct RoadSample { public Vector2 P, T; public float Y, S; public bool Junction; }
+
+        private const float KerbHeight = 0.0012f, Skirt = 0.004f, RoadLift = 0.0016f;
+
+        /// <summary>
+        /// The road's centre line smoothed for drawing: between the 1 cm points, extra samples on a Catmull-Rom curve
+        /// wherever it bends (no more than ~3 degrees a step, so the kerbs of a tight corner are round, not faceted).
+        /// Each sample carries the height of a flat cross-section: the highest ground across the road, so no bump of
+        /// the land shows through it (on a bridge, the deck).
+        /// </summary>
+        private List<RoadSample> RoadSamples(PathLine l)
+        {
+            var pts = l.points;
+            int n = pts.Count;
+            var dense = new List<Vector2>(n * 2);
+            Vector2 P(int i) => l.closed ? pts[(i % n + n) % n] : pts[Mathf.Clamp(i, 0, n - 1)];
+            int segs = l.closed ? n : n - 1;
+            for (int i = 0; i < segs; i++)
+            {
+                Vector2 p0 = P(i - 1), p1 = P(i), p2 = P(i + 1), p3 = P(i + 2);
+                float bend = Vector2.Angle(p1 - p0, p2 - p1) + Vector2.Angle(p2 - p1, p3 - p2);
+                int sub = Mathf.Clamp(Mathf.CeilToInt(bend * 0.5f / 3f), 1, 8);
+                for (int k = 0; k < sub; k++)
+                {
+                    float t = k / (float)sub, t2 = t * t, t3 = t2 * t;
+                    dense.Add(0.5f * (2f * p1 + (-p0 + p2) * t + (2f * p0 - 5f * p1 + 4f * p2 - p3) * t2 + (-p0 + 3f * p1 - 3f * p2 + p3) * t3));
+                }
+            }
+            if (!l.closed) dense.Add(pts[n - 1]);
+            float hw = HalfWidth(l.kind);
+            var samples = new List<RoadSample>(dense.Count);
+            float s = 0f;
+            for (int i = 0; i < dense.Count; i++)
+            {
+                int m = dense.Count;
+                var t = (l.closed ? dense[(i + 1) % m] - dense[(i - 1 + m) % m] : dense[Mathf.Min(i + 1, m - 1)] - dense[Mathf.Max(i - 1, 0)]);
+                t = t.sqrMagnitude > 1e-12f ? t.normalized : Vector2.up;
+                var right = new Vector2(t.y, -t.x);
+                float y = float.MinValue;
+                for (int k = -2; k <= 2; k++) y = Mathf.Max(y, RoadHeight(dense[i] + right * (hw * 0.5f * k), out _));
+                if (i > 0) s += (dense[i] - dense[i - 1]).magnitude;
+                samples.Add(new RoadSample { P = dense[i], T = t, Y = y, S = s, Junction = InJunction(dense[i], 0.004f) });
+            }
+            // A gentle smoothing along the road, never lowering it (bumps in the ground stay underneath).
+            var ys = new float[samples.Count];
+            for (int i = 0; i < samples.Count; i++)
+            {
+                float best = samples[i].Y;
+                for (int k = -3; k <= 3; k++) { int j = l.closed ? (i + k + samples.Count) % samples.Count : Mathf.Clamp(i + k, 0, samples.Count - 1); best = Mathf.Max(best, samples[j].Y - Mathf.Abs(k) * 0.0006f); }
+                ys[i] = best;
+            }
+            for (int i = 0; i < samples.Count; i++) { var r = samples[i]; r.Y = ys[i]; samples[i] = r; }
+            return samples;
+        }
+
+        /// <summary>
+        /// A road's surface: flat asphalt between kerbs (with a skirt under each kerb so no gap shows on a slope), white
+        /// edge lines, and a dashed centre line (a highway: lane lines and a double yellow line). Markings and kerbs are
+        /// left out inside junctions.
+        /// </summary>
         private void RoadSurface(MeshBuilder b, MeshBuilder props, PathLine l)
         {
-            int n = l.points.Count;
-            if (n < 2) return;
+            if (l.points.Count < 2) return;
             float hw = HalfWidth(l.kind);
             bool highway = l.kind == (int)PathKind.Highway;
-            float lift = 0.0016f + (highway ? 0.0002f : 0f);
-            // The cross-section, from left kerb to right kerb: offsets and whether that strip is kerb (raised, pale).
-            float[] across = { -hw, -hw + KerbWidth, hw - KerbWidth, hw };
-            int start = b.VertexCount;
-            for (int i = 0; i < n; i++)
+            var samples = RoadSamples(l);
+            // Cross-section strips, left to right: skirt, kerb top, kerb face, asphalt, kerb face, kerb top, skirt.
+            // (offset, height above the road, and the next corner's) - kerbs drop to road level inside junctions.
+            (float x0, float h0, float x1, float h1, bool kerb)[] strips =
             {
-                var p = l.points[i];
-                var t = Tangent(l, i);
-                var right = new Vector2(t.y, -t.x);
-                bool junction = InJunction(p, 0.004f);
-                for (int k = 0; k < across.Length; k++)
+                (-hw, -Skirt, -hw, KerbHeight, true), (-hw, KerbHeight, -hw + KerbWidth, KerbHeight, true), (-hw + KerbWidth, KerbHeight, -hw + KerbWidth, 0f, true),
+                (-hw + KerbWidth, 0f, hw - KerbWidth, 0f, false),
+                (hw - KerbWidth, 0f, hw - KerbWidth, KerbHeight, true), (hw - KerbWidth, KerbHeight, hw, KerbHeight, true), (hw, KerbHeight, hw, -Skirt, true),
+            };
+            int count = samples.Count, last = l.closed ? count : count - 1;
+            foreach (var (x0, h0, x1, h1, kerb) in strips)
+            {
+                int start = b.VertexCount;
+                for (int i = 0; i < count; i++)
                 {
-                    var q = p + right * across[k];
-                    bool kerb = !junction && (k == 0 || k == 3);
-                    float y = RoadHeight(q, out _) + lift + (kerb ? 0.0012f : 0f);
-                    var colour = (k == 0 || k == 3) && !junction ? Pal.Shade(KerbStone, 0.95f + 0.1f * Noise.Hash(i / 3, k, 7)) : Pal.Shade(Asphalt, 0.96f + 0.06f * Noise.Hash(i / 2, k, 3));
-                    b.AddVertex(new Vector3(q.x, y, q.y), Vector3.up, colour);
+                    var sm = samples[i];
+                    var right = new Vector2(sm.T.y, -sm.T.x);
+                    bool flat = sm.Junction;   // inside a junction: all asphalt at road level
+                    float a = flat ? Mathf.Min(h0, 0f) : h0, c = flat ? Mathf.Min(h1, 0f) : h1;
+                    float y = sm.Y + RoadLift;
+                    var colour = kerb && !flat ? Pal.Shade(KerbStone, 0.95f + 0.1f * Noise.Hash(i / 4, (int)(x0 * 1000f), 7)) : Pal.Shade(Asphalt, 0.97f + 0.05f * Noise.Hash(i / 3, 1, 3));
+                    var q0 = sm.P + right * x0; var q1 = sm.P + right * x1;
+                    var p0 = new Vector3(q0.x, y + a, q0.y); var p1 = new Vector3(q1.x, y + c, q1.y);
+                    var along = new Vector3(sm.T.x, 0f, sm.T.y);
+                    var normal = Vector3.Cross(p1 - p0, along);
+                    if (normal.sqrMagnitude < 1e-14f) normal = Vector3.up; else normal.Normalize();
+                    if (Vector3.Dot(normal, Vector3.up) < -0.01f || (Mathf.Abs(normal.y) < 0.01f && Vector3.Dot(normal, new Vector3(right.x, 0f, right.y) * Mathf.Sign(x0 + x1 + 1e-6f)) < 0f)) normal = -normal;
+                    b.AddVertex(p0, normal, colour); b.AddVertex(p1, normal, colour);
                 }
-                if (i > 0)
-                    for (int k = 0; k < across.Length - 1; k++)
-                    {
-                        int a = start + (i - 1) * across.Length + k, c = start + i * across.Length + k;
-                        b.AddTriangle(a, c + 1, a + 1); b.AddTriangle(a, c, c + 1);
-                    }
+                for (int i = 0; i < last; i++)
+                {
+                    int i0 = start + i * 2, i1 = start + ((i + 1) % count) * 2;
+                    var v0 = b.Vertices[i0]; var v1 = b.Vertices[i0 + 1]; var v2 = b.Vertices[i1];
+                    // Wound so the face points along its normal.
+                    if (Vector3.Dot(Vector3.Cross(v1 - v0, v2 - v0), b.Normals[i0]) >= 0f) { b.AddTriangle(i0, i0 + 1, i1 + 1); b.AddTriangle(i0, i1 + 1, i1); }
+                    else { b.AddTriangle(i0, i1 + 1, i0 + 1); b.AddTriangle(i0, i1, i1 + 1); }
+                }
             }
-            if (l.closed)
-                for (int k = 0; k < across.Length - 1; k++)
-                {
-                    int a = start + (n - 1) * across.Length + k, c = start + k;
-                    b.AddTriangle(a, c + 1, a + 1); b.AddTriangle(a, c, c + 1);
-                }
-            b.RecalculateNormals(start);
-            // Markings: painted strips a hair above the asphalt.
-            float paintLift = lift + 0.0003f;
-            Strip(b, l, hw - KerbWidth - 0.0016f, 0.0011f, Paint, paintLift, 0f, 0f);    // edge lines
-            Strip(b, l, -(hw - KerbWidth - 0.0016f), 0.0011f, Paint, paintLift, 0f, 0f);
+            // Markings, painted a hair above the asphalt, measured exactly along the road.
+            float edge = hw - KerbWidth - 0.0016f;
+            PaintLine(b, samples, l.closed, edge, 0.0011f, Paint, 0f, 0f);
+            PaintLine(b, samples, l.closed, -edge, 0.0011f, Paint, 0f, 0f);
             if (highway)
             {
-                Strip(b, l, 0.0012f, 0.0009f, Yellow, paintLift, 0f, 0f);                    // the double yellow line
-                Strip(b, l, -0.0012f, 0.0009f, Yellow, paintLift, 0f, 0f);
-                Strip(b, l, 0.021f, 0.001f, Paint, paintLift, 0.018f, 0.014f);                // lane lines
-                Strip(b, l, -0.021f, 0.001f, Paint, paintLift, 0.018f, 0.014f);
+                PaintLine(b, samples, l.closed, 0.0012f, 0.0009f, Yellow, 0f, 0f);
+                PaintLine(b, samples, l.closed, -0.0012f, 0.0009f, Yellow, 0f, 0f);
+                PaintLine(b, samples, l.closed, 0.021f, 0.001f, Paint, 0.018f, 0.014f);
+                PaintLine(b, samples, l.closed, -0.021f, 0.001f, Paint, 0.018f, 0.014f);
             }
-            else Strip(b, l, 0f, 0.0011f, Paint, paintLift, 0.016f, 0.012f);                  // the dashed centre line
+            else PaintLine(b, samples, l.closed, 0f, 0.0011f, Paint, 0.016f, 0.012f);
             // Street lamps along a street now and then, on alternating sides.
             if (!highway)
-                for (int i = 40, side = 1; i < n - 10; i += 70, side = -side)
+            {
+                int side = 1;
+                for (float at = 0.4f; at < samples[^1].S - 0.1f; at += 0.7f, side = -side)
                 {
-                    var p = l.points[i];
-                    if (InJunction(p, 0.03f)) continue;
-                    var t = Tangent(l, i);
-                    var q = p + new Vector2(t.y, -t.x) * side * (hw + 0.004f);
+                    int i = samples.FindIndex(x => x.S >= at);
+                    if (i < 0 || samples[i].Junction || InJunction(samples[i].P, 0.03f)) continue;
+                    var sm = samples[i];
+                    var q = sm.P + new Vector2(sm.T.y, -sm.T.x) * side * (hw + 0.004f);
                     float y = RoadHeight(q, out bool deck);
                     if (deck) continue;
                     props.AddCylinder(new Vector3(q.x, y, q.y), 0.0009f, 0.0007f, 0.04f, 5, Pal.Hex("#3A3F46"), Pal.Hex("#3A3F46"), false);
                     props.AddBlob(new Vector3(q.x, y + 0.041f, q.y), new Vector3(0.0028f, 0.0018f, 0.0028f), 1, 0f, i, (_, __) => Pal.Glow(Pal.Hex("#FFE9B0")));
                 }
+            }
         }
 
         private static Vector2 Tangent(PathLine l, int i)
@@ -346,29 +414,48 @@ namespace Wonderland
         }
 
         /// <summary>
-        /// A painted line along a road at <paramref name="offset"/> from its middle: solid, or dashed (<paramref name="dash"/>
-        /// painted, <paramref name="gap"/> bare); left out inside junctions.
+        /// A painted line along the road at <paramref name="offset"/> from its middle, as one continuous strip: solid, or
+        /// dashed (<paramref name="dash"/> painted, <paramref name="gap"/> bare, measured exactly along the road, so every
+        /// dash is the same length on a straight or a bend). Left out inside junctions.
         /// </summary>
-        private void Strip(MeshBuilder b, PathLine l, float offset, float width, Color colour, float lift, float dash, float gap)
+        private static void PaintLine(MeshBuilder b, List<RoadSample> samples, bool closed, float offset, float width, Color colour, float dash, float gap)
         {
-            int n = l.points.Count;
-            float along = 0f;
-            int last = l.closed ? n : n - 1;
+            const float lift = RoadLift + 0.0003f;
+            int count = samples.Count, last = closed ? count : count - 1;
+            float period = dash + gap;
+            bool On(float s) => dash <= 0f || Mathf.Repeat(s, period) < dash;
+            Vector3 Edge(RoadSample sm, float side)
+            {
+                var right = new Vector2(sm.T.y, -sm.T.x);
+                var q = sm.P + right * (offset + side * width / 2);
+                return new Vector3(q.x, sm.Y + lift, q.y);
+            }
+            RoadSample Lerp(RoadSample a, RoadSample c, float t) => new()
+            {
+                P = Vector2.Lerp(a.P, c.P, t), T = Vector2.Lerp(a.T, c.T, t).normalized, Y = Mathf.Lerp(a.Y, c.Y, t), S = Mathf.Lerp(a.S, c.S, t),
+            };
+            void Quad(RoadSample a, RoadSample c)
+            {
+                var va = Edge(a, -1f); var vb = Edge(a, 1f); var vc = Edge(c, 1f); var vd = Edge(c, -1f);
+                if (Vector3.Cross(vb - va, vc - va).y >= 0f) b.AddQuad(va, vb, vc, vd, colour); else b.AddQuad(va, vd, vc, vb, colour);
+            }
             for (int i = 0; i < last; i++)
             {
-                var p0 = l.points[i]; var p1 = l.points[(i + 1) % n];
-                float seg = (p1 - p0).magnitude;
-                float mid = along + seg * 0.5f;
-                along += seg;
-                if (dash > 0f && (mid % (dash + gap)) > dash) continue;
-                if (InJunction(p0, 0.006f) || InJunction(p1, 0.006f)) continue;
-                var t0 = Tangent(l, i); var t1 = Tangent(l, (i + 1) % n);
-                var r0 = new Vector2(t0.y, -t0.x); var r1 = new Vector2(t1.y, -t1.x);
-                var a0 = p0 + r0 * (offset - width / 2); var b0 = p0 + r0 * (offset + width / 2);
-                var a1 = p1 + r1 * (offset - width / 2); var b1 = p1 + r1 * (offset + width / 2);
-                Vector3 V(Vector2 q) => new(q.x, RoadHeight(q, out _) + lift, q.y);
-                var va = V(a0); var vb = V(b0); var vc = V(b1); var vd = V(a1);
-                if (Vector3.Cross(vb - va, vc - va).y >= 0f) b.AddQuad(va, vb, vc, vd, colour); else b.AddQuad(va, vd, vc, vb, colour);
+                var a = samples[i]; var c = samples[(i + 1) % count];
+                if (a.Junction || c.Junction) continue;
+                float s0 = a.S, s1 = closed && i == count - 1 ? a.S + (c.P - a.P).magnitude : c.S;
+                if (s1 - s0 < 1e-6f) continue;
+                if (dash <= 0f) { Quad(a, c); continue; }
+                // Split this piece where dashes start and end.
+                // (in steps of at least 0.05 mm: a dash edge landing exactly on a sample never stalls the walk)
+                float from = s0;
+                for (int guard = 0; from < s1 - 1e-5f && guard < 64; guard++)
+                {
+                    float phase = Mathf.Repeat(from, period);
+                    float to = Mathf.Min(s1, from + Mathf.Max(0.00005f, phase < dash ? dash - phase : period - phase));
+                    if (On(from + 0.00002f)) Quad(Lerp(a, c, (from - s0) / (s1 - s0)), Lerp(a, c, (to - s0) / (s1 - s0)));
+                    from = to;
+                }
             }
         }
 
@@ -378,7 +465,10 @@ namespace Wonderland
             for (int ji = 0; ji < Junctions.Count; ji++)
             {
                 var j = Junctions[ji];
-                float y = RoadHeight(j.At, out _) + 0.0019f;
+                // One flat patch, at the highest ground under it (like the roads' flat cross-sections), just above them.
+                float y = RoadHeight(j.At, out _);
+                for (int k = 0; k < 12; k++) foreach (float f in new[] { 0.5f, 1f }) { float ang = k / 12f * Mathf.PI * 2f; y = Mathf.Max(y, RoadHeight(j.At + new Vector2(Mathf.Cos(ang), Mathf.Sin(ang)) * j.Radius * f, out _)); }
+                y += RoadLift + 0.0002f;
                 // A rounded patch big enough to cover the arms' full width where they enter.
                 const int seg = 24;
                 int centre = b.AddVertex(new Vector3(j.At.x, y, j.At.y), Vector3.up, Asphalt);
@@ -386,7 +476,7 @@ namespace Wonderland
                 {
                     float a = k / (float)seg * Mathf.PI * 2f;
                     var q = j.At + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * (j.Radius + 0.002f);
-                    b.AddVertex(new Vector3(q.x, RoadHeight(q, out _) + 0.0019f, q.y), Vector3.up, Asphalt);
+                    b.AddVertex(new Vector3(q.x, y, q.y), Vector3.up, Asphalt);
                     if (k > 0) b.AddTriangle(centre, centre + k + 1, centre + k);
                 }
                 for (int arm = 0; arm < j.Arms.Count; arm++)
@@ -398,7 +488,7 @@ namespace Wonderland
                     var line = j.At + d * (j.Radius + 0.004f);
                     var a0 = line + right * 0.0008f; var a1 = line + right * (hw - KerbWidth - 0.001f);
                     var w = d * 0.0014f;
-                    Vector3 V(Vector2 q) => new(q.x, RoadHeight(q, out _) + 0.0023f, q.y);
+                    Vector3 V(Vector2 q) => new(q.x, y + 0.0004f, q.y);
                     var va = V(a0 - w); var vb = V(a1 - w); var vc = V(a1 + w); var vd = V(a0 + w);
                     if (Vector3.Cross(vb - va, vc - va).y >= 0f) b.AddQuad(va, vb, vc, vd, Paint); else b.AddQuad(va, vd, vc, vb, Paint);
                     if (!j.Lights) continue;

@@ -296,8 +296,8 @@ namespace Wonderland
                 for (int i = 0; i < n; i += 2) { float d = (l.points[i] - c).sqrMagnitude; if (d < best) { best = d; bi = i; } }
                 float dist = Mathf.Sqrt(best);
                 if (dist > margin) continue;
-                float w = dist < hw ? 1f : Mathf.SmoothStep(1f, 0f, (dist - hw) / (margin - hw));
-                terrain.Height[g] = Mathf.Lerp(terrain.Height[g], terrain.HeightForSurface(g, smooth[bi]), w * 0.9f);
+                float w = dist < hw + 0.005f ? 1f : Mathf.SmoothStep(1f, 0f, (dist - hw - 0.005f) / (margin - hw - 0.005f));
+                terrain.Height[g] = Mathf.Lerp(terrain.Height[g], terrain.HeightForSurface(g, smooth[bi]), IsRoad(l.kind) ? w : w * 0.9f);   // (under a road: flat)
             }
             terrain.UpdateSurface(region);
             return region;
