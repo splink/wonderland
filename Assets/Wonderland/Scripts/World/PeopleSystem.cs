@@ -55,6 +55,8 @@ namespace Wonderland
             public int Index, Seed;
             public string Name;
             public Vector2 Home, Position, Target;
+            public Vector2 GroundPos = new(float.NaN, 0f);   // where Ground was last looked up (Smart scheduling)
+            public float Ground, Chosen = float.NaN, ChosenWant;
             public float Heading, Timer, Phase, Height, Cooldown, Ride, WaveHeading, ResumeTimer;
             public Activity State, Resume;
             public bool ToStation, Cheering, Hidden;
@@ -425,6 +427,11 @@ namespace Wonderland
             stepFrames++;
             long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
             decisionsThisStep = 0;
+            tick++;
+            bool smart = PerfSettings.SmartVillagers;
+            FindLocos();
+            var eye = Camera.main != null ? (Vector3?)transform.InverseTransformPoint(Camera.main.transform.position) : null;
+            float drawn = WonderlandWorld.MiniatureCullDistance / Mathf.Max(transform.lossyScale.x, 1e-3f) + 0.1f;
             Grid.Update(placesBuilt ? 2f : 6f);
             RefreshPlaces();
             // Needs grow with village time (at the normal pace while the clock is stopped).
@@ -450,13 +457,15 @@ namespace Wonderland
                 }
                 if (a.State == Activity.Riding) { StepRiding(a, dt); continue; }
                 if (a.State == Activity.OnRide) { StepRide(a); continue; }
-                if (!Walkable(a.Position) && a.State != Activity.Sitting && a.State != Activity.Unwell)   // the world changed under them
+                int beat = tick + a.Index;   // (Smart: the occasional checks spread over the frames)
+                if ((!smart || (beat & 7) == 0) && !Walkable(a.Position) && a.State != Activity.Sitting && a.State != Activity.Unwell)   // the world changed under them
                 {
                     if (FindNear(a.Position, 0.06f, out var near)) a.Position = near; else a.Position = a.Home;
                     Stop(a);
                 }
-                a.Cheering = a.State == Activity.Waiting && TrainPassing(a, out _);   // waiting passengers wave on the spot
-                if (a.State != Activity.Waving && a.State != Activity.Waiting && a.State != Activity.Playing && a.State != Activity.Unwell && a.Cooldown <= 0f && TrainPassing(a, out var toTrain))
+                bool look = !smart || (beat & 3) == 0;
+                if (look) a.Cheering = a.State == Activity.Waiting && TrainPassing(a, out _);   // waiting passengers wave on the spot
+                if (look && a.State != Activity.Waving && a.State != Activity.Waiting && a.State != Activity.Playing && a.State != Activity.Unwell && a.Cooldown <= 0f && TrainPassing(a, out var toTrain))
                 {
                     a.Resume = a.State; a.ResumeTimer = a.Timer; a.State = Activity.Waving; a.Timer = 2.6f; a.Cooldown = 9f;
                     a.WaveHeading = Mathf.Atan2(toTrain.x, toTrain.y) * Mathf.Rad2Deg;
@@ -505,7 +514,11 @@ namespace Wonderland
                         if (a.Timer <= 0f || (a.SpotHouse >= 0 && !SpotStillThere(a))) EndActivity(a);
                         break;
                 }
-                a.Height = Mathf.MoveTowards(a.Height, GroundAt(a.Position) + (a.State == Activity.Watching ? a.SpotLift : 0f), (a.SpotLift > 0f ? 0.4f : 0.12f) * dt);
+                // The ground under them: looked up again once they have moved (or now and then: the land may change).
+                if (!smart || (beat & 7) == 0 || !((a.Position - a.GroundPos).sqrMagnitude < 0.0015f * 0.0015f)) { a.Ground = GroundAt(a.Position); a.GroundPos = a.Position; }
+                a.Height = Mathf.MoveTowards(a.Height, a.Ground + (a.State == Activity.Watching ? a.SpotLift : 0f), (a.SpotLift > 0f ? 0.4f : 0.12f) * dt);
+                // Beyond the distance figures are drawn at, nobody sees them move: posed only now and then.
+                if (smart && eye.HasValue && (beat & 7) != 0 && (new Vector3(a.Position.x, a.Height, a.Position.y) - eye.Value).sqrMagnitude > drawn * drawn) continue;
                 Pose(a);
             }
             double stepMs = (System.Diagnostics.Stopwatch.GetTimestamp() - t1) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
@@ -542,16 +555,29 @@ namespace Wonderland
             Pose(a);
         }
 
-        private bool TrainPassing(Agent a, out Vector2 toTrain)
+        private int tick;
+        private readonly List<Vector2> locos = new();
+
+        /// <summary>Where the moving engines are, once a frame (for everyone's "a train is passing" check).</summary>
+        private void FindLocos()
         {
-            toTrain = Vector2.zero;
-            float best = 0.24f; bool any = false;
+            locos.Clear();
             foreach (var t in world.Trains.Trains)
             {
                 if (!t.Running || t.Speed < 0.03f || world.Trains.InTunnel(t)) continue;
                 var loco = world.Trains.LocoPosition(t);
-                var to = new Vector2(loco.x, loco.z) - a.Position;
-                if (to.magnitude < best) { best = to.magnitude; toTrain = to; any = true; }
+                locos.Add(new Vector2(loco.x, loco.z));
+            }
+        }
+
+        private bool TrainPassing(Agent a, out Vector2 toTrain)
+        {
+            toTrain = Vector2.zero;
+            float best = 0.24f * 0.24f; bool any = false;
+            foreach (var loco in locos)
+            {
+                var to = loco - a.Position;
+                if (to.sqrMagnitude < best) { best = to.sqrMagnitude; toTrain = to; any = true; }
             }
             return any;
         }
@@ -971,18 +997,25 @@ namespace Wonderland
             float pace = a.Plan.What == Intent.Kind.Sleep ? 1.35f : a.Hiking ? 1.1f : 1f;   // hurrying home to bed
             float step = Mathf.Min(Speed * pace * dt, to.magnitude);
             float chosen = float.NaN;
-            foreach (float off in Offsets)
+            // Smart: the way round obstacles is looked for every third frame (the step itself is always checked below).
+            if (PerfSettings.SmartVillagers && ((tick + a.Index) % 3) != 0 && !float.IsNaN(a.Chosen) && Mathf.Abs(Mathf.DeltaAngle(want, a.ChosenWant)) < 12f)
+                chosen = a.Chosen + Mathf.DeltaAngle(a.ChosenWant, want);
+            else
             {
-                float h = want + off;
-                var dir = new Vector2(Mathf.Sin(h * Mathf.Deg2Rad), Mathf.Cos(h * Mathf.Deg2Rad));
-                if (Walkable(a.Position + dir * Mathf.Min(0.012f, to.magnitude)) && Walkable(a.Position + dir * step)) { chosen = h; break; }
+                foreach (float off in Offsets)
+                {
+                    float h = want + off;
+                    var dir = new Vector2(Mathf.Sin(h * Mathf.Deg2Rad), Mathf.Cos(h * Mathf.Deg2Rad));
+                    if (Walkable(a.Position + dir * Mathf.Min(0.012f, to.magnitude)) && Walkable(a.Position + dir * step)) { chosen = h; break; }
+                }
+                a.Chosen = chosen; a.ChosenWant = want;
             }
             if (float.IsNaN(chosen)) { a.Timer = 0f; a.Waypoints.Clear(); return; }
             a.Heading = Mathf.MoveTowardsAngle(a.Heading, chosen, 300f * dt);
             if (Mathf.Abs(Mathf.DeltaAngle(a.Heading, chosen)) > 50f) return;   // turn first
             var fwd = new Vector2(Mathf.Sin(a.Heading * Mathf.Deg2Rad), Mathf.Cos(a.Heading * Mathf.Deg2Rad));
             var next = a.Position + fwd * step;
-            if (!Walkable(next)) { a.Heading = chosen; return; }
+            if (!Walkable(next)) { a.Heading = chosen; a.Chosen = float.NaN; return; }
             a.Position = next;
             a.Phase += step / 0.0105f * Mathf.PI;   // one stride per ~1 cm
         }

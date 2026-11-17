@@ -95,6 +95,38 @@ namespace Wonderland.Editor
             Object.DestroyImmediate(w.gameObject);
         }
 
+        /// <summary>Where the villagers' and animals' time goes on a saved world (Logs/simprofile-results.txt).</summary>
+        public static void SimProfile()
+        {
+            var w = new GameObject("Profile").AddComponent<WonderlandWorld>();
+            w.Deserialize(System.IO.File.ReadAllText(System.Environment.GetEnvironmentVariable("WL_SAVE") ?? "Tests/Saves/headset-wonderland-world.json"), Materials());
+            w.People.Grid.Complete();
+            for (float s = 0f; s < 10f; s += Dt) { w.Clock.Tick(Dt); w.People.Step(Dt); w.Animals.Step(Dt); w.Trains.Step(Dt); }
+            var sb = new System.Text.StringBuilder();
+            foreach (int mode in new[] { 1, 0 })
+            {
+                PerfSettings.Villagers.Value = mode;
+                var watch = new System.Diagnostics.Stopwatch();
+                double people = 0, animals = 0, trains = 0; int frames = 0;
+                for (float s = 0f; s < 20f; s += Dt)
+                {
+                    w.Clock.Tick(Dt);
+                    watch.Restart(); w.People.Step(Dt); people += watch.Elapsed.TotalMilliseconds;
+                    watch.Restart(); w.Animals.Step(Dt); animals += watch.Elapsed.TotalMilliseconds;
+                    watch.Restart(); w.Trains.Step(Dt); trains += watch.Elapsed.TotalMilliseconds;
+                    frames++;
+                }
+                double f = frames;
+                sb.AppendLine($"{w.People.People.Count} people, {w.Animals.Animals.Count} animals, {w.Trains.Trains.Count} trains; per frame: people {people / f:0.000} ms, animals {animals / f:0.000} ms, trains {trains / f:0.000} ms ({PerfSettings.Villagers.Label})");
+                sb.AppendLine("  " + w.People.Diagnostics);
+            }
+            PerfSettings.ResetAll();
+            System.IO.File.WriteAllText("Logs/simprofile-results.txt", sb.ToString());
+            Debug.Log(sb.ToString());
+            Object.DestroyImmediate(w.gameObject);
+            if (Application.isBatchMode) EditorApplication.Exit(0);
+        }
+
         /// <summary>The player's world in each terrain shading mode (Full, Light, Simple), from where they would stand.</summary>
         public static void TerrainModeRenders()
         {

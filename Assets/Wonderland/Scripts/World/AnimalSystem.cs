@@ -48,6 +48,10 @@ namespace Wonderland
             public AnimalKind Kind;
             public Vector2 Home, Position, Target;
             public float Heading, Timer, Bob, Pitch, Speed;
+            public int Index;
+            public Vector2 GroundPos = new(float.NaN, 0f);   // where Ground and Normal were last looked up (Smart scheduling)
+            public float Ground;
+            public Vector3 Normal = Vector3.up;
             public bool Walking, Fleeing;
             public Rng Rng;
             // Pets.
@@ -142,6 +146,7 @@ namespace Wonderland
         public bool IsFleeing(int i) => agents[i].Fleeing;
 
         private bool Suits(Agent a, Vector2 p) => suits == null || suits(p, a.Kind, a.Home);
+        private int tick;
 
         private void Update()
         {
@@ -152,14 +157,23 @@ namespace Wonderland
         /// <summary>Advances every animal (also driven by the scripted test).</summary>
         public void Step(float dt)
         {
-            foreach (var a in agents)
+            tick++;
+            bool smart = PerfSettings.SmartVillagers;
+            var eye = Camera.main != null ? (Vector3?)transform.InverseTransformPoint(Camera.main.transform.position) : null;
+            float drawn = WonderlandWorld.MiniatureCullDistance / Mathf.Max(transform.lossyScale.x, 1e-3f) + 0.1f;
+            for (int i = 0; i < agents.Count; i++)
             {
+                var a = agents[i];
+                a.Index = i;
+                int beat = tick + i;
                 var t = Of(a.Kind);
                 a.Timer -= dt;
-                if (a.Kind == AnimalKind.Dog) { StepDog(a, dt); Pose(a); continue; }
-                if (a.Kind == AnimalKind.Cat) { StepCat(a, dt); Pose(a); continue; }
+                // Beyond the distance figures are drawn at, nobody sees them: posed only now and then.
+                bool unseen = smart && eye.HasValue && (beat & 7) != 0 && (new Vector3(a.Position.x, a.Ground, a.Position.y) - eye.Value).sqrMagnitude > drawn * drawn;
+                if (a.Kind == AnimalKind.Dog) { StepDog(a, dt); if (!unseen) Pose(a); continue; }
+                if (a.Kind == AnimalKind.Cat) { StepCat(a, dt); if (!unseen) Pose(a); continue; }
                 // Deer: something close? Bolt away from it.
-                if (a.Kind == AnimalKind.Deer && threat != null && !a.Fleeing)
+                if (a.Kind == AnimalKind.Deer && threat != null && !a.Fleeing && (!smart || beat % 6 == 0))
                 {
                     var danger = threat(a.Position, 0.11f);
                     if (danger.HasValue)
@@ -194,13 +208,15 @@ namespace Wonderland
                     {
                         var fwd = new Vector2(Mathf.Sin(a.Heading * Mathf.Deg2Rad), Mathf.Cos(a.Heading * Mathf.Deg2Rad));
                         var next = a.Position + fwd * Mathf.Min(speed * dt, to.magnitude);
-                        bool free = Suits(a, next) && (blocked == null || !blocked(a.Position, next + fwd * 0.004f));
+                        // Smart: the ground and fences ahead are checked every fourth frame, looking far enough ahead to cover them
+                        // (the way to the target was checked when it was picked).
+                        bool free = smart && (beat & 3) != 0 || Suits(a, next) && (blocked == null || !blocked(a.Position, next + fwd * (0.004f + (smart ? speed * dt * 4f : 0f))));
                         if (free) { a.Position = next; a.Bob += dt * (a.Kind == AnimalKind.Chicken ? 30f : 14f) * (a.Fleeing ? 2f : 1f); }
                         else a.Timer = 0f;   // blocked: stop and graze
                     }
                     if (to.magnitude < 0.004f || a.Timer <= 0f) { a.Walking = false; a.Fleeing = false; a.Timer = a.Kind == AnimalKind.Chicken ? a.Rng.Range(0.6f, 2f) : a.Rng.Range(2.5f, 7f); }
                 }
-                Pose(a);
+                if (!unseen) Pose(a);
             }
         }
 
@@ -414,8 +430,14 @@ namespace Wonderland
                 float level = terrain.WaterLevelAt(a.Position.x, a.Position.y);
                 y = (level > 0f ? level : terrain.SurfaceAt(a.Position.x, a.Position.y)) - 0.0012f + Mathf.Sin(Time.realtimeSinceStartup * 2.2f + a.Home.x * 40f) * 0.0003f;
             }
-            else y = terrain.SurfaceAt(a.Position.x, a.Position.y);
-            var normal = terrain.NormalAt(a.Position.x, a.Position.y);
+            else
+            {
+                // The ground and its slope: looked up again once it has moved (or now and then: the land may change).
+                if (!PerfSettings.SmartVillagers || ((tick + a.Index) & 15) == 0 || !((a.Position - a.GroundPos).sqrMagnitude < 0.001f * 0.001f))
+                { a.Ground = terrain.SurfaceAt(a.Position.x, a.Position.y); a.Normal = terrain.NormalAt(a.Position.x, a.Position.y); a.GroundPos = a.Position; }
+                y = a.Ground;
+            }
+            var normal = a.Kind == AnimalKind.Duck ? Vector3.up : a.Normal;
             float bob = a.Walking ? Mathf.Abs(Mathf.Sin(a.Bob)) * (a.Kind == AnimalKind.Chicken ? 0.0012f : a.Fleeing ? 0.002f : 0.0007f) : 0f;
             float roll = a.Walking ? Mathf.Sin(a.Bob) * 3f : 0f;
             a.Body.localPosition = new Vector3(a.Position.x, y + bob, a.Position.y);
