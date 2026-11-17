@@ -659,6 +659,77 @@ the lane still counts. When two vehicles block each other (crossing paths), one 
 **Old saves.** Roads drawn free-hand before this change keep their points. They now render as asphalt with markings,
 but stay as wobbly as they were drawn. Redraw them to straighten them.
 
+## Performance: measured on the headset, then fixed where it costs
+
+**Measurement.** `PerfBench` runs on the headset, on saved worlds in a fixed view, with the clocks held. It switches
+one thing off at a time and reads the headset's own app GPU and CPU time; Unity's GPU timing reads 0 on the Quest.
+
+| | World 1 (126 houses, 219 people) | World 4 (80 houses, 83 people) |
+|---|---|---|
+| Frame rate | 43–45 fps | 56–59 fps |
+| GPU time per frame | 18.4 ms, 98% busy | 13.8 ms |
+
+The GPU was the bottleneck: at 72 fps the budget is 13.9 ms. Savings when each part was switched off, World 1 /
+World 4:
+
+| Switched off | Saving |
+|---|---|
+| Terrain shading | 5.1 / 3.0 ms |
+| MSAA 4x | 4.0 / 3.1 ms |
+| Villagers and animals | 3.4 / 1.6 ms |
+| Vehicles | 2.1 / 1.1 ms |
+| Track, roads and water | 1.9 / 1.0 ms |
+| Ground cover | 1.4 / 1.4 ms |
+| Shadows | 0.3 ms |
+| Trees and buildings | about 0, behind the stand-ins |
+| Stand-ins removed | +3.2 / +1.3 ms |
+
+The CPU main thread was 12.6 ms on World 1, of which the simulation was 5–7 ms.
+
+**What changed**, each unit committed separately:
+1. **Performance panel** (Stats > Performance): live headset numbers and a switch for every setting, applied at once and
+   remembered, plus Measure, the same sweep run in the headset on the current view. The blocky stand-ins are no
+   longer drawn; they only cast the shadows.
+2. **Terrain shading.** Light, the default, reads the five noise layers from a generated tileable texture instead of
+   computing 20 hashes per pixel, with the same look (`editor-terrain-*.png`). Simple drops the noise and the painted
+   flowers.
+3. **Smart scheduling** for villagers and animals:
+   - Engine positions are found once per frame instead of per villager per train.
+   - The ground height is looked up again only after moving.
+   - Walkability checks and obstacle scans are spread over frames; the next step is always checked.
+   - Animals cache their ground while grazing and check fences every fourth frame, looking far enough ahead.
+   - Figures beyond drawing distance are posed only now and then.
+   - Editor timing on World 1: 6.6 ms down to 2.7 ms.
+4. **Levels of detail that stay recognisable**, not stand-ins. The mesh builder builds at detail 1 or 2: features under
+   2 mm or 3.5 mm and thin sticks are left out, rounded shapes get fewer facets, roof tiles become a strip per row,
+   flower boxes bands of colour, and lettering stays at level 1. Figures use 0.4 times the sizes. Buildings and forest
+   chunks switch at 1.3 m and 2.6 m; figures swap their part meshes. Triangles kept at level 1 / level 2:
+
+   | | Level 1 | Level 2 |
+   |---|---|---|
+   | Buildings | 60% | 40% |
+   | Trees | 30% | 29% |
+   | Figures | 43% | 30% |
+
+   Renders: `editor-levels.png`, `editor-levels-figures.png`.
+5. **One-mesh villagers: deferred.** Merging each villager's parts into one draw means rewriting how figures are posed.
+   It waits for a headset measurement with levels of detail and Smart scheduling in place, both of which cut the
+   villagers' cost.
+6. **Roads look right:**
+   - The mesh follows a smooth curve, about 3° per step on bends.
+   - Each cross-section is flat at the highest ground across the road, with a skirt under each kerb, and the ground
+     under a road is levelled, so no terrain shows through.
+   - Markings are continuous strips, with dashes measured exactly along the road.
+   - Render: `editor-roads-bend.png`.
+7. **Building grid**, on by default, with a Grid chip to turn it off:
+   - Road corners land on a 5 cm grid.
+   - Buildings face the nearest road and line up along it; elsewhere they sit on the grid in quarter turns.
+   - The grid shows around the pointer while placing.
+   - Render: `editor-grid.png`.
+
+**Not yet re-measured on the headset with all of this in place.** Run Measure in Stats > Performance, or the
+benchmark ("bench" file), to see the new numbers.
+
 ## Known defects and risks
 
 - **Station, water, bridges, tunnels, animals and villagers are untested on the device.** They are covered by the

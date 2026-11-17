@@ -34,7 +34,7 @@ The palette floats above the **left** controller; the **right** controller point
 | Input | Action |
 |---|---|
 | Right trigger | use the tool / press palette buttons |
-| Right stick ← → | brush size (Build: flick to turn 15°, hold to turn smoothly; the arrow shows the front) |
+| Right stick ← → | brush size (Build: flick to turn 15°, hold to turn smoothly - on the grid, a flick is a quarter turn; the arrow shows the front) |
 | Right stick ↑ ↓ | strength (Forest: density) |
 | A | next mode: Raise → Lower → Smooth → Flatten → Grow → Trim → Peaks · next path kind · next item · Pond → Stream → Drain · Paint ↔ Erase · next house · Sheep → Cows → Villagers · Track: draw ↔ signals · Trains: start/stop (the one pointed at, or all) |
 | B | undo |
@@ -72,7 +72,8 @@ level), **Stream** is drawn like the railway and flows only downhill, carving a 
 away (tap a stream to remove it). Reeds and lily pads grow at the water's edge.
 
 **Build (41 places in 7 categories).** Pick a category chip (Homes, Town, Farm, Fun, Travel, Nature, Small), then an
-item in the row below:
+item in the row below. With the grid on (the **Grid** chip, on by default), a building near a road turns to face it
+and lines up along it just behind the kerb; elsewhere it sits on the grid in quarter turns:
 - **Homes:** cottage, townhouse, thatched, apartments, chalet
 - **Town:** church, town hall, bakery, café, grocer, school, fire station, fountain
 - **Farm:** barn, windmill with turning sails, silo, greenhouse, fields of wheat, sunflowers or lavender, vegetable garden
@@ -96,6 +97,9 @@ stroke:
 - **Cars and lorries:** pick Car, Taxi, Van, Bus, Lorry or Tanker and pull the trigger on a road. It drives off
   wherever it is pointed and roams the town. It keeps to its lane (buses and lorries take a highway's slow lane), keeps
   its distance and stops at red lights. Vehicles are saved with the world; the Eraser takes one away.
+- **The grid** (on by default; the **Grid** chip turns it off): road corners land on a 5 cm grid, so near-straight
+  strokes come out exactly straight and streets line up. It shows faintly around the pointer while you place roads or
+  buildings.
 - Lanes, paths and trails keep the free-hand look.
 - Start or end a stroke on another line and they join.
 - Roads and lanes smooth the ground across their width.
@@ -320,6 +324,19 @@ the ponds, without damming them; a stream from a higher pond falls into the lowe
 - **Stats** shows the time, the frame rate, CPU and GPU time where the headset reports them, what the simulation costs
   system by system, and what the world holds (people, animals, buildings and beds, trains and track, vehicles,
   cameras).
+- **Stats > Performance** shows live numbers: frame rate, and the headset's own GPU and CPU time per frame against the
+  budget, plus the simulation by system. Below them is a switch for each setting. Every switch takes effect at once and
+  is remembered:
+  - **Terrain:** Full, Light (the default: the same look, the noise read from a texture), or Simple.
+  - **Edges:** MSAA 4x, 2x or off.
+  - **Shadows:** on or off.
+  - **Grass:** full, half or off.
+  - **Distance:** Reduced (the default: buildings, trees and figures drawn with less detail beyond 1.3 m and 2.6 m, but
+    still recognisable) or Full.
+  - **Villagers:** Smart (the default: occasional checks spread over the frames) or Every frame.
+  - **Resolution** and **Foveation.**
+  - **Measure** switches each part of the world off for a moment, on the view you have, and shows on the card what each
+    one costs, biggest first. **Defaults** puts every setting back.
 - **Redo** sits next to Undo (B on the controller also undoes).
 - **Save** and **Load** keep up to six worlds, World 1 to World 6. The world in play is shown in the palette's title
   and keeps itself up to date when you leave the app.

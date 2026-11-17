@@ -108,7 +108,7 @@ namespace Wonderland
             var all = new List<Renderer>(); foreach (var r in world.GetComponentsInChildren<Renderer>(false)) if (r.enabled) all.Add(r);
             int msaa = urp != null ? urp.msaaSampleCount : 4;
             var shadows = sun != null ? sun.shadows : LightShadows.None;
-            int terrainMode = PerfSettings.Terrain.Value;
+            int terrainMode = PerfSettings.Terrain.Value, detail = PerfSettings.Detail.Value, villagers = PerfSettings.Villagers.Value;
             var variants = new List<Variant>
             {
                 new() { Name = "baseline" },
@@ -122,6 +122,8 @@ namespace Wonderland
                 new() { Name = "villagers and animals", On = () => Show(Of("life", world.People, world.Animals), false), Off = () => Show(Of("life", world.People, world.Animals), true) },
                 new() { Name = "trains, cars and boats", On = () => Show(Of("vehicles", world.Trains, world.Traffic, world.Boats), false), Off = () => Show(Of("vehicles", world.Trains, world.Traffic, world.Boats), true) },
                 new() { Name = "railway, roads and water", On = () => Show(Of("lines", world.Track, world.Paths, world.Streams, world.Bridges), false), Off = () => Show(Of("lines", world.Track, world.Paths, world.Streams, world.Bridges), true) },
+                new() { Name = "less detail further away (full instead)", On = () => PerfSettings.Detail.Value = 1, Off = () => PerfSettings.Detail.Value = detail },
+                new() { Name = "smart villagers (every frame instead)", On = () => PerfSettings.Villagers.Value = 1, Off = () => PerfSettings.Villagers.Value = villagers },
                 new() { Name = "simulation", On = () => { foreach (var b in logic) if (b != null) b.enabled = false; }, Off = () => { foreach (var b in logic) if (b != null) b.enabled = true; } },
                 new() { Name = "everything (passthrough and palette left)", On = () => Show(all, false), Off = () => Show(all, true) },
                 new() { Name = "baseline again" },
