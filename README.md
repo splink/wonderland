@@ -336,6 +336,8 @@ the ponds, without damming them; a stream from a higher pond falls into the lowe
     eyebrows), High (the model as designed), then Medium, Low and Minimal (still recognisable: shape, colours, windows,
     roof), one level per doubling of distance. A big building keeps its detail further away than a small villager.
   - **Villagers:** Smart (the default: occasional checks spread over the frames) or Every frame.
+  - **Haze:** Soft (the default), Strong or Off: the far side of the world takes on a soft tint of the sky, for depth.
+  - **World size:** 100%, 80% or 60%: everything smaller, to see more of it at once.
   - **Resolution** and **Foveation.**
   - **Measure** switches each part of the world off for a moment, on the view you have, and shows on the card what each
     one costs, biggest first. **Defaults** puts every setting back.

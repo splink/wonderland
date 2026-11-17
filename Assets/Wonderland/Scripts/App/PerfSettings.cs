@@ -45,6 +45,9 @@ namespace Wonderland
         public static readonly Setting Grass = Make("Grass", "grass", 0, "the tufts, flowers and pebbles on the meadows", "Full", "Half", "Off");
         public static readonly Setting Detail = Make("Detail", "detail", 0, "five levels chosen by how big each thing looks: extra detail up close, simpler (still recognisable) far away", "By size", "Always high");
         public static readonly Setting Villagers = Make("Villagers", "villagers", 0, "villagers and animals think on a schedule instead of every frame", "Smart", "Every frame");
+        public static readonly Setting Haze = Make("Haze", "haze", 0, "the far side of the world takes on a soft tint of the sky, for depth (costs next to nothing)", "Soft", "Strong", "Off");
+        public static readonly Setting WorldSize = Make("World size", "worldsize", 0, "everything smaller, to see more of the world at once (try it: the same things cost the same to draw at any size)", "100%", "80%", "60%");
+        public static float WorldScale => WorldSize.Value switch { 0 => 1f, 1 => 0.8f, _ => 0.6f };
         public static readonly Setting Resolution = Make("Resolution", "resolution", 0, "the eye buffers' resolution", "100%", "90%", "80%", "70%");
         public static readonly Setting Foveation = Make("Foveation", "foveation", 0, "the edges of the view drawn at lower resolution", "High", "Highest", "Medium", "Off");
 
@@ -59,6 +62,7 @@ namespace Wonderland
         {
             if (sun != null) sun.shadows = Shadows.Value == 0 ? LightShadows.Soft : LightShadows.None;
             TerrainNoise.SetMode(Terrain.Value);
+            Shader.SetGlobalVector("_WL_Haze", new Vector4(1.2f, 2.8f, Haze.Value switch { 0 => 0.35f, 1 => 0.6f, _ => 0f }, 0f));
             if (Application.isEditor) return;   // (in the editor these would be written into the project's assets)
             var urp = UniversalRenderPipeline.asset;
             if (urp != null)

@@ -9,6 +9,7 @@ half4 _WL_SkyColor;
 half4 _WL_GroundColor;
 half4 _WL_ShadowTint;
 half _WL_Night;   // 0 by day, 1 at night: lamps and lit windows glow brighter
+float4 _WL_Haze;  // distance haze: x = where it starts (m from the eyes), y = over how far it builds up, z = how strong (0: off)
 
 float WL_Hash(float2 p)
 {
@@ -54,6 +55,13 @@ half3 WL_Shade(half3 albedo, float3 positionWS, half3 normalWS)
     half rim = pow(1.0h - saturate(dot(normalWS, viewDir)), 3.0h);
     half3 colour = albedo * (ambient + light.color * direct);
     colour += albedo * rim * 0.22h * _WL_SkyColor.rgb;
+    // Distance haze: the further parts of the world take on a soft tint of the sky, like hills on a summer day.
+    if (_WL_Haze.z > 0.001)
+    {
+        float far = saturate((distance(positionWS, GetCameraPositionWS()) - _WL_Haze.x) / _WL_Haze.y);
+        half3 air = lerp(_WL_SkyColor.rgb, half3(0.85h, 0.9h, 0.97h), 0.5h) * 0.9h;
+        colour = lerp(colour, air, far * far * _WL_Haze.z);
+    }
     return colour;
 }
 

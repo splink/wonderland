@@ -174,6 +174,15 @@ namespace Wonderland.Editor
                 TerrainNoise.SetMode(m);
                 WonderlandRenders.Capture(cam, $"editor-terrain-{names[m]}-close.png", 1600, 1000);
             }
+            // Distance haze: off, soft (the default), strong - from where a player would stand, the far side a few metres off.
+            TerrainNoise.SetMode(1);
+            cam.transform.position = c + new Vector3(0.0f, 0.55f, -1.25f); cam.transform.LookAt(c + new Vector3(0f, 0f, 0.6f));
+            foreach (var (strength, name) in new[] { (0f, "off"), (0.35f, "soft"), (0.6f, "strong") })
+            {
+                Shader.SetGlobalVector("_WL_Haze", new Vector4(1.2f, 2.8f, strength, 0f));
+                WonderlandRenders.Capture(cam, $"editor-haze-{name}.png", 1600, 1000);
+            }
+            Shader.SetGlobalVector("_WL_Haze", Vector4.zero);
             TerrainNoise.SetMode(0);
             Object.DestroyImmediate(w.gameObject);
             if (Application.isBatchMode) EditorApplication.Exit(0);
