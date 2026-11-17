@@ -131,18 +131,20 @@ namespace Wonderland
             title.color = new Color(1f, 0.86f, 0.55f);
             title.fontStyle = FontStyles.Bold;
 
-            for (int i = 0; i < ToolNames.Length; i++)
+            // The tools in four groups, each named above its tiles: shaping the land, building, bringing it to life, and
+            // changing what is there.
+            const float groupGap = 0.007f;
+            float pitch = (Width - 0.012f - groupGap * (Groups.Length - 1)) / ToolNames.Length;
+            float left = -Width / 2 + 0.006f;
+            foreach (var (heading, members) in Groups)
             {
-                var tool = (Tool)i;
-                float pitch = (Width - 0.012f) / ToolNames.Length;
-                float x = -Width / 2 + 0.006f + pitch * (i + 0.5f);
-                var b = Button(ToolNames[i], transform, new Vector3(x, 0.046f, 0f), new Vector2(pitch - 0.0045f, 0.052f), ToolNames[i], true);
-                b.Label.transform.localPosition = new Vector3(0f, -0.019f, -0.003f);
-                b.Icon = Icon(tool, b.transform);
-                (b.IconYaw, b.IconPitch) = tool switch { Tool.Train => (115f, -15f), Tool.Track => (20f, -55f), Tool.Terrain => (25f, -30f), _ => (30f, -20f) };
-                b.ApplyVisuals();
-                b.OnClick = () => ToolSelected?.Invoke(tool);
-                tools[tool] = b;
+                float span = pitch * members.Length;
+                var h = Text("Group " + heading, transform, heading, new Vector3(left + span / 2, 0.0765f, -0.002f), new Vector2(span - 0.004f, 0.009f), 0.048f, TextAlignmentOptions.Center);
+                h.color = new Color(0.86f, 0.76f, 0.56f);
+                var rule = Quad("Rule", transform, span - 0.006f, 0.0006f, 0.0003f, new Color(0.86f, 0.76f, 0.56f, 0.35f), new Color(0.86f, 0.76f, 0.56f, 0.35f), -0.001f, 2993);
+                rule.transform.localPosition = new Vector3(left + span / 2, 0.0718f, -0.001f);
+                for (int m = 0; m < members.Length; m++) MakeTool(members[m], left + pitch * (m + 0.5f), pitch);
+                left += span + groupGap;
             }
             optionRow = new GameObject("Options").transform;
             optionRow.SetParent(transform, false);
@@ -161,6 +163,27 @@ namespace Wonderland
             health.transform.localPosition = new Vector3(0.006f, Height / 2 - 0.011f, -0.002f);
         }
 
+        /// <summary>The tools as the palette shows them: in groups, each with a heading.</summary>
+        public static readonly (string heading, Tool[] tools)[] Groups =
+        {
+            ("Landscape", new[] { Tool.Terrain, Tool.Water, Tool.Forest }),
+            ("Build", new[] { Tool.Paths, Tool.Track, Tool.Houses }),
+            ("Bring to life", new[] { Tool.Train, Tool.Decor }),
+            ("Change", new[] { Tool.Select, Tool.Eraser }),
+        };
+
+        private void MakeTool(Tool tool, float x, float pitch)
+        {
+            string name = ToolNames[(int)tool];
+            var b = Button(name, transform, new Vector3(x, 0.044f, 0f), new Vector2(pitch - 0.0045f, 0.05f), name, true);
+            b.Label.transform.localPosition = new Vector3(0f, -0.018f, -0.003f);
+            b.Icon = Icon(tool, b.transform);
+            (b.IconYaw, b.IconPitch) = tool switch { Tool.Train => (115f, -15f), Tool.Track => (20f, -55f), Tool.Terrain => (25f, -30f), _ => (30f, -20f) };
+            b.ApplyVisuals();
+            b.OnClick = () => ToolSelected?.Invoke(tool);
+            tools[tool] = b;
+        }
+
         private TextMeshPro clock;
         public string ClockText => clock != null ? clock.text : null;
         private MeshRenderer health;
@@ -174,7 +197,7 @@ namespace Wonderland
             health.sharedMaterial.SetColor(TintId, light);
         }
 
-        public const float GlobalWidth = 0.034f;   // nine fit along the bottom
+        public const float GlobalWidth = 0.04f;    // seven fit along the bottom
 
         public PaletteButton AddGlobal(string label, Action onClick)
         {

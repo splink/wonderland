@@ -1235,7 +1235,7 @@ namespace Wonderland
         {
             if (resetArmed) { resetArmed = false; ResetRequested?.Invoke(); return; }
             resetArmed = true; resetUntil = Time.time + 3f;
-            Say("Press New again to start a fresh world", 3f);
+            Say("Press New world again to start a fresh landscape", 3f);
         }
 
         private void Haptic(float amplitude, float seconds)

@@ -68,17 +68,20 @@ namespace Wonderland.Editor
             palette.AddGlobal("Load", () => tools.ShowWorlds(false));
             palette.AddGlobal("Redo", () => world.Redo());
             palette.AddGlobal("Help", tools.ToggleHelp);
-            palette.AddGlobal("Stats", tools.ToggleStats);
-            palette.AddGlobal("Tips", tools.ToggleTips);
+            palette.AddGlobal("Settings", tools.ToggleSettings);
             bool keepTips = ToolController.TipsOn;
             var hand = new Vector3(0.2f, 1.1f, 0.25f);
             // Tips: on, a first tip appears in the banner above the palette after a moment; the Tips button turns them off.
             if (!ToolController.TipsOn) tools.ToggleTips(); else { tools.ToggleTips(); tools.ToggleTips(); }   // (on, and starting over)
             for (int i = 0; i < 72 * 6; i++) Frame(hand, hand + Vector3.forward, false);
             string firstTip = palette.TipText;
-            ClickButton(hand, "Tips");
+            ClickButton(hand, "Settings");
+            ClickButton(hand, "Tips: On");
+            bool tipsSaysOff = Find("Tips: Off") != null;
+            ClickButton(hand, "Settings");
             for (int i = 0; i < 3; i++) Frame(hand, hand + Vector3.forward, false);
-            Check(!string.IsNullOrEmpty(firstTip) && !ToolController.TipsOn && string.IsNullOrEmpty(palette.TipText), $"A tip appears above the palette (\"{firstTip}\"), and the Tips button turns tips off");
+            Check(!string.IsNullOrEmpty(firstTip) && !ToolController.TipsOn && tipsSaysOff && string.IsNullOrEmpty(palette.TipText) && !palette.InfoShown,
+                $"A tip appears above the palette (\"{firstTip}\"), and Settings' Tips button turns tips off (and says so)");
             if (keepTips != ToolController.TipsOn) tools.ToggleTips();
 
             // Terrain: the default tool. Aim at the landscape and hold the trigger.
@@ -438,7 +441,14 @@ namespace Wonderland.Editor
             ClickButton(hand, "Help");
             var infoPanel = palette.transform.Find("Info");
             bool helpOpen = infoPanel != null && infoPanel.gameObject.activeSelf && palette.InfoShown;
-            ClickButton(hand, "Stats");
+            // Settings: the label at the pointer can be turned off (and on); Grid shows its state.
+            ClickButton(hand, "Settings");
+            bool settingsOpen = palette.InfoShown && Find("Labels: On") != null && Find(BuildGrid.Snap ? "Grid: On" : "Grid: Off") != null && Find("New world") != null;
+            ClickButton(hand, "Labels: On");
+            bool labelsOff = !ToolController.LabelsOn && Find("Labels: Off") != null;
+            ClickButton(hand, "Labels: Off");
+            Check(settingsOpen && labelsOff && ToolController.LabelsOn, "Settings beside the palette: Sound, Tips, Labels, Grid, World stats, Performance, New world - each says its state and a tap changes it");
+            ClickButton(hand, "World stats");
             string stats = tools.StatsText();
             bool statsTrue = palette.InfoShown && stats.Contains($"{world.People.People.Count} people") && stats.Contains($"{world.Buildings.Houses.Count} buildings");
             // The performance panel: from Stats; a setting cycles when tapped and takes effect; Defaults puts it back.
@@ -451,7 +461,7 @@ namespace Wonderland.Editor
             ClickButton(hand, "Defaults");
             Check(perfOpen && grassOff && PerfSettings.Grass.Value == 0 && world.Cover.Count == tufts, $"Stats opens the performance panel; Grass cycles to Off (no tufts) and Defaults brings them back ({tufts} tufts)");
             ClickButton(hand, "World stats");
-            ClickButton(hand, "Stats");
+            ClickButton(hand, "Settings");
             Check(helpOpen && statsTrue && !palette.InfoShown, "Help and Stats open beside the palette (with the world's own numbers) and close again");
             bool standIns = false; int levels = 0;
             foreach (var r in world.GetComponentsInChildren<Renderer>(true))
@@ -659,9 +669,9 @@ namespace Wonderland.Editor
             tools = new GameObject("Tools").AddComponent<ToolController>();
             tools.HapticsEnabled = false;
             tools.Init(world, palette, null);
-            foreach (var g in new[] { "Undo", "Redo", "Save", "Load", "Move", "New", "Sound" }) palette.AddGlobal(g, null);
+            foreach (var g in new[] { "Undo", "Redo", "Save", "Load", "Move" }) palette.AddGlobal(g, null);
             palette.AddGlobal("Help", tools.ToggleHelp);
-            palette.AddGlobal("Stats", tools.ToggleStats);
+            palette.AddGlobal("Settings", tools.ToggleSettings);
             var t = world.Terrain;
             world.BuildPath(new System.Collections.Generic.List<Vector3> { t.PointAt(-0.6f, 0f), t.PointAt(0f, 0f), t.PointAt(0.6f, 0f) }, PathKind.Road);
             foreach (var (id, x, z, rot) in new[] { (Catalog.Cottage, -0.45f, 0.12f, 0f), (Catalog.Townhouse, -0.25f, 0.12f, 0f), (Catalog.Apartments, 0.0f, 0.13f, 0f), (Catalog.Cottage, 0.25f, 0.12f, 0f),
@@ -680,12 +690,14 @@ namespace Wonderland.Editor
             var at = world.transform.TransformPoint(new Vector3(who.x, t.SurfaceAt(who.x, who.y), who.y));
             tools.SelectTool(Tool.Select);
             Frame(hand, at, false); Frame(hand, at, true); Frame(hand, at, false); Frame(hand, at, false);
-            tools.ToggleStats();
+            tools.ToggleSettings();
             var cam = new GameObject("Camera").AddComponent<Camera>();
             cam.clearFlags = CameraClearFlags.SolidColor; cam.backgroundColor = new Color(0.32f, 0.3f, 0.28f);
             cam.nearClipPlane = 0.05f; cam.fieldOfView = 34f;
             cam.transform.position = palette.transform.position - palette.transform.forward * 0.62f;
             cam.transform.rotation = Quaternion.LookRotation(palette.transform.forward, palette.transform.up);
+            cam.tag = "MainCamera";
+            Frame(hand, at, false); Frame(hand, at, false);
             WonderlandRenders.Capture(cam, "editor-cards-person-stats.png", 2400, 1000);
             // A building, and Help.
             int bakery = world.Buildings.Houses.FindIndex(h => h.variant == Catalog.Bakery);

@@ -152,6 +152,10 @@ namespace Wonderland
             float k = Mathf.Clamp(d / 0.5f, 0.5f, 5f);
             // Up and right of the tip, pulled a little towards the eye so it never sinks into what it names.
             var at = tip + (right * 0.016f + up * 0.012f) * k - toTip * Mathf.Min(0.05f, d * 0.08f);
+            // Never over the palette (or a panel beside it): when it is between the eyes and the label, the label waits.
+            var look = at - eye;
+            if (Palette != null && Palette.gameObject.activeInHierarchy && Palette.RayHitsPanel(new Ray(eye, look.normalized), out float behind) && behind < look.magnitude)
+            { label.gameObject.SetActive(false); return; }
             label.transform.SetPositionAndRotation(at, Quaternion.LookRotation(toTip, up));
             label.transform.localScale = Vector3.one * k;
         }

@@ -1,4 +1,4 @@
-PASS  A tip appears above the palette ("Welcome! Point at the palette and pull the trigger to pick a tool. Try Track to lay a railway, or Terrain to shape the land."), and the Tips button turns tips off
+PASS  A tip appears above the palette ("Welcome! Point at the palette and pull the trigger to pick a tool. Try Track to lay a railway, or Terrain to shape the land."), and Settings' Tips button turns tips off (and says so)
 PASS  Starts with the Terrain tool
 PASS  Trigger + aim raises a hill (6.4 -> 17.4 cm)
 PASS  One stroke = one undo step
@@ -46,6 +46,7 @@ PASS  Select a switch: its card says where each way leads, and Always left / Alw
 PASS  Select the track: its card's Bend button bends it, the trigger puts it down [card True, bending1 True] - Track reshaped
 PASS  A building's card has Remove; B brings it back [card True, removed True, back True]
 PASS  Save and Load keep several worlds: saved as World 2 and World 3, and World 2 loads back as it was (4 buildings)
+PASS  Settings beside the palette: Sound, Tips, Labels, Grid, World stats, Performance, New world - each says its state and a tap changes it
 PASS  Stats opens the performance panel; Grass cycles to Off (no tufts) and Defaults brings them back (5538 tufts)
 PASS  Help and Stats open beside the palette (with the world's own numbers) and close again
 PASS  No blocky stand-ins anywhere: further away the same buildings and trees are drawn with less detail (44 simpler levels)

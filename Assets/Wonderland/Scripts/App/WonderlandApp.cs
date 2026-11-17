@@ -95,19 +95,15 @@ namespace Wonderland
             Palette.AddGlobal("Save", () => Tools.ShowWorlds(true));
             Palette.AddGlobal("Load", () => Tools.ShowWorlds(false));
             Palette.AddGlobal("Move", () => { Tools.PlacingWorld = true; Tools.Say("Point where the world should grow"); });
-            Palette.AddGlobal("New", Tools.RequestReset);
-            PaletteButton sound = null;
-            string SoundLabel() => SoundSystem.Setting switch { SoundSetting.On => "Sound", SoundSetting.Quiet => "Quiet", _ => "Muted" };
-            sound = Palette.AddGlobal(SoundLabel(), () =>
+            // Sound, tips, labels, the grid, stats, performance and New world: all under Settings.
+            Tools.SoundState = () => SoundSystem.Setting switch { SoundSetting.On => "On", SoundSetting.Quiet => "Quiet", _ => "Off" };
+            Tools.CycleSound = () =>
             {
                 SoundSystem.Setting = (SoundSetting)(((int)SoundSystem.Setting + 1) % 3);
-                sound.Label.text = SoundLabel();
                 Tools.Say(SoundSystem.Setting switch { SoundSetting.On => "Sound on", SoundSetting.Quiet => "Sound quiet", _ => "Sound off" });
-            });
+            };
             Palette.AddGlobal("Help", Tools.ToggleHelp);
-            PaletteButton tips = null;
-            tips = Palette.AddGlobal(ToolController.TipsOn ? "Tips" : "No tips", () => { Tools.ToggleTips(); tips.Label.text = ToolController.TipsOn ? "Tips" : "No tips"; });
-            Palette.AddGlobal("Stats", Tools.ToggleStats);
+            Palette.AddGlobal("Settings", Tools.ToggleSettings);
             Tools.Perf = GetComponent<PerfLog>();
             // The little figures (2-3 cm) are not drawn further than 3 m from the eyes: barely a pixel there, and in a big
             // world over a thousand draws saved (the CCTV camera still sees them).
