@@ -788,6 +788,44 @@ even out of the player's sight; everything else keeps the usual savings.
   - grip on a train opens its card, and its camera rides along;
   - Close puts the camera away.
 
+## Room to move, trains by the rules, a Select tool
+
+**Villagers** (`scripts/unity.sh walkprobe`: two minutes on Worlds 1 and 4, old walking vs new):
+
+| | Before | After |
+|---|---|---|
+| Spins (turning three-quarters round within about a second), World 1 | 12–44 per run | 3 |
+| Walkers within 5 mm, per frame, World 1 | 1.5–2.5 | 0.55 |
+| Walkers within 5 mm, per frame, World 4 | 0.5–2.3 | 0.01 |
+| People inside a car's body, per frame, World 4 | 0.2–0.3 | 0.00 |
+
+- **The twirl** was hikers circling a trail point they couldn't quite reach. A waypoint they stop getting closer to is
+  now skipped.
+- **Routes** are softened by Chaikin corner cutting, and gentle corners are rounded by aiming at the next waypoint.
+- **Personal space:** villagers steer round each other and round cars, and wait for someone or a passing car rather
+  than walk through. They don't wait for room near a door or seat, or on a doorstep.
+- **Umbrellas** stay down under a station canopy or a roof.
+
+**Trains** (`scripts/unity.sh trainflow`: five minutes on four of the player's worlds):
+- Every piece of track has a direction, including old parts that can't run one way everywhere; their wrong-way
+  branch is never taken.
+- No reversing, no turning back, no engine jumping to the other end. Turn round is gone. Measured: 0 reversals.
+- Each switch's clearance is measured from its geometry (the branches 3.6 cm apart), not a fixed 16 cm. Side by
+  side, trains now keep about 3 cm apart; before, 1.5 cm on World 4. A following train keeps 2.5 cm.
+
+**Track connections** (`scripts/unity.sh trackshape`, 24 hand-drawn connections; `trackshaperender`):
+- Strokes are de-wobbled (Douglas-Peucker to 1.5 cm), and the one- or two-curve fit is preferred for connections.
+- Spline overshoot next to a switch is smoothed out.
+- Short wiggles went from 7 to 6, and turning beyond what a piece needs from 89° to 82° each: a small gain. The
+  renders look smooth before and after, so a reported case is needed to go further.
+
+**Select tool** (replaces Watch):
+- The trigger selects anything with the gold ring under it; grip still works in every tool.
+- A selected CCTV camera shows its picture on the monitor, with ‹ › ^ v buttons round it to turn and tilt it. The
+  stick also turns it, and the trigger on the land points it there.
+- The Cam and Train chips open each camera.
+- The monitor is shown only while something is being watched.
+
 ## Known defects and risks
 
 - **Station, water, bridges, tunnels, animals and villagers are untested on the device.** They are covered by the

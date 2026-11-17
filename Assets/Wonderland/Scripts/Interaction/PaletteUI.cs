@@ -6,7 +6,7 @@ using UnityEngine.Rendering;
 
 namespace Wonderland
 {
-    public enum Tool { Terrain, Water, Forest, Paths, Track, Train, Houses, Decor, Watch, Eraser }
+    public enum Tool { Terrain, Water, Forest, Paths, Track, Train, Houses, Decor, Select, Eraser }
 
     /// <summary>One pressable element of the palette (tool tile or option chip).</summary>
     public sealed class PaletteButton : MonoBehaviour
@@ -67,7 +67,7 @@ namespace Wonderland
         public PaletteButton Hovered { get; private set; }
         public event Action<Tool> ToolSelected;
 
-        public static readonly string[] ToolNames = { "Terrain", "Water", "Forest", "Roads", "Track", "Train", "Build", "Life", "Watch", "Eraser" };
+        public static readonly string[] ToolNames = { "Terrain", "Water", "Forest", "Roads", "Track", "Train", "Build", "Life", "Select", "Eraser" };
         private MeshRenderer viewer;
 
         /// <summary>The CCTV viewer: a little monitor above the palette showing a live feed (null hides it).</summary>
@@ -92,6 +92,33 @@ namespace Wonderland
             }
             viewer.sharedMaterial = feed;
             viewer.transform.parent.gameObject.SetActive(true);
+        }
+
+        private readonly PaletteButton[] viewerTurn = new PaletteButton[4];
+
+        /// <summary>
+        /// Turn and tilt buttons round the monitor (for a CCTV camera on a pole): left, right, up, down - each press calls
+        /// <paramref name="turn"/> with (yaw, pitch) steps. Null hides them.
+        /// </summary>
+        public void SetViewerControls(Action<float, float> turn)
+        {
+            if (viewer == null) return;
+            var frame = viewer.transform.parent;
+            (string label, Vector3 at, float yaw, float pitch)[] keys =
+            {
+                ("<", new Vector3(-0.097f, 0f, -0.001f), -15f, 0f), (">", new Vector3(0.097f, 0f, -0.001f), 15f, 0f),
+                ("^", new Vector3(0f, 0.076f, -0.001f), 0f, -7f), ("v", new Vector3(0f, -0.076f, -0.001f), 0f, 7f),
+            };
+            for (int k = 0; k < keys.Length; k++)
+            {
+                if (viewerTurn[k] == null) viewerTurn[k] = Button("Turn " + keys[k].label, frame, keys[k].at, new Vector2(0.02f, 0.02f), keys[k].label, false);
+                var b = viewerTurn[k];
+                b.gameObject.SetActive(turn != null);
+                if (turn == null) continue;
+                var (_, _, yaw, pitch) = keys[k];
+                b.OnClick = () => turn(yaw, pitch);
+                b.ApplyVisuals();
+            }
         }
 
         public void Build(Material ui, Material lit)
@@ -614,7 +641,7 @@ namespace Wonderland
                 Tool.Train => TrainFactory.LocoMesh(),
                 Tool.Houses => HouseFactory.Get(Catalog.Church),
                 Tool.Decor => SheepIcon(),
-                Tool.Watch => HouseFactory.CameraHead(),
+                Tool.Select => HouseFactory.CameraHead(),
                 _ => EraserIcon(),
             };
             var pivot = new GameObject("Icon").transform;

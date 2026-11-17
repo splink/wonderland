@@ -187,7 +187,7 @@ namespace Wonderland
                         new ActivitySpot(-0.04f, -0.088f, SpotKind.Watch), new ActivitySpot(0f, -0.09f, SpotKind.Watch), new ActivitySpot(0.04f, -0.088f, SpotKind.Watch) } },
                 new() { Name = "Monitoring studio", Short = "Studio", Category = PlaceCategory.Services, Half = new Vector2(0.065f, 0.05f), Height = 0.11f, Styles = 1, Hint = "screens showing the camera feeds",
                     Spots = new[] { Door(0.045f, 0.05f), new ActivitySpot(-0.03f, -0.075f, SpotKind.Watch), new ActivitySpot(0.005f, -0.078f, SpotKind.Watch) } },
-                new() { Name = "CCTV camera", Short = "Camera", Category = PlaceCategory.Small, Half = new Vector2(0.009f, 0.009f), Height = 0.09f, Pad = false, Small = true, Styles = 1, Hint = "watch it from the Watch tool" },
+                new() { Name = "CCTV camera", Short = "Camera", Category = PlaceCategory.Small, Half = new Vector2(0.009f, 0.009f), Height = 0.09f, Pad = false, Small = true, Styles = 1, Hint = "select it to see its picture and turn it" },
                 new() { Name = "Hot-air balloon", Short = "Balloon", Category = PlaceCategory.Fun, Half = new Vector2(0.05f, 0.05f), Height = 0.12f, Styles = 1, Hint = "flights over the countryside",
                     RotorSpeed = 0.001f, Spots = new[] { new ActivitySpot(0f, 0f, SpotKind.Ride, 0f, 0.01f), new ActivitySpot(0.004f, 0.004f, SpotKind.Ride, 90f, 0.01f), new ActivitySpot(-0.04f, -0.058f, SpotKind.Watch, 30f), new ActivitySpot(0.04f, -0.06f, SpotKind.Watch, -30f) } },
                 // On the ponds: a landing stage for boat trips (its front end out over the water), and the boats themselves.

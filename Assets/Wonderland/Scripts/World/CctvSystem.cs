@@ -17,11 +17,11 @@ namespace Wonderland
     /// <summary>
     /// CCTV: miniature cameras on poles the player puts up (Build, Small, Camera), and what they see - live, from the
     /// miniature world only (never the passthrough room). One hidden camera does all the filming, on demand: the feed
-    /// being watched in the Watch tool's viewer is filmed about 15 times a second into a small 320 x 240 picture, and
-    /// each monitoring studio's wall of four screens is refreshed in turn, a screen at a time, only while a studio is in
-    /// view. At most one picture is filmed per frame, so the cost stays bounded however many cameras there are.
-    /// Cameras keep their aim (tap the land in the Watch tool to point the selected one there) through edits, saves and
-    /// loads; moving one resets its aim to straight ahead.
+    /// being watched (a camera selected, a train ridden along with, a villager followed) is filmed about 15 times a second
+    /// into a small 320 x 240 picture, and each monitoring studio's wall of four screens is refreshed in turn, a screen at
+    /// a time, only while a studio is in view. At most one picture is filmed per frame, so the cost stays bounded however
+    /// many cameras there are. Cameras keep their aim (turned with the buttons round their picture, or pointed with the
+    /// trigger in Select) through edits, saves and loads; moving one resets its aim to straight ahead.
     /// </summary>
     public sealed class CctvSystem : MonoBehaviour
     {
@@ -44,7 +44,7 @@ namespace Wonderland
         private float viewerTimer, wallTimer;
         private Vector2? selected;                                      // the watched camera, by where it stands
 
-        /// <summary>The Watch tool is open: film the selected camera for the viewer.</summary>
+        /// <summary>A camera (on a pole, or a train's) is being watched: film it for the viewer.</summary>
         public bool Watching;
         public int Filmed { get; private set; }                         // pictures filmed so far (tests, diagnostics)
         public int FilmedForViewer { get; private set; }
@@ -278,6 +278,9 @@ namespace Wonderland
             }
             return $"Camera {k + 1}" + (near != null ? $" - by the {near}" : "");
         }
+
+        /// <summary>The camera (feed) on building <paramref name="house"/>, or -1.</summary>
+        public int CameraOn(int house) { Refresh(); return cameras.IndexOf(house); }
 
         /// <summary>The building index of camera <paramref name="k"/>.</summary>
         public int HouseOf(int k) => k >= 0 && k < cameras.Count ? cameras[k] : -1;

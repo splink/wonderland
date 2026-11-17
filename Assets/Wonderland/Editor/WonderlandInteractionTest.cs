@@ -296,27 +296,42 @@ namespace Wonderland.Editor
                 camera = world.PlaceHouse(new HouseInstance { x = at.x, z = at.y, variant = Catalog.Camera });
                 if (camera == null) break;
             }
-            ClickButton(hand, "Watch");
+            // Select: trigger on the camera - its card, its picture on the monitor with buttons round it to turn it;
+            // the stick turns it too, the trigger on the land points it there; Close puts the picture away.
+            tools.CloseCards();
+            ClickButton(hand, "Select");
             var feed = palette.transform.Find("Viewer");
-            bool watching = tools.Tool == Tool.Watch && world.Cctv.Watching && feed != null && feed.gameObject.activeSelf && world.Cctv.Count >= 1;
-            float yaw = world.Cctv.Count > 0 ? world.Cctv.AimOf(0).yaw : 0f;
-            var aimAt = world.transform.TransformPoint(new Vector3(-0.3f, world.Terrain.SurfaceAt(-0.3f, 0.3f), 0.3f));
-            Frame(hand, aimAt, true); Frame(hand, aimAt, false);
-            bool aimed = world.Cctv.Count > 0 && Mathf.Abs(Mathf.DeltaAngle(world.Cctv.AimOf(0).yaw, yaw)) > 5f;
-            // The stick turns and tilts the camera being watched.
+            bool hiddenAtFirst = feed == null || !feed.gameObject.activeSelf;
+            bool selected = false, buttons = false, turned = false, aimed = false;
             if (world.Cctv.Count > 0)
             {
-                world.Cctv.Selected = 0;
+                int ch = world.Cctv.HouseOf(0);
+                var camAt = world.transform.TransformPoint(new Vector3(world.Buildings.Houses[ch].x, world.Buildings.TopOf(ch) - 0.01f, world.Buildings.Houses[ch].z));
+                Frame(hand, camAt, false); Frame(hand, camAt, true); Frame(hand, camAt, false);
+                feed = palette.transform.Find("Viewer");
+                selected = palette.CardShown && world.Cctv.Watching && world.Cctv.Selected == 0 && feed != null && feed.gameObject.activeSelf;
+                var right = Find(">");
+                buttons = right != null && right.gameObject.activeInHierarchy;
+                float yaw0 = world.Cctv.AimOf(0).yaw;
+                if (buttons) { ClickButton(hand, ">"); ClickButton(hand, ">"); }
+                turned = Mathf.Abs(Mathf.DeltaAngle(world.Cctv.AimOf(0).yaw, yaw0)) > 25f;
+                float yaw1 = world.Cctv.AimOf(0).yaw;
+                var aimAt = world.transform.TransformPoint(new Vector3(-0.3f, world.Terrain.SurfaceAt(-0.3f, 0.3f), 0.3f));
+                Frame(hand, aimAt, true); Frame(hand, aimAt, false);
+                aimed = Mathf.Abs(Mathf.DeltaAngle(world.Cctv.AimOf(0).yaw, yaw1)) > 5f;
+                // The stick turns and tilts it too.
                 var aim0 = world.Cctv.AimOf(0);
                 for (int i = 0; i < 72; i++) Frame(hand, aimAt + Vector3.up * 0.5f, false, stick: new Vector2(1f, 0f));
                 for (int i = 0; i < 36; i++) Frame(hand, aimAt + Vector3.up * 0.5f, false, stick: new Vector2(0f, -1f));
                 var aim1 = world.Cctv.AimOf(0);
-                Check(Mathf.Abs(Mathf.DeltaAngle(aim1.yaw, aim0.yaw)) > 40f && aim1.pitch > aim0.pitch + 5f, $"The stick turns and tilts the watched camera (yaw {aim0.yaw:0}° -> {aim1.yaw:0}°, tilt {aim0.pitch:0}° -> {aim1.pitch:0}°)");
+                Check(Mathf.Abs(Mathf.DeltaAngle(aim1.yaw, aim0.yaw)) > 40f && aim1.pitch > aim0.pitch + 5f, $"The stick turns and tilts the selected camera (yaw {aim0.yaw:0}° -> {aim1.yaw:0}°, tilt {aim0.pitch:0}° -> {aim1.pitch:0}°)");
             }
+            Check(camera == null && hiddenAtFirst && selected && buttons && turned && aimed,
+                "Select: trigger on a camera - its card and its live picture over the palette, with buttons round it that turn it; the trigger on the land points it there" + (camera == null ? "" : $" (\"{camera}\")")
+                + $" [first hidden {hiddenAtFirst}, selected {selected}, buttons {buttons}, turned {turned}, aimed {aimed}]");
+            tools.CloseCards();
+            Check(!world.Cctv.Watching && !feed.gameObject.activeSelf, "Close puts the picture away");
             ClickButton(hand, "Life");
-            Check(camera == null && watching && aimed && !world.Cctv.Watching && !feed.gameObject.activeSelf,
-                "The Watch tool shows the camera's live feed above the palette, aims it where you point, and puts it away again" + (camera == null ? "" : $" (\"{camera}\")")
-                + $" [watching {watching}, aimed {aimed}, cameras {world.Cctv.Count}, tool {tools.Tool}, feed {(feed != null ? feed.gameObject.activeSelf.ToString() : "none")}]");
 
             // Several worlds: save this one as World 2, change it, save that as World 3, and load World 2 back.
             int houses = world.Buildings.Houses.Count;
@@ -414,7 +429,8 @@ namespace Wonderland.Editor
                 var hh = world.Buildings.Houses[someHouse];
                 var roof = world.transform.TransformPoint(new Vector3(hh.x, world.Buildings.TopOf(someHouse) - 0.01f, hh.z));
                 Frame(hand, roof, false); Frame(hand, roof, false, grip: true); Frame(hand, roof, false);
-                Check(palette.CardShown && palette.CardTitle == Catalog.Get(hh.variant).Name, $"Grip on a building opens its card (\"{palette.CardTitle}\")");
+                bool titled = palette.CardTitle == Catalog.Get(hh.variant).Name || hh.variant == Catalog.Camera && palette.CardTitle.StartsWith("Camera");
+                Check(palette.CardShown && titled, $"Grip on a building opens its card (\"{palette.CardTitle}\")");
             }
             // Pointing at someone puts a gold ring under them; grip on another villager moves the camera to them.
             tools.CloseCards();

@@ -202,10 +202,12 @@ where a trail meets a narrow stream.
 
   Only the eight most audible nearby sources play, so it stays calm. The **Sound** button at the bottom of the
   palette cycles On / Quiet / Off, and the setting is remembered.
-- **CCTV.** Put up cameras (Build ▸ Small ▸ Camera; a camera looks the way its front faces) and open the
-  **Watch** tool.
-  - A little monitor above the palette shows the selected camera live: the trains, traffic and people as they move.
-  - Tap a camera to watch it, tap the land to point the watched camera there, or press A for the next one.
+- **CCTV.** Put up cameras (Build ▸ Small ▸ Camera; a camera looks the way its front faces) and select one with
+  the **Select** tool (or grip in any tool).
+  - A little monitor above the palette shows it live: the trains, traffic and people as they move.
+  - The **‹ › ^ v** buttons round its picture turn and tilt it, and so does the stick. The trigger on the land points
+    it there.
+  - The Cam 1, 2... chips open each camera in turn, and A moves to the next one.
   - A monitoring studio shows four feeds on its front wall, and villagers stop to watch.
   - Cameras keep their aim through edits, saves and loads.
 - **Point at a vehicle** (Life tool) to see what it is doing ("The ambulance - on a call, lights flashing").
@@ -249,10 +251,12 @@ where a trail meets a narrow stream.
 (full frame rate, room to build more), **orange** (frames starting to run late, close to the limit), **red** (falling
 behind: the world is heavy for the headset). It is measured from the real frame time, not estimated.
 
-**Who is that?** Point at anyone - a villager, an animal, a building, a train, a car or a boat - with any tool:
-- A soft **gold ring** appears under it, the pointer turns gold, and the palette says who or what it is.
-- **Grip** opens its card. In the Life tool the trigger does too. Build, Track and Train keep grip for their own work on
-  buildings, track and trains.
+**Who is that?** The **Select** tool is for looking: point at anything - a villager, an animal, a building, a train, a
+car, a boat, a camera - and pull the trigger to see its card.
+- A soft **gold ring** appears under whatever would be selected, the pointer turns gold, and the palette says who or
+  what it is.
+- In every other tool **grip** does the same (in the Life tool the trigger too). Build, Track and Train keep grip for
+  their own work on buildings, track and trains.
 - Small figures are found by how close the pointer passes to them, so a villager in front of a house is easy to point
   at. Nothing hidden behind a building's walls is selected.
 - The first time you point at a villager, a tip says what grip does.
@@ -294,14 +298,20 @@ to the wind; fastest across it) and a **paddle steamer** (six passengers). Boats
 aground. Villagers come to the landing stage for a boat trip; a boat comes alongside, they sit in it while it goes round
 the lake, and step off when it brings them back. Point at a boat to see what it is doing; the eraser takes one away.
 
-**Cameras on trains.** Every train carries a camera on the front of its engine: in the Watch tool its chips (Train 1,
-Train 2...) follow the cameras on poles, giving a driver's view of the line. Turning a camera while placing it shows
-the edges of what it will see; in the Watch tool the **stick turns and tilts** the camera being watched.
+**Cameras on trains.** Every train carries a camera on the front of its engine, giving a driver's view of the line.
+Its card's **Camera** button shows it, and in the Select tool its chip (Train 1, Train 2...) follows the cameras on
+poles. Turning a camera while placing it shows the edges of what it will see.
 
 **Carriages:** in the Train tool, point at a train, then press **+ Carriage** or **- Carriage** on the palette (or push
-the stick left/right while pointing at it). **Turn round** moves the engine to the other end of its train, so a train
-that was running backwards runs engine first. Trains also do this themselves at the buffers, and at the next station
-after backing away from another train.
+the stick left/right while pointing at it).
+
+**Trains follow the arrows, always.** Every piece of track has a direction, and every train runs that way, engine
+first:
+- A train never reverses, never backs away from another train, and its engine never moves to the other end.
+- A new train is set facing the arrows.
+- At the end of a line it stops, so lines are best joined back onto the railway (the Track tool says so).
+- Trains keep a little more room: about 2.5 cm behind the train ahead. At each switch, a train waits until the two
+  lines are 3.6 cm apart, enough for two trains side by side.
 
 **The world stays where you put it.** It is pinned to the room with a Meta spatial anchor: next launch it comes back to
 the same spot, and it doesn't drift when the headset re-centres (taken off and put on again). Its height is the room
@@ -374,7 +384,7 @@ the ponds, without damming them; a stream from a higher pond falls into the lowe
 **Mountains.** The **Peaks** terrain mode raises craggy summits. High ground turns to scree and rock bands, with snow on
 the tops and boulders on the slopes. Ponds get sandy beaches.
 
-Palette: **Terrain · Water · Forest · Roads · Track · Train · Build · Life · Watch · Eraser** tools, an options row for the current
+Palette: **Terrain · Water · Forest · Roads · Track · Train · Build · Life · Select · Eraser** tools, an options row for the current
 tool, and **Undo · Redo · Save · Load · Move · New · Sound · Help · Stats**. The world saves automatically when the app is paused or closed and is restored
 on the next launch.
 

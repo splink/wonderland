@@ -125,21 +125,48 @@ namespace Wonderland
 
         private void StopCameras() { World.Cctv.FollowSeed = 0; trainCamera = false; SyncViewer(); }
 
+        /// <summary>The CCTV camera whose card is open (its feed index), or -1.</summary>
+        private int SelectedCamera()
+        {
+            if (followKind != 3) return -1;
+            int i = Followed();
+            return i >= 0 && World.Buildings.Houses[i].variant == Catalog.Camera ? World.Cctv.CameraOn(i) : -1;
+        }
+
+        /// <summary>Whether feed <paramref name="k"/> is the one on the monitor now.</summary>
+        private bool Watching(int k) => k == World.Cctv.Selected && (SelectedCamera() == k || trainCamera);
+
         private bool viewerShown;
 
-        /// <summary>The monitor over the palette: shown for the Watch tool, a followed villager's camera or a train's.</summary>
+        private int controlsFor = -2;
+
+        /// <summary>
+        /// The monitor over the palette: shown while there is something to watch - a CCTV camera's card (with buttons to
+        /// turn it), a train's camera, or a followed villager's.
+        /// </summary>
         private void SyncViewer()
         {
-            bool show = Tool == Tool.Watch || World.Cctv.FollowSeed != 0 || trainCamera;
-            World.Cctv.Watching = Tool == Tool.Watch || trainCamera;
-            if (show == viewerShown && Palette != null) return;
-            viewerShown = show;
-            Palette.SetViewer(show ? World.Cctv.ViewerMaterial : null);
+            int cam = SelectedCamera();
+            if (cam >= 0 && World.Cctv.Selected != cam) World.Cctv.Selected = cam;
+            bool show = World.Cctv.FollowSeed != 0 || trainCamera || cam >= 0;
+            World.Cctv.Watching = trainCamera || cam >= 0;
+            if (show != viewerShown || Palette == null)
+            {
+                viewerShown = show;
+                Palette.SetViewer(show ? World.Cctv.ViewerMaterial : null);
+                controlsFor = -2;
+            }
+            if (show && controlsFor != cam)
+            {
+                controlsFor = cam;
+                Palette.SetViewerControls(cam >= 0 ? TurnCamera : null);
+            }
         }
 
         /// <summary>Opens the card of a building (visitors, hours, staff, goods; residents for a home).</summary>
         private void InspectHouse(int house)
         {
+            StopCameras();
             var h = World.Buildings.Houses[house];
             followKind = 3; followHouse = new Vector2(h.x, h.z);
             cardTimer = 0f;
@@ -213,9 +240,17 @@ namespace Wonderland
                 if (refresh)
                 {
                     var c = World.People.PlaceCardOf(i);
+                    string place = PlaceBody(c, i);
+                    int cam = World.Cctv.CameraOn(i);
+                    if (h.variant == Catalog.Camera && cam >= 0)
+                    {
+                        var aim = World.Cctv.AimOf(cam);
+                        place = new CardText().Section("Camera").Row("Looking", $"{Compass(aim.yaw)}, {aim.pitch:0}° down")
+                            .Row("Turn it", "the buttons round its picture, or the stick").Row("Point it", "trigger on the land") + place;
+                    }
                     model.Clear();
                     model.Add((HouseFactory.Get(h.variant, h.style), Matrix4x4.Rotate(Quaternion.Euler(0f, 180f, 0f))));
-                    Palette.ShowCard(c.Name, c.Status != null ? $"{c.Kind} · {CardText.Tint(c.Status, c.StatusColour)}" : c.Kind, PlaceBody(c, i), model, CloseCard);
+                    Palette.ShowCard(h.variant == Catalog.Camera && cam >= 0 ? World.Cctv.NameOf(cam) : c.Name, c.Status != null ? $"{c.Kind} · {CardText.Tint(c.Status, c.StatusColour)}" : c.Kind, place, model, CloseCard);
                     Palette.SetCardAction(null, false, null);
                     Pin(homePin, null); Pin(workPin, null);
                     routeLine.enabled = false;
@@ -627,7 +662,7 @@ namespace Wonderland
                 Tool.Train => "Trigger on the track: a train - pick it on the second row (Steam, Express, Tank engine, Goods, Railcar); it runs the way the arrows point\nPointing at a train: trigger stop / go · stick up/down: speed · grip: pick it up and put it elsewhere\nCarriages: point at a train, then + Carriage / - Carriage (trains always run engine first, the way the arrows point)\nThe hint says what it is doing and why it waits (a red signal, the train ahead, the buffers)\nSwitches: Spread (trains take the way with fewer trains ahead, so they cover the whole railway), Random, Manual (tap a switch) · A: start / stop all",
                 Tool.Houses => "Pick a category, then a building. Trigger: place it · stick: a flick turns it 15°, hold to turn smoothly (the arrow is its front) · A: next\nTrigger (or grip) on a building: pick it up and move it · pointing at one says who is there\nTravel: a landing stage at a pond's edge, and boats on the water",
                 Tool.Decor => "Trigger: place people or animals (hold and sweep for a herd)\nTrigger on a villager or animal: their card - a marker follows them, a line shows where they are going, pins mark home and work\nChips: days pass / fast / stop time, Fête, Emergency, Clouds · A: next kind",
-                Tool.Watch => "Put cameras up with Build, Small, Camera (they look the way their front faces)\nTrigger on a camera: watch it · stick: turn and tilt it · trigger on the land: point it there\nTrain 1, 2...: the view from the front of each train · A: next camera",
+                Tool.Select => "Trigger on anything with a gold ring under it: its card (in every other tool, grip does the same)\nA villager's card follows them with their camera; a train's card rides along at the front\nA camera (Build, Small, Camera): its picture on the monitor - the buttons round it or the stick turn and tilt it, the trigger on the land points it there\nCam 1, 2... and Train 1, 2...: open a camera · A: next camera",
                 _ => "Trigger on anything you built: take it away · hold over trees: clear them",
             };
             return here + "\n\nEverywhere: Grip on a villager, animal or building: its card · B undo (Redo below) · point at the palette and pull the trigger to choose\nSave / Load: Worlds 1-6 · Move: place the world elsewhere · New: start again (press twice) · Sound: on / quiet / muted · Stats: frame rate and the world's numbers";

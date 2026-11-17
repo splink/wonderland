@@ -201,7 +201,7 @@ namespace Wonderland
             if (carriedTrain != null) { carriedTrain = null; World.Undo(false); }
             Tool = tool;   // (an open card - and the camera following someone - stays open: keep building while watching)
             Palette.SetTool(tool);
-            World.Cctv.Watching = tool == Tool.Watch;
+            World.Cctv.Watching = tool == Tool.Select;
             if (infoMode == 2) ShowHelp();
             SyncViewer();
             drawn.Clear(); World.Track.HidePreview();
@@ -330,14 +330,15 @@ namespace Wonderland
                     items.Add(new PaletteUI.Option("Clouds", World.Sky.Shown, () => { World.Sky.Shown = !World.Sky.Shown; Say(World.Sky.Shown ? "Clouds drift over the land" : "Clear skies"); RefreshOptions(); }));
                     items.Add(new PaletteUI.Option("Rain", World.Sky.Raining, () => { if (!World.Sky.Shown) World.Sky.Shown = true; Say(World.Sky.ToggleRain()); RefreshOptions(); }));
                     break;
-                case Tool.Watch:
+                case Tool.Select:
                 {
+                    // The cameras (and the trains' cameras): a chip opens one, its picture on the monitor.
                     var cctv = World.Cctv;
-                    if (cctv.Feeds == 0) o.Add(new PaletteUI.Option("Put up a camera: Build, Small, Camera", false, null, false));
                     for (int k = 0; k < cctv.Feeds && k < 10; k++)
                     {
                         int cam = k;
-                        o.Add(new PaletteUI.Option(k < cctv.Count ? $"Cam {k + 1}" : $"Train {k - cctv.Count + 1}", cctv.Selected == k, () => { cctv.Selected = cam; Say(cctv.NameOf(cam)); RefreshOptions(); }));
+                        bool on = Watching(cam);
+                        o.Add(new PaletteUI.Option(k < cctv.Count ? $"Cam {k + 1}" : $"Train {k - cctv.Count + 1}", on, () => { OpenFeed(cam); RefreshOptions(); }));
                     }
                     break;
                 }
@@ -432,10 +433,8 @@ namespace Wonderland
                 : DecorKind == (int)AnimalKind.Duck ? "Trigger on a pond: ducks paddle about  ·  A: next"
                 : DecorKind == (int)AnimalKind.Deer ? "Trigger near the woods: deer stay among the trees and shy away from people  ·  A: next"
                 : $"Trigger: place a {AnimalFactory.Names[DecorKind].ToLower()} - hold and sweep for a herd; inside a fence they stay in their pasture  ·  A: next",
-            Tool.Watch => World.Cctv.Feeds == 0 ? "No cameras yet: put one up with Build, Small, Camera (its front faces the way it looks), or put a train on the track"
-                : hoverCamera >= 0 ? $"{World.Cctv.NameOf(hoverCamera)}  ·  trigger: watch it"
-                : World.Cctv.Selected >= World.Cctv.Count ? $"Watching {World.Cctv.NameOf(World.Cctv.Selected)}  ·  trigger on a camera: watch it  ·  A: next camera"
-                : $"Watching {World.Cctv.NameOf(World.Cctv.Selected)}  ·  stick: turn and tilt it  ·  trigger on a camera: watch it  ·  trigger on the land: point it there  ·  A: next camera",
+            Tool.Select => SelectedCamera() >= 0 ? $"{World.Cctv.NameOf(SelectedCamera())}  ·  turn it with the buttons round its picture or the stick  ·  trigger on the land: point it there  ·  A: next camera"
+                : "Point at anything - a villager, an animal, a building, a train, a car, a camera - and pull the trigger to select it  ·  A: next camera",
             _ => "Tap a house, an animal, a villager, a train, a signal or a piece of track to erase  ·  hold over trees to clear them",
         };
 
@@ -504,8 +503,8 @@ namespace Wonderland
                 else turnHeld = 0f;
                 houseRotation = Mathf.Repeat(houseRotation, 360f);
             }
-            else if (Mathf.Abs(stick.x) > 0.25f && Tool != Tool.Watch) radius[(int)Tool] = Mathf.Clamp(Radius * (1f + stick.x * 1.2f * dt), 0.04f, 0.4f);
-            if (Mathf.Abs(stick.y) > 0.4f && Tool != Tool.Train && Tool != Tool.Watch)
+            else if (Mathf.Abs(stick.x) > 0.25f && Tool != Tool.Select) radius[(int)Tool] = Mathf.Clamp(Radius * (1f + stick.x * 1.2f * dt), 0.04f, 0.4f);
+            if (Mathf.Abs(stick.y) > 0.4f && Tool != Tool.Train && Tool != Tool.Select)
             {
                 if (Tool == Tool.Forest) { density = Mathf.Clamp01(density + stick.y * 0.6f * dt); }
                 else strength = Mathf.Clamp(strength + stick.y * 0.6f * dt, 0.15f, 1f);
@@ -532,7 +531,9 @@ namespace Wonderland
             // ...and a building: grip (trigger in the Life tool) opens its card - not in Build or Eraser, where these pick up or remove.
             peekHouse = looking && !small && peekBoat < 0 && Tool != Tool.Houses && Tool != Tool.Eraser ? houseHit : -1;
             ShowTarget();
-            if (input.GripDown && looking && (small || peekHouse >= 0 && Tool != Tool.Track) || peekHouse >= 0 && Tool == Tool.Decor && input.TriggerDown && looking)
+            // Select: the trigger picks what is pointed at. Everywhere else grip does (and in Life the trigger on a building).
+            bool picking = input.GripDown && (small || peekHouse >= 0 && Tool != Tool.Track) || input.TriggerDown && (Tool == Tool.Select && (small || peekHouse >= 0) || Tool == Tool.Decor && peekHouse >= 0);
+            if (looking && picking)
             {
                 if (peekPerson >= 0 || peekAnimal >= 0) Inspect(peekPerson, peekAnimal);
                 else if (peekVehicle != null) InspectVehicle(peekVehicle);
@@ -552,7 +553,7 @@ namespace Wonderland
                 case Tool.Houses: HouseTool(input, hit, local, localOrigin, localDir, ref colour); break;
                 case Tool.Paths: PathTool(input, hit, local, ref colour); break;
                 case Tool.Decor: DecorTool(input, hit, local, dt, ref colour); break;
-                case Tool.Watch: WatchTool(input, hit, local, dt, ref colour); break;
+                case Tool.Select: SelectTool(input, hit, local, dt, ref colour); break;
                 case Tool.Eraser: EraserTool(input, hit, local, localOrigin, localDir, dt, ref colour); break;
             }
             if (Tool != Tool.Houses) ghost.gameObject.SetActive(false);
@@ -586,8 +587,8 @@ namespace Wonderland
                 }
                 case Tool.Train: ToggleTrain(); break;
                 case Tool.Track: SignalMode = !SignalMode; Say(SignalMode ? "Signals" : "Draw track"); break;
-                case Tool.Watch:
-                    if (World.Cctv.Feeds > 0) { World.Cctv.Selected = (World.Cctv.Selected + 1) % World.Cctv.Feeds; Say(World.Cctv.NameOf(World.Cctv.Selected)); }
+                case Tool.Select:
+                    if (World.Cctv.Feeds > 0) OpenFeed((World.Cctv.Selected + 1) % World.Cctv.Feeds);
                     break;
             }
             RefreshOptions();
@@ -663,27 +664,45 @@ namespace Wonderland
         }
 
         /// <summary>Watch: pick a camera to watch (trigger on it), or point the watched one at a spot (trigger on the land).</summary>
-        private void WatchTool(PointerInput input, bool hit, Vector3 local, float dt, ref Color colour)
+        /// <summary>
+        /// Select: the trigger picks whatever has the gold ring under it - a villager, an animal, a building, a train, a
+        /// car, a boat, a CCTV camera - and opens its card. With a camera's card open, its picture is on the monitor:
+        /// the buttons round it (or the stick) turn and tilt it, and the trigger on bare land points it there.
+        /// </summary>
+        private void SelectTool(PointerInput input, bool hit, Vector3 local, float dt, ref Color colour)
         {
             var cctv = World.Cctv;
             World.TerrainView.HideBrush();
-            hoverCamera = hit ? cctv.NearestCamera(new Vector2(local.x, local.z), 0.035f) : -1;
-            colour = hoverCamera >= 0 ? new Color(0.55f, 0.9f, 1f, 0.9f) : new Color(1f, 0.95f, 0.75f, 0.85f);
-            // The stick turns (left/right) and tilts (up/down) the camera being watched.
-            int watched = cctv.Selected;
-            if (watched >= 0 && watched < cctv.Count && input.Stick.sqrMagnitude > 0.09f)
-            {
-                cctv.Turn(watched, input.Stick.x * 70f * dt, -input.Stick.y * 40f * dt);
-                turnSaid -= dt;
-                if (turnSaid <= 0f) { turnSaid = 0.4f; var a = cctv.AimOf(watched); Say($"{cctv.NameOf(watched)}: facing {Compass(a.yaw)}, {a.pitch:0}° down", 1f); }
-            }
-            if (!input.TriggerDown || !hit) return;
-            if (hoverCamera >= 0) { cctv.Selected = hoverCamera; Say(cctv.NameOf(hoverCamera)); RefreshOptions(); Haptic(0.4f, 0.03f); return; }
-            int k = cctv.Selected;
-            if (k < 0) { Say("Put up a camera first: Build, Small, Camera"); return; }
-            cctv.AimAt(k, local);
-            Say($"{cctv.NameOf(k)} now looks this way");
-            Haptic(0.4f, 0.03f);
+            colour = new Color(1f, 0.95f, 0.75f, 0.85f);
+            int cam = SelectedCamera();
+            if (cam >= 0 && input.Stick.sqrMagnitude > 0.09f) TurnCamera(input.Stick.x * 70f * dt, -input.Stick.y * 40f * dt);
+            bool target = peekPerson >= 0 || peekAnimal >= 0 || peekVehicle != null || peekTrain != null || peekHouse >= 0 || peekBoat >= 0;
+            if (!input.TriggerDown || target) return;
+            if (cam >= 0 && hit) { cctv.AimAt(cam, local); Say($"{cctv.NameOf(cam)} now looks this way"); Haptic(0.4f, 0.03f); cardTimer = 0f; return; }
+            Say("Point at something - a villager, a building, a train, a camera - and pull the trigger to select it");
+        }
+
+        /// <summary>Turns the selected camera (on a pole) by <paramref name="yaw"/> and tilts it by <paramref name="pitch"/> degrees.</summary>
+        private void TurnCamera(float yaw, float pitch)
+        {
+            int cam = SelectedCamera();
+            if (cam < 0) return;
+            var cctv = World.Cctv;
+            cctv.Turn(cam, yaw, pitch);
+            turnSaid -= Time.deltaTime;
+            if (turnSaid <= 0f || Mathf.Abs(yaw) >= 5f || Mathf.Abs(pitch) >= 5f) { turnSaid = 0.4f; var a = cctv.AimOf(cam); Say($"{cctv.NameOf(cam)}: facing {Compass(a.yaw)}, {a.pitch:0}° down", 1f); }
+            cardTimer = 0f;
+        }
+
+        /// <summary>Opens feed <paramref name="k"/>: a pole camera's card (its picture on the monitor), or a train's card with its camera.</summary>
+        private void OpenFeed(int k)
+        {
+            var cctv = World.Cctv;
+            if (k < 0 || k >= cctv.Feeds) return;
+            if (k < cctv.Count) InspectHouse(cctv.HouseOf(k));
+            else { InspectTrain(World.Trains.Trains[k - cctv.Count]); trainCamera = true; cctv.Selected = k; }
+            Say(cctv.NameOf(k));
+            SyncViewer();
         }
 
         private void DecorTool(PointerInput input, bool hit, Vector3 local, float dt, ref Color colour)
