@@ -615,6 +615,7 @@ namespace Wonderland.Editor
                 new[] { Catalog.Sawmill, Catalog.FurnitureShop, Catalog.IceCream, Catalog.Pub, Catalog.Hotel, Catalog.PostOffice },
                 new[] { Catalog.TaxiRank, Catalog.Letterbox, Catalog.CarPark, Catalog.FreightYard, Catalog.Harbour },
                 new[] { Catalog.Zoo, Catalog.FairyCastle, Catalog.Stadium },
+                new[] { Catalog.FairyCastle },
             };
             for (int set = 0; set < sets.Length; set++)
             {
@@ -628,7 +629,7 @@ namespace Wonderland.Editor
                     WonderlandRenders.Place(root, HouseFactory.Get(id, 0), WonderlandMaterials.Lit, new Vector3(x + w / 2f, 0f, 0f), Quaternion.identity);
                     x += w;
                 }
-                float back = set == 0 ? 0.95f : set == 1 ? 0.75f : 0.8f;
+                float back = set == 0 ? 0.95f : set == 1 ? 0.75f : set == 2 ? 0.8f : 0.32f;
                 cam.transform.position = new Vector3(0f, back * 0.32f, -back); cam.transform.LookAt(new Vector3(0f, 0.04f, 0f));
                 WonderlandRenders.Capture(cam, $"living-buildings-{set + 1}.png", 2400, 1100);
                 UnityEngine.Object.DestroyImmediate(root.gameObject);
