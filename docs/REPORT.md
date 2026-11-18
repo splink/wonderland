@@ -896,7 +896,7 @@ Renders: `docs/renders/editor-label-building.png`, `editor-label-villager.png`, 
   ship, cranes, crates and containers. There is a new Shops category in Build.
 - **Water:** three stream widths (creek, stream, river), joined stream networks, waterfall spray, a Lake brush.
 
-**What is demonstrably working.** `scripts/unity.sh living` runs nine scenes from start to end, 38 checks, all
+**What is demonstrably working.** `scripts/unity.sh living` runs nine scenes from start to end, 41 checks, all
 passing:
 - deliveries, including with no road and with the drop removed half way;
 - a taxi journey;
