@@ -14,13 +14,9 @@ namespace Wonderland
         /// </summary>
         private RectInt PadHouse(HouseInstance h)
         {
-            if (!Catalog.Get(h.variant).Pad) return new RectInt(0, 0, 0, 0);   // rocks, camps and small details follow the ground
+            var region = PadRegion(h, out var e, out float margin);
+            if (region.width <= 0) return region;
             float target = Buildings.SitHeight(h, out _);
-            // Fully flat and protected out to 2.5 cm beyond the footprint (bilinear sampling reaches one 2 cm cell out),
-            // then a soft 7 cm blend into the surrounding ground.
-            var e = HouseFactory.HalfExtents(h.variant) + Vector2.one * 0.025f;
-            float margin = 0.07f;
-            var region = Terrain.RegionAround(new Vector2(h.x, h.z), e.magnitude + margin + 0.02f);
             var inv = Quaternion.Inverse(Quaternion.Euler(0f, h.rotation, 0f));
             for (int z = region.yMin; z < region.yMax; z++)
             for (int x = region.xMin; x < region.xMax; x++)
@@ -39,11 +35,32 @@ namespace Wonderland
             return region;
         }
 
-        /// <summary>Re-derives every house pad (after houses were removed, moved, restored or loaded).</summary>
-        public void ApplyPads()
+        /// <summary>
+        /// The ground a house's pad covers: fully flat and protected out to 2.5 cm beyond the footprint (bilinear sampling
+        /// reaches one 2 cm cell out), then a soft 7 cm blend into the surrounding ground. Empty for rocks, camps and small
+        /// details, which follow the ground.
+        /// </summary>
+        private RectInt PadRegion(HouseInstance h, out Vector2 halfExtents, out float margin)
         {
-            System.Array.Clear(Terrain.Pad, 0, Terrain.Pad.Length);
-            foreach (var h in Buildings.Houses) TerrainView.Rebuild(PadHouse(h));
+            halfExtents = HouseFactory.HalfExtents(h.variant) + Vector2.one * 0.025f;
+            margin = 0.07f;
+            if (!Catalog.Get(h.variant).Pad) return new RectInt(0, 0, 0, 0);
+            return Terrain.RegionAround(new Vector2(h.x, h.z), halfExtents.magnitude + margin + 0.02f);
+        }
+
+        /// <summary>
+        /// Re-derives every house pad (after houses were removed, moved, restored or loaded) - or, with
+        /// <paramref name="within"/>, the pads there: every house whose pad reaches into it is padded again.
+        /// </summary>
+        public void ApplyPads(RectInt? within = null)
+        {
+            var area = within ?? Terrain.All;
+            for (int z = area.yMin; z < area.yMax; z++)
+                System.Array.Clear(Terrain.Pad, z * Terrain.Nx + area.xMin, area.width);
+            var padded = new List<RectInt>();
+            foreach (var h in Buildings.Houses)
+                if (within == null || PadRegion(h, out _, out _).Overlaps(area)) padded.Add(PadHouse(h));
+            TerrainView.Rebuild(padded);
             Buildings.Resit();
             Forest.MarkAllDirty();
             RebuildStations();

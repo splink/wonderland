@@ -183,9 +183,60 @@ namespace Wonderland.Editor
                 Check(arrowsOnNew && arrowsOnOld && n.TwoWayParts == 1, $"Every piece has a direction - the new loop and the old part too (its wrong-way branch is never taken); the old part is still counted as one that can't run one way everywhere ({n.TwoWayParts})");
                 UnityEngine.Object.DestroyImmediate(w.gameObject);
             }
+            IncrementalRebuild();
             RailOperations();
             LoopJoinProbe();
             OneWayJourney();
+        }
+
+        /// <summary>
+        /// Building and removing track redoes only what the change touched: afterwards the track meshes show exactly the
+        /// network, and the ground's locks are what grading the whole railway from scratch would give.
+        /// </summary>
+        private static void IncrementalRebuild()
+        {
+            var w = Scratch("Incremental", 370f);
+            var t = w.Terrain;
+            var steps = new List<string>();
+            bool meshesOk = true; float worstLock = 0f; int lockedCells = 0;
+            void Verify(string step)
+            {
+                var n = w.Track.Network;
+                var shown = new HashSet<TrackLayout>(w.Track.BuiltLayouts);
+                int count = 0; foreach (var _ in w.Track.BuiltLayouts) count++;
+                bool same = count == n.Edges.Count;
+                foreach (var e in n.Edges) same &= shown.Contains(e.Layout);
+                if (!same) { meshesOk = false; steps.Add(step + ": meshes out of date"); }
+                // Grade the whole railway on a copy of the ground and compare the locks.
+                var height = (float[])t.Height.Clone(); var lockNow = (float[])t.Lock.Clone(); var soil = (float[])t.Soil.Clone(); var surface = (float[])t.Surface.Clone();
+                TrackSystem.UnlockTerrain(t);
+                foreach (var e in n.Edges) TrackSystem.GradeTerrain(t, e.Layout, w.WaterLevelFor, e.Tunnel);
+                float worst = 0f; int locked = 0;
+                for (int i = 0; i < lockNow.Length; i++) { worst = Mathf.Max(worst, Mathf.Abs(t.Lock[i] - lockNow[i])); if (lockNow[i] > 0f) locked++; }
+                worstLock = Mathf.Max(worstLock, worst); lockedCells = locked;
+                height.CopyTo(t.Height, 0); lockNow.CopyTo(t.Lock, 0); soil.CopyTo(t.Soil, 0); surface.CopyTo(t.Surface, 0);
+                steps.Add($"{step} ({n.Edges.Count} pieces, locks off by {worst:0.000})");
+            }
+            var loop = w.BuildTrack(Loop(t, 0.42f, 0.32f, 0.97f, false));
+            Verify("loop");
+            TrackPlan branch = null;
+            for (int k = 0; k < 6 && (branch == null || !branch.Ok); k++)
+            {
+                float a = 0.3f + k * 0.9f;
+                var p0 = new Vector2(Mathf.Cos(a) * 0.42f, Mathf.Sin(a) * 0.32f);
+                var dir = new Vector2(-Mathf.Sin(a) * 0.42f, Mathf.Cos(a) * 0.32f).normalized; var outward = p0.normalized;
+                var stroke = new List<Vector3>();
+                for (int i = 0; i <= 30; i++) { float u = i / 30f; var q = p0 + dir * (u * 0.45f) + outward * (u * u * 0.3f); stroke.Add(t.PointAt(q.x, q.y)); }
+                branch = w.BuildTrack(stroke);
+            }
+            Verify("branch");
+            var across = w.BuildTrack(Line(t, new Vector2(-0.7f, -0.6f), new Vector2(-0.1f, 0.6f)));
+            Verify("a line across");
+            bool removed = branch.Ok && w.RemovePieceAt(new Vector3(branch.Path[branch.Path.Count / 2].x, 0f, branch.Path[branch.Path.Count / 2].y));
+            Verify("branch removed");
+            Check(loop.Ok && branch.Ok && removed && meshesOk && worstLock < 0.02f && lockedCells > 0,
+                $"Building and removing track redoes only what changed: the meshes show the network and the ground is locked as if graded from scratch ({string.Join("; ", steps)}; across: {across.Error ?? "built"}{(branch.Ok ? "" : "; branch: " + branch.Error)})");
+            UnityEngine.Object.DestroyImmediate(w.gameObject);
         }
 
         /// <summary>Every switch lists three track ends, each of which ends at the switch.</summary>

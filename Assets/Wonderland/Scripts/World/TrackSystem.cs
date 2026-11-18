@@ -31,7 +31,16 @@ namespace Wonderland
         public readonly List<SignalInstance> Signals = new();
         /// <summary>Hand-placed signals snapped to the track: piece, arc length (-1 when not beside any track).</summary>
         public readonly List<(int edge, float s)> SignalSpots = new();
-        private readonly List<(GameObject go, Mesh mesh)> pieces = new();
+        /// <summary>A piece's mesh and what it shows (the layout, buffer stops, arrows and tunnels it was built with).</summary>
+        private sealed class Piece
+        {
+            public GameObject Go;
+            public Mesh Mesh;
+            public TrackLayout Layout;
+            public bool Dead0, Dead1, Arrows;
+            public bool[] Tunnel;
+        }
+        private readonly List<Piece> pieces = new();
         private Mesh fixturesMesh, lampsMesh, previewMesh;
         private Material lit, previewMaterial;
         private bool[] lampState = new bool[0];
@@ -62,16 +71,45 @@ namespace Wonderland
 
         public const float TunnelHeight = 0.1f;   // ground this far above the bed clears the tube's roof and hides the 8 cm train
 
-        /// <summary>Takes a network (already profiled) and rebuilds everything: tunnels, pieces, switches, signals.</summary>
+        /// <summary>
+        /// Takes a network (already profiled) and rebuilds what changed: tunnels, pieces, switches, signals. A piece whose
+        /// mesh already shows it (the same layout - layouts are never changed in place - ends, arrows and tunnels) keeps it.
+        /// </summary>
         public void SetNetwork(TrackNetwork network, System.Func<Vector2, float> waterLevel = null, TerrainField terrain = null)
         {
             Network = network ?? new TrackNetwork();
             Network.Reindex();
             if (terrain != null) foreach (var e in Network.Edges) e.Tunnel = TunnelMask(terrain, e.Layout);
-            while (pieces.Count > Network.Edges.Count) { var p = pieces[^1]; Release(p.go); Release(p.mesh); pieces.RemoveAt(pieces.Count - 1); }
-            for (int i = 0; i < Network.Edges.Count; i++) RebuildPiece(i, waterLevel, terrain);
+            var old = new List<Piece>(pieces);
+            pieces.Clear();
+            var stale = new List<int>();
+            for (int i = 0; i < Network.Edges.Count; i++)
+            {
+                int k = old.FindIndex(p => Shows(p, i));
+                if (k >= 0) { pieces.Add(old[k]); old.RemoveAt(k); }
+                else { pieces.Add(null); stale.Add(i); }
+            }
+            foreach (int i in stale)
+            {
+                if (old.Count > 0) { pieces[i] = old[^1]; old.RemoveAt(old.Count - 1); }   // (its game object and mesh reused)
+                RebuildPiece(i, waterLevel, terrain);
+            }
+            foreach (var p in old) { Release(p.Go); Release(p.Mesh); }
             SnapSignals();
             RebuildFixtures();
+        }
+
+        /// <summary>The layouts the track meshes show: the railway as it was last built.</summary>
+        public IEnumerable<TrackLayout> BuiltLayouts { get { foreach (var p in pieces) if (p?.Layout != null) yield return p.Layout; } }
+
+        private bool Shows(Piece p, int i)
+        {
+            var e = Network.Edges[i];
+            if (p.Layout != e.Layout || p.Dead0 != e.Joint[0] < 0 || p.Dead1 != e.Joint[1] < 0 || p.Arrows != Network.Directed(i)) return false;
+            if (p.Tunnel == null || e.Tunnel == null) return p.Tunnel == e.Tunnel;
+            if (p.Tunnel.Length != e.Tunnel.Length) return false;
+            for (int k = 0; k < p.Tunnel.Length; k++) if (p.Tunnel[k] != e.Tunnel[k]) return false;
+            return true;
         }
 
         private static void Release(Object o) { if (Application.isPlaying) Destroy(o); else DestroyImmediate(o); }
@@ -79,7 +117,8 @@ namespace Wonderland
         /// <summary>Rebuilds one piece's mesh (after its profile changed).</summary>
         public void RebuildPiece(int i, System.Func<Vector2, float> waterLevel, TerrainField terrain)
         {
-            while (pieces.Count <= i)
+            while (pieces.Count <= i) pieces.Add(null);
+            if (pieces[i] == null)
             {
                 var go = new GameObject("Track piece");
                 go.transform.SetParent(transform, false);
@@ -87,15 +126,17 @@ namespace Wonderland
                 go.AddComponent<MeshFilter>().sharedMesh = mesh;
                 var r = go.AddComponent<MeshRenderer>();
                 r.sharedMaterial = lit; r.shadowCastingMode = ShadowCastingMode.On;
-                pieces.Add((go, mesh));
+                pieces[i] = new Piece { Go = go, Mesh = mesh };
             }
             var e = Network.Edges[i];
+            var piece = pieces[i];
+            piece.Layout = e.Layout; piece.Dead0 = e.Joint[0] < 0; piece.Dead1 = e.Joint[1] < 0; piece.Arrows = Network.Directed(i); piece.Tunnel = (bool[])e.Tunnel?.Clone();
             var b = new MeshBuilder();
             BuildTrack(b, e.Layout, e.Joint[0] < 0, e.Joint[1] < 0);
             if (Network.Directed(i)) Arrows(b, e.Layout, 1, ArrowColour, RailTop - 0.0012f, 0.16f);
             if (e.Tunnel != null) BuildTunnels(b, e.Layout, e.Tunnel);
-            b.ToMesh("Track piece", pieces[i].mesh);
-            pieces[i].mesh.RecalculateBounds();
+            b.ToMesh("Track piece", piece.Mesh);
+            piece.Mesh.RecalculateBounds();
         }
 
         /// <summary>Whether a piece's point is inside a tunnel (no steam underground).</summary>
@@ -479,8 +520,11 @@ namespace Wonderland
             });
         }
 
-        /// <summary>Grades the corridor to the track bed and locks it; returns the touched region. Water is left alone.</summary>
-        public static RectInt GradeTerrain(TerrainField terrain, TrackLayout layout, System.Func<Vector2, float> waterLevel = null, bool[] tunnel = null)
+        /// <summary>
+        /// Grades the corridor to the track bed and locks it; returns the touched region. Water is left alone. With
+        /// <paramref name="only"/> (per terrain cell), just those cells are graded.
+        /// </summary>
+        public static RectInt GradeTerrain(TerrainField terrain, TrackLayout layout, System.Func<Vector2, float> waterLevel = null, bool[] tunnel = null, bool[] only = null)
         {
             float minX = float.MaxValue, minZ = float.MaxValue, maxX = float.MinValue, maxZ = float.MinValue;
             foreach (var p in layout.Points) { minX = Mathf.Min(minX, p.x); maxX = Mathf.Max(maxX, p.x); minZ = Mathf.Min(minZ, p.z); maxZ = Mathf.Max(maxZ, p.z); }
@@ -489,19 +533,26 @@ namespace Wonderland
             const float cellSize = 0.06f;
             var buckets = new Dictionary<long, List<int>>();
             long Key(int cx, int cz) => ((long)cx << 32) ^ (uint)cz;
+            int reach = Mathf.CeilToInt(CorridorHalfWidth / cellSize) + 1;
+            var near = new HashSet<long>();   // buckets with track within reach: the rest of the region is skipped at once
             for (int i = 0; i < layout.Points.Count; i++)
             {
                 var p = layout.Points[i];
-                long k = Key(Mathf.FloorToInt(p.x / cellSize), Mathf.FloorToInt(p.z / cellSize));
-                if (!buckets.TryGetValue(k, out var list)) buckets[k] = list = new List<int>();
+                int bx = Mathf.FloorToInt(p.x / cellSize), bz = Mathf.FloorToInt(p.z / cellSize);
+                if (!buckets.TryGetValue(Key(bx, bz), out var list))
+                {
+                    buckets[Key(bx, bz)] = list = new List<int>();
+                    for (int oz = -reach; oz <= reach; oz++) for (int ox = -reach; ox <= reach; ox++) near.Add(Key(bx + ox, bz + oz));
+                }
                 list.Add(i);
             }
-            int reach = Mathf.CeilToInt(CorridorHalfWidth / cellSize) + 1;
             for (int z = region.yMin; z < region.yMax; z++)
             for (int x = region.xMin; x < region.xMax; x++)
             {
+                if (only != null && !only[z * terrain.Nx + x]) continue;
                 float px = terrain.LocalX(x), pz = terrain.LocalZ(z);
                 int cx = Mathf.FloorToInt(px / cellSize), cz = Mathf.FloorToInt(pz / cellSize);
+                if (!near.Contains(Key(cx, cz))) continue;
                 float best = float.MaxValue; int bestIndex = -1;
                 for (int oz = -reach; oz <= reach; oz++)
                 for (int ox = -reach; ox <= reach; ox++)

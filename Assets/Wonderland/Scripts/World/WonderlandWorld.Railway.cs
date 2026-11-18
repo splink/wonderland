@@ -38,10 +38,11 @@ namespace Wonderland
         }
 
         /// <summary>
-        /// Gives every piece a smooth, grade-limited height profile from the ground. Switches and crossings get one
-        /// height from the ground there, shared by all the pieces meeting at them. Returns the pieces that changed.
+        /// Gives every piece (or just those in <paramref name="only"/>) a smooth, grade-limited height profile from the
+        /// ground. Switches and crossings get one height from the ground there, shared by all the pieces meeting at them.
+        /// Returns the pieces that changed.
         /// </summary>
-        private List<int> Reprofile(TrackNetwork net, bool all)
+        private List<int> Reprofile(TrackNetwork net, bool all, ICollection<int> only = null)
         {
             var jointH = new float[net.Joints.Count];
             for (int j = 0; j < net.Joints.Count; j++) jointH[j] = BedHeightAt(net.Joints[j].Position);
@@ -50,6 +51,7 @@ namespace Wonderland
             var changed = new List<int>();
             for (int e = 0; e < net.Edges.Count; e++)
             {
+                if (only != null && !only.Contains(e)) continue;
                 var old = net.Edges[e].Layout;
                 var xz = new List<Vector2>(old.Points.Count);
                 foreach (var p in old.Points) xz.Add(new Vector2(p.x, p.z));
@@ -309,55 +311,154 @@ namespace Wonderland
 
         /// <summary>
         /// After pieces were added or removed: profiles the network, regrades the corridors, rebuilds the meshes, clears
-        /// trees and houses in the way, puts the trains back on their track and refreshes stations and signals.
+        /// trees and houses in the way, puts the trains back on their track and refreshes stations and signals. Only what
+        /// the change touched is redone: the pieces that are new (a changed piece is a new layout - layouts are never
+        /// changed in place) or gone, the ground within a corridor of them, and the track, houses, roads and bridges there.
         /// </summary>
         private void AfterNetworkChanged(System.Action placeTrains = null)
         {
             var net = Track.Network;
             net.Reindex();
-            Reprofile(net, true);
-            TrackSystem.UnlockTerrain(Terrain);
+            // What changed since the railway was last built: points of new pieces that weren't there (or not at that
+            // height), and points of pieces that are gone. The ground within a corridor of them is regraded.
+            var built = new HashSet<TrackLayout>(Track.BuiltLayouts);
+            var now = new HashSet<TrackLayout>();
+            foreach (var e in net.Edges) now.Add(e.Layout);
+            var wasAt = new Dictionary<long, float>();   // (x, z) -> height of the gone pieces
+            foreach (var l in built) if (!now.Contains(l)) foreach (var p in l.Points) wasAt[XZ(p)] = p.y;
+            var kept = new HashSet<long>();
+            var changed = new RailChange(Terrain);
+            var reprofile = new HashSet<int>();
+            for (int e = 0; e < net.Edges.Count; e++)
+            {
+                var l = net.Edges[e].Layout;
+                if (built.Contains(l)) continue;
+                reprofile.Add(e);
+                foreach (var p in l.Points)
+                {
+                    long k = XZ(p);
+                    kept.Add(k);
+                    if (!wasAt.TryGetValue(k, out float y) || Mathf.Abs(y - p.y) > 0.0005f) changed.Touch(p);
+                }
+            }
+            foreach (var l in built) if (!now.Contains(l)) foreach (var p in l.Points) if (!kept.Contains(XZ(p))) changed.Touch(p);
+            // Pieces running through the change (meeting it at a switch, crossing it) get new heights too.
+            for (int e = 0; e < net.Edges.Count; e++) if (changed.Near(net.Edges[e].Layout, 0f)) reprofile.Add(e);
+            var before = new Dictionary<int, TrackLayout>();
+            foreach (int e in reprofile) before[e] = net.Edges[e].Layout;
+            Reprofile(net, true, reprofile);
+            foreach (var (e, l) in before)
+            {
+                var pts = net.Edges[e].Layout.Points;
+                for (int i = 0; i < pts.Count; i++) if (Mathf.Abs(pts[i].y - l.Points[i].y) > 0.0005f) changed.Touch(pts[i]);
+            }
             Track.SetNetwork(net, WaterLevelFor, Terrain);
-            // Only the ground the railway lies on (now or before) changes: rebuild just that part of the land.
-            var graded = railArea;
-            foreach (var e in net.Edges) graded = Span(graded, AreaOf(TrackSystem.GradeTerrain(Terrain, e.Layout, WaterLevelFor, e.Tunnel)));
-            Terrain.UpdateSurface(Terrain.All);
-            if (graded.width > 0f) TerrainView.Rebuild(Terrain.RegionAround(graded.center, Mathf.Max(graded.width, graded.height) * 0.5f + 0.02f));
-            railArea = graded;
+            if (!changed.Empty)
+            {
+                // The changed ground is unlocked and graded again by every piece whose corridor reaches into it.
+                foreach (int g in changed.Cells) { Terrain.Lock[g] = 0f; Terrain.Soil[g] = 0f; }
+                foreach (var e in net.Edges)
+                    if (changed.Near(e.Layout, TrackSystem.CorridorHalfWidth)) TrackSystem.GradeTerrain(Terrain, e.Layout, WaterLevelFor, e.Tunnel, changed.Mask);
+                Terrain.UpdateSurface(changed.Bounds);
+                TerrainView.Rebuild(changed.Bounds);
+            }
             Forest.RemoveWhere(t => net.DistanceTo(new Vector3(t.x, 0f, t.z)) < TrackSystem.BedHalfWidth + TreeFactory.Radius((TreeKind)t.kind) * t.scale * 0.5f + 0.006f);
             Forest.MarkAllDirty();
+            // Houses in the way go; the pads are redone where they stood and where the regraded ground reaches under one.
+            var padArea = changed.Bounds;
+            bool padsTouched = false;
+            foreach (int g in changed.Cells) if (Terrain.Pad[g] > 0f) { padsTouched = true; break; }
             for (int i = Buildings.Houses.Count - 1; i >= 0; i--)
             {
                 var h = Buildings.Houses[i];
                 bool gone = Catalog.IsStation(h.variant) ? ValidateStation(h) != null
                     : Buildings.Validate(h, i, p => Track.DistanceTo(new Vector3(p.x, 0f, p.y))) == "That's the railway";
-                if (gone) Buildings.RemoveAt(i);
+                if (!gone) continue;
+                var r = PadRegion(h, out _, out _);
+                if (r.width > 0) { padArea = Span(padArea, r); padsTouched = true; }
+                Buildings.RemoveAt(i);
             }
             for (int i = Track.Signals.Count - 1; i >= 0; i--)
                 if (i >= Track.SignalSpots.Count || Track.SignalSpots[i].edge < 0) Track.Signals.RemoveAt(i);
             Track.SnapSignals();
             Track.RebuildFixtures();
-            ApplyPads();
+            if (padsTouched) ApplyPads(padArea);
             RemoveStrandedAnimals();
             People.Rehome();
             Buildings.Resit();
             Cover.MarkAllDirty();
             if (placeTrains != null) placeTrains(); else Trains.Relocate();
             RebuildStations();
-            RefreshBridges();
+            // Bridges and roads again only where the change meets water or a road (bridges, level crossings).
+            bool meets = false;
+            foreach (var l in Paths.Lines) if (!meets) foreach (var p in l.points) if (changed.Near(p, 0.05f)) { meets = true; break; }
+            foreach (int g in changed.Cells) if (meets || Terrain.Water[g] > 0f) { meets = true; break; }
+            if (!meets && Streams != null) foreach (var l in Streams.Streams) if (!meets) foreach (var p in l.points) if (changed.Near(new Vector2(p.x, p.z), 0.1f)) { meets = true; break; }
+            if (meets) RefreshBridges();
         }
 
-        private Rect railArea;   // the land (metres) the railway has been graded into: rebuilt when the railway changes
-
-        private Rect AreaOf(RectInt r) => r.width <= 0 || r.height <= 0 ? default
-            : Rect.MinMaxRect(Terrain.LocalX(r.xMin), Terrain.LocalZ(r.yMin), Terrain.LocalX(r.xMax), Terrain.LocalZ(r.yMax));
-
-        /// <summary>Both areas (either may be empty).</summary>
-        private static Rect Span(Rect a, Rect b)
+        /// <summary>Both regions (either may be empty).</summary>
+        private static RectInt Span(RectInt a, RectInt b)
         {
-            if (a.width <= 0f || a.height <= 0f) return b;
-            if (b.width <= 0f || b.height <= 0f) return a;
-            return Rect.MinMaxRect(Mathf.Min(a.xMin, b.xMin), Mathf.Min(a.yMin, b.yMin), Mathf.Max(a.xMax, b.xMax), Mathf.Max(a.yMax, b.yMax));
+            if (a.width <= 0 || a.height <= 0) return b;
+            if (b.width <= 0 || b.height <= 0) return a;
+            int x0 = Mathf.Min(a.xMin, b.xMin), z0 = Mathf.Min(a.yMin, b.yMin);
+            return new RectInt(x0, z0, Mathf.Max(a.xMax, b.xMax) - x0, Mathf.Max(a.yMax, b.yMax) - z0);
+        }
+
+        private static long XZ(Vector3 p) => ((long)System.BitConverter.SingleToInt32Bits(p.x) << 32) | (uint)System.BitConverter.SingleToInt32Bits(p.z);
+
+        /// <summary>The ground a change of the railway touches: the terrain cells within a corridor of its changed points.</summary>
+        private sealed class RailChange
+        {
+            private readonly TerrainField terrain;
+            public readonly bool[] Mask;
+            public readonly List<int> Cells = new();
+            public RectInt Bounds;
+            public bool Empty => Cells.Count == 0;
+
+            public RailChange(TerrainField terrain)
+            {
+                this.terrain = terrain;
+                Mask = new bool[terrain.Nx * terrain.Nz];
+            }
+
+            public void Touch(Vector3 p)
+            {
+                var r = terrain.RegionAround(new Vector2(p.x, p.z), TrackSystem.CorridorHalfWidth);
+                for (int z = r.yMin; z < r.yMax; z++)
+                for (int x = r.xMin; x < r.xMax; x++)
+                {
+                    int g = z * terrain.Nx + x;
+                    if (Mask[g]) continue;
+                    float dx = terrain.LocalX(x) - p.x, dz = terrain.LocalZ(z) - p.z;
+                    if (dx * dx + dz * dz > TrackSystem.CorridorHalfWidth * TrackSystem.CorridorHalfWidth) continue;
+                    Mask[g] = true;
+                    Cells.Add(g);
+                    if (Cells.Count == 1) Bounds = new RectInt(x, z, 1, 1);
+                    else Bounds = new RectInt(Mathf.Min(Bounds.xMin, x), Mathf.Min(Bounds.yMin, z), Mathf.Max(Bounds.xMax, x + 1) - Mathf.Min(Bounds.xMin, x), Mathf.Max(Bounds.yMax, z + 1) - Mathf.Min(Bounds.yMin, z));
+                }
+            }
+
+            /// <summary>Whether a point is within <paramref name="within"/> of the touched ground.</summary>
+            public bool Near(Vector2 p, float within)
+            {
+                if (Empty) return false;
+                var r = terrain.RegionAround(p, within);
+                if (r.xMax <= Bounds.xMin || r.xMin >= Bounds.xMax || r.yMax <= Bounds.yMin || r.yMin >= Bounds.yMax) return false;
+                for (int z = r.yMin; z < r.yMax; z++)
+                for (int x = r.xMin; x < r.xMax; x++)
+                    if (Mask[z * terrain.Nx + x]) return true;
+                return false;
+            }
+
+            /// <summary>Whether any point of a piece is within <paramref name="within"/> of the touched ground.</summary>
+            public bool Near(TrackLayout l, float within)
+            {
+                if (Empty) return false;
+                for (int i = 0; i < l.Points.Count; i += 2) if (Near(new Vector2(l.Points[i].x, l.Points[i].z), within)) return true;
+                return false;
+            }
         }
 
         /// <summary>Re-derives every bridge (from the railway, the ways and the water) and lays the ways onto their decks.</summary>

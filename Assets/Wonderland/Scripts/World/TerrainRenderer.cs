@@ -76,14 +76,22 @@ namespace Wonderland
         public void RebuildAll() => Rebuild(field.All);
 
         /// <summary>Recomputes vertices (and triangles: the land may have changed) of the chunks overlapping the region.</summary>
-        public void Rebuild(RectInt region)
+        public void Rebuild(RectInt region) => Rebuild(new[] { region });
+
+        /// <summary>Rebuilds the chunks any of <paramref name="regions"/> touch, each chunk once.</summary>
+        public void Rebuild(IEnumerable<RectInt> regions)
         {
-            if (region.width <= 0 || region.height <= 0) return;
-            int x0 = Mathf.Max(0, region.xMin - 1), x1 = Mathf.Min(field.Nx - 1, region.xMax);
-            int z0 = Mathf.Max(0, region.yMin - 1), z1 = Mathf.Min(field.Nz - 1, region.yMax);
-            for (int cz = z0 / ChunkCells; cz <= Mathf.Min(chunksZ - 1, z1 / ChunkCells); cz++)
-            for (int cx = x0 / ChunkCells; cx <= Mathf.Min(chunksX - 1, x1 / ChunkCells); cx++)
-                RebuildChunk(chunks[cz * chunksX + cx]);
+            var dirty = new SortedSet<int>();
+            foreach (var region in regions)
+            {
+                if (region.width <= 0 || region.height <= 0) continue;
+                int x0 = Mathf.Max(0, region.xMin - 1), x1 = Mathf.Min(field.Nx - 1, region.xMax);
+                int z0 = Mathf.Max(0, region.yMin - 1), z1 = Mathf.Min(field.Nz - 1, region.yMax);
+                for (int cz = z0 / ChunkCells; cz <= Mathf.Min(chunksZ - 1, z1 / ChunkCells); cz++)
+                for (int cx = x0 / ChunkCells; cx <= Mathf.Min(chunksX - 1, x1 / ChunkCells); cx++)
+                    dirty.Add(cz * chunksX + cx);
+            }
+            foreach (int c in dirty) RebuildChunk(chunks[c]);
         }
 
         /// <summary>Sand along pond shores: land within a few centimetres of water, above it but not much higher.</summary>
