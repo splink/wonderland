@@ -220,7 +220,17 @@ namespace Wonderland.Editor
             Check(world.Buildings.Houses.Count == 1, "Palette Undo restores it");
 
             // Build categories: Fun shows its items; placing a fountain from Town.
+            // A long category is shown a page at a time: the disco is on the Fun list's second page.
             ClickButton(hand, "Build");
+            ClickButton(hand, "Fun");
+            bool firstPage = Find("Disco") == null && palette.ItemPages > 1;
+            ClickButton(hand, $"1/{palette.ItemPages} ›");
+            bool paged = Find("Disco") != null;
+            if (paged) ClickButton(hand, "Disco");
+            Check(firstPage && paged && tools.HouseVariant == Catalog.Disco, $"Long categories have pages: the disco is on the Fun list's second page ({palette.ItemPages} pages, chosen {tools.HouseVariant})");
+            int[] counts = new int[Catalog.CategoryNames.Length]; foreach (var b in Catalog.All) counts[(int)b.Category]++;
+            int total = 0; foreach (int c in counts) total += c;
+            Check(total == Catalog.Count, $"Every object in the library is in a category ({total} of {Catalog.Count})");
             ClickButton(hand, "Town");
             ClickButton(hand, "Fountain");
             var free = new Vector2(0.12f, 0.18f);

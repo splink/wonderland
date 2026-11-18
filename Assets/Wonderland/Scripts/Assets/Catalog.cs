@@ -239,7 +239,7 @@ namespace Wonderland
                     Spots = new[] { new ActivitySpot(-0.07f, -0.003f, SpotKind.Watch, 0f), new ActivitySpot(0.03f, 0.008f, SpotKind.Watch, 0f), new ActivitySpot(-0.022f, -0.045f, SpotKind.Watch, -90f),
                         new ActivitySpot(0.032f, -0.025f, SpotKind.Watch, 90f), new ActivitySpot(-0.005f, -0.061f, SpotKind.Watch, 0f), new ActivitySpot(0.012f, -0.061f, SpotKind.Watch, -20f),
                         new ActivitySpot(0.075f, -0.097f, SpotKind.Sit, 0f), new ActivitySpot(0.095f, -0.097f, SpotKind.Sit, 0f) } },
-                new() { Name = "Fairy-tale castle", Short = "Castle", Category = PlaceCategory.Fun, Half = new Vector2(0.118f, 0.095f), Height = 0.3f, Styles = 1, Kids = true,
+                new() { Name = "Fairy-tale castle", Short = "Fairy", Category = PlaceCategory.Fun, Half = new Vector2(0.118f, 0.095f), Height = 0.3f, Styles = 1, Kids = true,
                     Hint = "visitors come to gaze at its towers",
                     Spots = new[] { new ActivitySpot(-0.05f, -0.112f, SpotKind.Watch, 0f), new ActivitySpot(-0.015f, -0.118f, SpotKind.Watch, 0f), new ActivitySpot(0.02f, -0.116f, SpotKind.Watch, 0f),
                         new ActivitySpot(0.055f, -0.11f, SpotKind.Watch, 0f), new ActivitySpot(0.13f, -0.03f, SpotKind.Watch, -90f), new ActivitySpot(-0.13f, 0.01f, SpotKind.Watch, 90f) } },

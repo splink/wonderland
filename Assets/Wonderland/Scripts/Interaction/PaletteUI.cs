@@ -443,8 +443,39 @@ namespace Wonderland
         /// <summary>Rebuilds the option chips (cheap: a handful of objects, only when the tool or mode changes).</summary>
         public void SetOptions(IReadOnlyList<Option> list) => FillRow(options, optionRow, list, 0.02f);
 
-        /// <summary>The second row of chips (the items of a category, for the Build tool); empty hides it.</summary>
-        public void SetItems(IReadOnlyList<Option> list) => FillRow(items, itemRow, list ?? new List<Option>(), 0.018f);
+        public const int ItemsPerPage = 7;
+        private List<Option> allItems = new();
+        private int itemPage;
+        private string itemsKey;
+
+        /// <summary>
+        /// The second row of chips (the items of a category, for the Build tool); empty hides it. A long list is shown a
+        /// page at a time - seven chips, with ‹ and › to turn the page and the page number between them - so every chip
+        /// stays big enough to read. The page with the chosen item is shown.
+        /// </summary>
+        public void SetItems(IReadOnlyList<Option> list)
+        {
+            list ??= new List<Option>();
+            string key = string.Join("|", System.Linq.Enumerable.Select(list, o => o.Label));
+            allItems = new List<Option>(list);
+            if (key != itemsKey) { itemsKey = key; itemPage = Mathf.Max(0, allItems.FindIndex(o => o.Selected)) / ItemsPerPage; }
+            ShowItemPage();
+        }
+
+        /// <summary>The page of items showing (0 based) and how many pages there are (tests).</summary>
+        public int ItemPage => itemPage;
+        public int ItemPages => Mathf.Max(1, (allItems.Count + ItemsPerPage - 1) / ItemsPerPage);
+
+        private void ShowItemPage()
+        {
+            int pages = ItemPages;
+            itemPage = Mathf.Clamp(itemPage, 0, pages - 1);
+            if (pages <= 1) { FillRow(items, itemRow, allItems, 0.018f); return; }
+            var page = new List<Option> { new("‹", false, () => { itemPage = (itemPage + pages - 1) % pages; ShowItemPage(); }) };
+            for (int k = itemPage * ItemsPerPage; k < Mathf.Min(allItems.Count, (itemPage + 1) * ItemsPerPage); k++) page.Add(allItems[k]);
+            page.Add(new Option($"{itemPage + 1}/{pages} ›", false, () => { itemPage = (itemPage + 1) % pages; ShowItemPage(); }));
+            FillRow(items, itemRow, page, 0.018f);
+        }
 
         private void FillRow(List<PaletteButton> options, Transform optionRow, IReadOnlyList<Option> list, float height)
         {

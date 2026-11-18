@@ -25,6 +25,8 @@ PASS  House type chips choose the variant
 PASS  B undoes the last house
 PASS  Eraser tap removes the house under the pointer
 PASS  Palette Undo restores it
+PASS  Long categories have pages: the disco is on the Fun list's second page (2 pages, chosen 44)
+PASS  Every object in the library is in a category (71 of 71)
 PASS  Category and item chips place a fountain from the Town set (Fountain placed; selected 13)
 PASS  Drawing with the Paths tool lays a footpath (1)
 PASS  ...and a fence
