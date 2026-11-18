@@ -104,7 +104,7 @@ namespace Wonderland
             LogPile = 32, Lamp = 33, Bench = 34, FlowerBed = 35, Well = 36, Statue = 37, Signpost = 38, Picnic = 39, HayBales = 40,
             Park = 41, Museum = 42, Restaurant = 43, Disco = 44, Hospital = 45, Police = 46, Factory = 47, Football = 48, Studio = 49,
             Camera = 50, Balloon = 51, Jetty = 52, RowingBoat = 53, SailingBoat = 54, Steamer = 55, Halt = 56, TaxiRank = 57,
-            Sawmill = 58, FurnitureShop = 59, IceCream = 60, Pub = 61, Hotel = 62, PostOffice = 63, Letterbox = 64, CarPark = 65, FreightYard = 66, Harbour = 67, Zoo = 68, FairyCastle = 69, Stadium = 70;
+            Sawmill = 58, FurnitureShop = 59, IceCream = 60, Pub = 61, Hotel = 62, PostOffice = 63, Letterbox = 64, CarPark = 65, FreightYard = 66, Harbour = 67, Zoo = 68, FairyCastle = 69, Stadium = 70, Zebra = 71;
 
         /// <summary>A station of any size (the big one, or a country halt): trains stop beside it.</summary>
         public static bool IsStation(int variant) => variant == Station || variant == Halt || variant == FreightYard;
@@ -248,6 +248,8 @@ namespace Wonderland
                     Spots = new[] { new ActivitySpot(-0.06f, -0.105f, SpotKind.Watch, 0f), new ActivitySpot(-0.02f, -0.106f, SpotKind.Watch, 0f), new ActivitySpot(0.02f, -0.106f, SpotKind.Watch, 0f),
                         new ActivitySpot(0.06f, -0.105f, SpotKind.Watch, 0f), new ActivitySpot(-0.04f, 0.106f, SpotKind.Watch, 180f), new ActivitySpot(0.04f, 0.106f, SpotKind.Watch, 180f) } },
             };
+            list.Add(new() { Name = "Zebra crossing", Short = "Zebra", Category = PlaceCategory.Small, Half = new Vector2(0.034f, 0.011f), Height = 0.04f, Pad = false, Small = true, Styles = 1,
+                Hint = "point at a street: it goes across it - people cross here, cars stop for them" });
             for (int i = 0; i < list.Count; i++) list[i].Id = i;
             // What each place is for: the needs it satisfies decide who comes and when (see Needs).
             foreach (var b in list)

@@ -62,7 +62,7 @@ PASS  The railcar runs along its line the way the arrows point and stops at the 
 PASS  An open line with buffers at both ends
 PASS  Put on a single line facing each other, both run the way the arrows point - no head-on, nobody reverses (closest 7.3 cm)
 PASS  They run on to the buffers (0.9 m, 0.1 m)
-PASS  Every one of the 71 library objects builds (largest: Wheat field, 16552 vertices)
+PASS  Every one of the 72 library objects builds (largest: Wheat field, 16552 vertices)
 PASS  Library objects stay within the vertex budget
 PASS  A village square goes up (9/9 places)
 PASS  New homes and shops bring their residents (5 moved in)
@@ -78,7 +78,7 @@ PASS  A road is drawn across the meadow
 PASS  The road smooths the ground across its width (5.8 -> 0.0 mm side to side)
 PASS  A footpath drawn from the road's end joins it
 PASS  Villagers find a walking route along the road and the path (26 waypoints)
-PASS  Houses are not built on the road ("That's the road")
+PASS  Houses are not built on the road ("That's the road (and its pavement)")
 PASS  A street lamp may stand at the roadside
 PASS  A hiker sets off along the trail
 PASS  A fence drawn round a meadow closes into a pasture
@@ -117,7 +117,7 @@ PASS  The village clock runs a day in 7.6 minutes (360 s of daylight, 97 s of ni
 PASS  The daily rhythm: shops in the morning, lunch at midday, the fair in the afternoon, the square in the evening
 PASS  A railway loop divides the land
 PASS  A village goes up around the railway (13/13 places, 8 residents moved in)
-PASS  The walk grid sees the railway as a divide (2 regions over 6972 cells, built in 23 ms)
+PASS  The walk grid sees the railway as a divide (2 regions over 6972 cells, built in 22 ms)
 PASS  Every resident knows their home (8/8; 2 live inside the loop)
 PASS  The baker lives over the bakery
 PASS  At two in the morning everyone is asleep at home (8/8)
@@ -140,8 +140,8 @@ PASS  ...get off at the far station and walk on to where they were going
 PASS  A lane with a level crossing joins the two sides (1 regions)
 PASS  ...and people from inside the loop walk over it to the village
 PASS  Save/load keeps the time (10:00), the clock speed, needs and homes (8/8)
-PASS  40 villagers: 0.29 ms per frame on average, worst 5.8 ms, 1.4 decisions/s, slowest decision 2.2 ms, places directory 0.7 ms (editor timing)
-PASS  After an edit the walk grid rebuilds over 32 frames (60 ms of work, worst frame 3.2 ms)
+PASS  40 villagers: 0.30 ms per frame on average, worst 5.4 ms, 1.4 decisions/s, slowest decision 2.3 ms, places directory 0.7 ms (editor timing)
+PASS  After an edit the walk grid rebuilds over 32 frames (59 ms of work, worst frame 3.1 ms)
 PASS  With no places at all, villagers wander by day and sleep under the stars at night
 PASS  A working village goes up (15/15 places, 10 villagers)
 PASS  Opening hours: the bakery opens at half six and shuts at six, the carousel stops in the evening, the fountain never closes
@@ -167,9 +167,9 @@ PASS  The destination board follows the switches: set for the loop the train won
 PASS  With the switch set for the loop, the passenger lets the train go by (plan: 0->1)
 PASS  Set for the branch: they board, ride to the branch station and walk on to the bench
 PASS  A small town with homes, shops, a school, a park and a road (11 villagers)
-PASS  Everyone leaves home during the day; most visit two or more places (10/11; e.g. "Ugo (Curator): On the way to work at the museum; going to work at the museum (as planned); then 12:00 lunch at the café")
+PASS  Everyone leaves home during the day; most visit two or more places (8/11; e.g. "Ugo (Curator): On the way to work at the museum; going to work at the museum (as planned); then 12:00 lunch at the café")
 PASS  Workers go to work and children to school (9/11)
-PASS  Days follow plans (planned choices seen 3729 times) and nobody with a home wanders aimlessly (0)
+PASS  Days follow plans (planned choices seen 3769 times) and nobody with a home wanders aimlessly (0)
 PASS  The card says where they are really going (400 checked, 0 wrong)
 PASS  Nobody walks for ages without getting anywhere (0)
 PASS  By one in the morning everyone with a home is in bed there (11/11)
@@ -181,12 +181,12 @@ PASS  A town goes up along two crossing roads and a lane (23/23 places, 11 villa
 PASS  The roads make one network, joined where they cross (124 nodes)
 PASS  Homes by the road have vehicles (3 cars, 0 motorbikes, 2 bicycles), and the stations theirs
 PASS  A dog and a cat move in
-PASS  Vehicles drive the roads all day and never leave them (worst 2.4 cm from a road's centre line; 15 trips, 39 stops for traffic or people)
+PASS  Vehicles drive the roads all day and never leave them (worst 2.4 cm from a road's centre line; 15 trips, 32 stops for traffic or people)
 PASS  Households drive to the shops, the restaurant and the park and come home (15 round trips)
-PASS  Supper fills the restaurant terrace (76 in the evening vs 67 in the afternoon)
-PASS  The disco comes alive after dark (24 dancing, 2 night owls; heard 187 times; nobody there by day)
-PASS  Visitors come to the museum (338) and the park (78)
-PASS  Children go to school and play football: a match with a ball (1.1 m of passes, 6 goals)
+PASS  Supper fills the restaurant terrace (238 in the evening vs 33 in the afternoon)
+PASS  The disco comes alive after dark (57 dancing, 2 night owls; heard 187 times; nobody there by day)
+PASS  Visitors come to the museum (332) and the park (39)
+PASS  Children go to school and play football: a match with a ball (1.7 m of passes, 10 goals)
 PASS  The factory chimney smokes while it works (Dora works there; next door: Dora (child False, works at 15))
 PASS  The dog goes out with its owner, in their footsteps, and never strays from home (followed True)
 PASS  The cat keeps to its territory and sits up on the wall
@@ -201,9 +201,9 @@ PASS  Save and load keep where the cameras look (71 / 15 degrees; loaded 71 / 15
 PASS  Erasing a camera leaves the other selected, still aimed where it was
 PASS  Sound: 4 sources near the crossroads (at most 8); off means silent; five barks in a row play once; a meow out of earshot isn't played
 PASS  Taking a road away re-routes or parks the traffic (worst 1.4 cm off the remaining roads)
-PASS  A busy town (40 villagers, 8 vehicles, 2 animals, sound and a camera feed): 0.25 ms per frame on average, worst 2.9 ms (editor timing, simulation only)
-PASS  A road crosses the railway at a level crossing; homes on both sides have vehicles (5 places, 4 vehicles)
-PASS  Vehicles wait at the level crossing while a train goes by (245 waits, 7 trips), and are never on it with the train
+PASS  A busy town (40 villagers, 8 vehicles, 2 animals, sound and a camera feed): 0.28 ms per frame on average, worst 3.7 ms (editor timing, simulation only)
+PASS  A road crosses the railway at a level crossing; homes on both sides have vehicles (4 places, 3 vehicles)
+PASS  Vehicles wait at the level crossing while a train goes by (413 waits, 6 trips), and are never on it with the train
 PASS  A loop drawn in two halves closes (1 pieces, 0 dead ends)
 PASS  Branches drawn off a loop at any angle from 20 to 90 degrees are built (44/44; refused: )
 PASS  Two loops are joined by a line drawn from one to the other (2 switches, 0 dead ends)
@@ -272,7 +272,7 @@ PASS  They keep their distance (closest 2.3 cm between two)
 PASS  The vehicles are saved with the world (7)
 PASS  The eraser takes a vehicle away ("Car removed") and Undo brings it back
 PASS  On the grid an askew stroke comes out straight, on a grid line (0.0 mm off straight)
-PASS  A building beside it faces the road from just behind the kerb (facing 0°, at 43.3 cm)
+PASS  A building beside it faces the road from just behind the kerb (facing 0°, at 44.5 cm)
 PASS  With the grid off the stroke keeps its angle
 PASS  A railway under a big hill becomes a tunnel (hill 29 cm, 30 cm of tunnel, hill kept above it)
 PASS  The train runs into the tunnel (steam off underground)
@@ -343,5 +343,5 @@ PASS  Land still grows with bad room data
 PASS  Trimmed land grows back (1.19 -> 1.04 -> 1.16 m2)
 INFO  terrain: 6 chunk meshes, 17 k triangles, land 3.49 m2 of a 4.8 x 4.8 m grid
 INFO  static budget of this world: 346 mesh renderers (~draw calls per eye pass before batching, excl. shadows/UI), 1166 k triangles, ground cover 5538 tufts
-INFO  trees 131, forest chunks 30, houses 3, track 3.43 m, undo depth 9, journey simulated in 75.8 s wall time
+INFO  trees 131, forest chunks 30, houses 3, track 3.43 m, undo depth 9, journey simulated in 78.2 s wall time
 RESULT: PASS

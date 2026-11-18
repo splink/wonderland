@@ -128,6 +128,7 @@ namespace Wonderland
             Traffic = Child<TrafficSystem>("Traffic");
             Traffic.Init(this, materials.Lit);
             Traffic.FareAlive = seed => People.IndexOfSeed(seed) >= 0;
+            Paths.OnCrossing = OnZebra;
             Traffic.Operating = house => People.OnTractor(house);
             Traffic.FarmerStyle = house => People.WorkerOf(house).style;
             Traffic.FarmerSeed = house => People.WorkerOf(house).seed;
@@ -1140,13 +1141,14 @@ namespace Wonderland
             if (boat >= 0) return Boats.Validate(new Vector2(h.x, h.z), h.rotation + 180f, boat);
             if (h.variant == Catalog.Jetty && ValidateJetty(h) is { } jetty) return jetty;
             if (h.variant == Catalog.Harbour && ValidateHarbour(h) is { } harbour) return harbour;
+            if (h.variant == Catalog.Zebra && !(Paths.WayDistance(new Vector2(h.x, h.z), out int zk) < -0.01f && PathSystem.IsCarWay(zk))) return "A zebra crossing goes across a street";
             string error = (Catalog.IsStation(h.variant) ? ValidateStation(h) : null) ?? Buildings.Validate(h, ignore, p => Track.DistanceTo(new Vector3(p.x, 0f, p.y)));
             if (error == null)
                 foreach (var p in BuildingSystem.FootprintSamples(h))
                 {
                     if (Streams.IsWet(p, 0.01f)) return "That's a stream";
                     if (Paths.NearBarrier(p, 0.004f)) return "That's a fence";
-                    if (!Catalog.Get(h.variant).Small && Paths.WayDistance(p, out int kind) < -0.004f) return kind == 0 ? "That's the road" : "That's the path";
+                    if (!Catalog.Get(h.variant).Small && Paths.WayDistance(p, out int kind) < PathSystem.Pavement(kind) - 0.004f) return kind == 0 ? "That's the road (and its pavement)" : "That's the path";
                 }
             return error;
         }
@@ -1194,6 +1196,27 @@ namespace Wonderland
                     }
             }
             return null;
+        }
+
+        /// <summary>A zebra crossing where the pointer is, snapped across the street nearest it (null: no street near).</summary>
+        public HouseInstance? ZebraSnap(Vector3 local)
+        {
+            var p = new Vector2(local.x, local.z);
+            if (!Paths.AcrossRoad(p, out var at, out float yaw)) return null;
+            return new HouseInstance { x = at.x, z = at.y, rotation = yaw, variant = Catalog.Zebra };
+        }
+
+        /// <summary>Whether a point is on a zebra crossing.</summary>
+        public bool OnZebra(Vector2 p)
+        {
+            foreach (var h in Buildings.Houses)
+            {
+                if (h.variant != Catalog.Zebra) continue;
+                var d = Quaternion.Euler(0f, -h.rotation, 0f) * new Vector3(p.x - h.x, 0f, p.y - h.z);
+                var half = Catalog.Get(Catalog.Zebra).Half;
+                if (Mathf.Abs(d.x) <= half.x && Mathf.Abs(d.z) <= half.y + 0.006f) return true;
+            }
+            return false;
         }
 
         /// <summary>A harbour stands on the shore, its front to open water deep and wide enough for a ship to moor.</summary>

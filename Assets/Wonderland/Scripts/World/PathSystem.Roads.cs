@@ -150,8 +150,23 @@ namespace Wonderland
             var normal = Vector2.Dot(p - q, right) >= 0f ? right : -right;
             float s = Vector2.Dot(q, t);
             q += t * (Mathf.Round(s / BuildGrid.Size) * BuildGrid.Size - s);
-            at = q + normal * (hw + depth + 0.006f);
+            at = q + normal * (hw + Pavement(l.kind) + depth + 0.006f);
             yaw = Mathf.Atan2(normal.x, normal.y) * Mathf.Rad2Deg;   // (a building's front is its -Z: it looks back along -normal, at the road)
+            return true;
+        }
+
+        /// <summary>The point on the street nearest <paramref name="p"/> (within reach) and the way along it: a crossing's yaw.</summary>
+        public bool AcrossRoad(Vector2 p, out Vector2 at, out float yaw)
+        {
+            at = p; yaw = 0f;
+            float d = Query(p, 0.08f, k => IsCarWay(Lines[k].kind) && Lines[k].kind != (int)PathKind.Highway, out int li);
+            if (li < 0 || d > HalfWidth(Lines[li].kind) + 0.04f) return false;
+            var l = Lines[li];
+            int best = 0; float bestD = float.MaxValue;
+            for (int i = 0; i < l.points.Count; i++) { float q2 = (l.points[i] - p).sqrMagnitude; if (q2 < bestD) { bestD = q2; best = i; } }
+            var t = Tangent(l, best);
+            at = l.points[best];
+            yaw = Mathf.Atan2(t.x, t.y) * Mathf.Rad2Deg;   // (its local Z along the street, its long side - local X - across it)
             return true;
         }
 
@@ -353,6 +368,7 @@ namespace Wonderland
         /// <summary>A point along a road for its mesh: where, which way, how high the (flat) road surface is there, how far along.</summary>
         private struct RoadSample { public Vector2 P, T; public float Y, S; public bool Junction; }
 
+        private static readonly Color Paving = new(0.78f, 0.75f, 0.7f);
         private const float KerbHeight = 0.0012f, Skirt = 0.004f, RoadLift = 0.0016f;
 
         /// <summary>
@@ -417,13 +433,15 @@ namespace Wonderland
             float hw = HalfWidth(l.kind);
             bool highway = l.kind == (int)PathKind.Highway;
             var samples = RoadSamples(l);
-            // Cross-section strips, left to right: skirt, kerb top, kerb face, asphalt, kerb face, kerb top, skirt.
-            // (offset, height above the road, and the next corner's) - kerbs drop to road level inside junctions.
+            // Cross-section strips, left to right: skirt, pavement, kerb top, kerb face, asphalt, kerb face, kerb top,
+            // pavement, skirt (offset, height above the road, and the next corner's) - kerbs drop to road level inside
+            // junctions. Streets and lanes have a pavement either side for people to walk on; highways don't.
+            float pw = Pavement(l.kind);
             (float x0, float h0, float x1, float h1, bool kerb)[] strips =
             {
-                (-hw, -Skirt, -hw, KerbHeight, true), (-hw, KerbHeight, -hw + KerbWidth, KerbHeight, true), (-hw + KerbWidth, KerbHeight, -hw + KerbWidth, 0f, true),
+                (-hw - pw, -Skirt, -hw - pw, KerbHeight, true), (-hw - pw, KerbHeight, -hw, KerbHeight, true), (-hw, KerbHeight, -hw + KerbWidth, KerbHeight, true), (-hw + KerbWidth, KerbHeight, -hw + KerbWidth, 0f, true),
                 (-hw + KerbWidth, 0f, hw - KerbWidth, 0f, false),
-                (hw - KerbWidth, 0f, hw - KerbWidth, KerbHeight, true), (hw - KerbWidth, KerbHeight, hw, KerbHeight, true), (hw, KerbHeight, hw, -Skirt, true),
+                (hw - KerbWidth, 0f, hw - KerbWidth, KerbHeight, true), (hw - KerbWidth, KerbHeight, hw, KerbHeight, true), (hw, KerbHeight, hw + pw, KerbHeight, true), (hw + pw, KerbHeight, hw + pw, -Skirt, true),
             };
             int count = samples.Count, last = l.closed ? count : count - 1;
             foreach (var (x0, h0, x1, h1, kerb) in strips)
@@ -436,7 +454,8 @@ namespace Wonderland
                     bool flat = sm.Junction;   // inside a junction: all asphalt at road level
                     float a = flat ? Mathf.Min(h0, 0f) : h0, c = flat ? Mathf.Min(h1, 0f) : h1;
                     float y = sm.Y + RoadLift;
-                    var colour = kerb && !flat ? Pal.Shade(KerbStone, 0.95f + 0.1f * Noise.Hash(i / 4, (int)(x0 * 1000f), 7)) : Pal.Shade(Asphalt, 0.97f + 0.05f * Noise.Hash(i / 3, 1, 3));
+                    bool paving = Mathf.Abs(x0) >= hw - 1e-5f && Mathf.Abs(x1) >= hw - 1e-5f && pw > 0f;
+                    var colour = kerb && !flat ? (paving ? Pal.Shade(Paving, 0.94f + 0.08f * Noise.Hash(i / 2, (int)(x0 * 1000f), 11)) : Pal.Shade(KerbStone, 0.95f + 0.1f * Noise.Hash(i / 4, (int)(x0 * 1000f), 7))) : Pal.Shade(Asphalt, 0.97f + 0.05f * Noise.Hash(i / 3, 1, 3));
                     var q0 = sm.P + right * x0; var q1 = sm.P + right * x1;
                     var p0 = new Vector3(q0.x, y + a, q0.y); var p1 = new Vector3(q1.x, y + c, q1.y);
                     var along = new Vector3(sm.T.x, 0f, sm.T.y);

@@ -892,7 +892,7 @@ namespace Wonderland.Editor
             var route = w.Paths.Route(new Vector2(-0.68f, -0.45f), new Vector2(-0.08f, -0.11f));
             Check(route != null && route.Count > 5, $"Villagers find a walking route along the road and the path ({route?.Count ?? 0} waypoints)");
             string onRoad = w.ValidateHouse(new HouseInstance { x = -0.5f, z = -0.45f, variant = Catalog.Cottage });
-            Check(onRoad == "That's the road", $"Houses are not built on the road (\"{onRoad}\")");
+            Check(onRoad != null && onRoad.StartsWith("That's the road"), $"Houses are not built on the road (\"{onRoad}\")");
             string lampError = w.ValidateHouse(new HouseInstance { x = -0.55f, z = -0.415f, variant = Catalog.Lamp });
             Check(lampError == null, "A street lamp may stand at the roadside" + (lampError == null ? "" : $" (\"{lampError}\")"));
             // A hiking trail and a hiker.

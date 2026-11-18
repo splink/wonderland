@@ -17,6 +17,7 @@ namespace Wonderland
                 case Catalog.Sawmill: return SawmillShed(b, ref rng);
                 case Catalog.Letterbox: return PillarBox(b);
                 case Catalog.CarPark: return CarParkBays(b);
+                case Catalog.Zebra: return ZebraStripes(b);
                 case Catalog.FreightYard: return FreightYardPad(b, ref rng);
                 case Catalog.Harbour: return HarbourQuay(b, ref rng);
                 case Catalog.Zoo: return ZooGrounds(b, ref rng);
@@ -180,6 +181,24 @@ namespace Wonderland
         }
 
         public const int ParkingBays = 8;
+
+        /// <summary>
+        /// A zebra crossing across a street (local X across it, Z along it): white bars on the asphalt, a hair above the
+        /// road, and a black-and-white post with an orange globe on the pavement at each end.
+        /// </summary>
+        private static float ZebraStripes(MeshBuilder b)
+        {
+            const float lift = 0.0021f, half = 0.026f;
+            for (float x = -half + 0.002f; x <= half - 0.002f + 1e-4f; x += 0.0075f)
+                b.AddBox(new Vector3(x, lift, 0f), new Vector3(0.004f, 0.0003f, 0.018f), Pal.FlowerWhite);
+            foreach (int s in new[] { -1, 1 })
+            {
+                var post = new Vector3(s * 0.037f, 0.0016f, 0.009f);
+                for (int k = 0; k < 6; k++) b.AddCylinder(post + Vector3.up * k * 0.004f, 0.0007f, 0.0007f, 0.004f, 6, k % 2 == 0 ? Pal.TrainBlack : Pal.FlowerWhite, k % 2 == 0 ? Pal.TrainBlack : Pal.FlowerWhite, false);
+                b.AddBlob(post + Vector3.up * 0.026f, Vector3.one * 0.0022f, 1, 0f, 3 + s, (_, __) => Pal.Glow(Pal.Hex("#F29A2E")));
+            }
+            return 0.03f;
+        }
 
         /// <summary>
         /// The freight yard (its front, -Z, to the railway): a concrete pad, the rail the crane rolls along, a stack of

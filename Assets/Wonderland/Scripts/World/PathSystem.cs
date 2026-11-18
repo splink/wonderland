@@ -167,6 +167,26 @@ namespace Wonderland
         }
 
         /// <summary>Distance to the nearest way (road, lane, path, trail), and its kind.</summary>
+        /// <summary>The pavement beyond each kerb of a street or lane (where people walk); none on a highway or a path.</summary>
+        public static float Pavement(int kind) => kind is (int)PathKind.Road or (int)PathKind.Lane ? 0.012f : 0f;
+
+        /// <summary>Zebra crossings (set by the world): whether a point is on one.</summary>
+        public Func<Vector2, bool> OnCrossing;
+
+        /// <summary>What a point is to someone on foot: 0 nothing, 1 a path or a pavement, 2 a road's carriageway, 3 a zebra crossing.</summary>
+        public int Walking(Vector2 p)
+        {
+            float d = Query(p, 0.09f, li => IsWay(Lines[li].kind), out int line);
+            if (line < 0) return 0;
+            int kind = Lines[line].kind;
+            float hw = HalfWidth(kind);
+            if (!IsCarWay(kind)) return d < hw ? 1 : 0;
+            if (d < hw - RoadKerb * 0.5f) return OnCrossing != null && OnCrossing(p) ? 3 : 2;
+            return d < hw + Pavement(kind) + 0.004f ? 1 : 0;
+        }
+
+        private const float RoadKerb = 0.0045f;
+
         public float WayDistance(Vector2 p, out int kind)
         {
             kind = -1;
@@ -180,7 +200,7 @@ namespace Wonderland
         public bool Covers(Vector2 p, float margin)
         {
             float d = Query(p, 0.03f + margin, _ => true, out int line);
-            return line >= 0 && d < HalfWidth(Lines[line].kind) + margin;
+            return line >= 0 && d < HalfWidth(Lines[line].kind) + Pavement(Lines[line].kind) + margin;
         }
 
         public bool NearBarrier(Vector2 p, float margin)

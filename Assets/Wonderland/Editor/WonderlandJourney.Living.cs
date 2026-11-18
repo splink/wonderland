@@ -41,6 +41,8 @@ namespace Wonderland.Editor
             catch (Exception e) { Fail("Exception: " + e); }
             try { StrictGrid(); }
             catch (Exception e) { Fail("Exception: " + e); }
+            try { Pavements(); }
+            catch (Exception e) { Fail("Exception: " + e); }
             try { Soak(); }
             catch (Exception e) { Fail("Exception: " + e); }
             BuildGrid.Snap = true;
@@ -658,6 +660,40 @@ namespace Wonderland.Editor
             UnityEngine.Object.DestroyImmediate(w.gameObject);
         }
 
+        /// <summary>
+        /// Pavements and zebra crossings: streets have a pavement either side; someone walking to a café across the street
+        /// keeps to the pavement and crosses at the zebra crossing, hardly setting foot on the carriageway otherwise.
+        /// </summary>
+        private static void Pavements()
+        {
+            var w = Scratch("Pavements", 600f);
+            var t = w.Terrain;
+            w.BuildPath(Line(t, new Vector2(-0.7f, 0f), new Vector2(0.7f, 0f)), PathKind.Road);
+            w.PlaceHouse(new HouseInstance { x = -0.5f, z = -0.13f, rotation = 180f, variant = Catalog.Cottage });
+            string cafe = w.PlaceHouse(new HouseInstance { x = 0.5f, z = 0.13f, variant = Catalog.Cafe });
+            var z = w.ZebraSnap(t.PointAt(0.05f, 0.01f));
+            string zebra = z.HasValue ? w.PlaceHouse(z.Value) : "no street";
+            var pave = new Vector2(0f, -0.036f); var road = new Vector2(0f, 0.005f);
+            Check(cafe == null && zebra == null && w.Paths.Walking(pave) == 1 && w.Paths.Walking(road) == 2 && w.Paths.Walking(new Vector2(z.Value.x, 0.01f)) == 3,
+                $"A street with a pavement either side and a zebra crossing ({w.Paths.Walking(pave)} on the pavement, {w.Paths.Walking(road)} in the road, {(z.HasValue ? w.Paths.Walking(new Vector2(z.Value.x, 0.01f)) : -1)} on the zebra){cafe ?? ""}{zebra ?? ""}");
+            w.PlacePerson(new Vector3(-0.45f, 0f, -0.06f), 1, 888);
+            w.People.Grid.Complete(); w.Clock.Hour = 10f; w.People.Step(Dt);
+            int ci = w.Buildings.Houses.FindIndex(h => h.variant == Catalog.Cafe);
+            w.People.Deciders.Add(new SendOnce { Seed = 888, House = ci });
+            float onRoad = 0f, onPavement = 0f, onZebra = 0f, walking = 0f; var roadSpots = new List<string>();
+            Live(w, 150f, s =>
+            {
+                int i = w.People.IndexOfSeed(888);
+                if (i < 0 || w.People.StateOf(i) != PeopleSystem.Activity.Walking) return;
+                walking += Dt;
+                var at = w.People.PositionOf(i);
+                switch (w.Paths.Walking(at)) { case 1: onPavement += Dt; break; case 2: onRoad += Dt; if (roadSpots.Count < 12 && Mathf.Repeat(s, 1f) < Dt) roadSpots.Add($"({at.x:0.00}, {at.y:0.000})"); break; case 3: onZebra += Dt; break; }
+            });
+            Check(onZebra > 0f && onPavement > walking * 0.4f && onRoad < walking * 0.12f,
+                $"Walking to the café across the street they keep to the pavement and cross at the zebra ({onPavement:0} s on the pavement, {onZebra:0.0} s on the zebra, {onRoad:0.0} s in the road, of {walking:0} s walking; in the road at {string.Join(" ", roadSpots)})");
+            UnityEngine.Object.DestroyImmediate(w.gameObject);
+        }
+
         /// <summary>The living world's buildings in a row, fronts to the camera (docs/renders/living-buildings*.png).</summary>
         public static void LivingGallery()
         {
@@ -811,6 +847,19 @@ namespace Wonderland.Editor
             for (int k = 0; k < 120; k++) foreach (var ps in ww.Streams.GetComponentsInChildren<ParticleSystem>()) ps.Simulate(1f / 30f, true, false);
             WonderlandRenders.Capture(cam, "living-river-waterfall.png", 1400, 900);
             Debug.Log($"Living renders: water ({ww.Streams.Waterfalls} falls)");
+            // A street with its pavements and a zebra crossing, villagers on the pavement.
+            var sw = Scratch("Street render", 240f);
+            sw.Sky.Shown = false;
+            var st = sw.Terrain;
+            sw.BuildPath(Line(st, new Vector2(-0.6f, 0f), new Vector2(0.6f, 0f)), PathKind.Road);
+            foreach (var (x, z, r, v) in new[] { (-0.2f, 0.13f, 0f, Catalog.Bakery), (0.05f, 0.13f, 0f, Catalog.Cafe), (0.3f, 0.13f, 0f, Catalog.Grocer), (-0.15f, -0.13f, 180f, Catalog.Townhouse), (0.15f, -0.13f, 180f, Catalog.Cottage) })
+                sw.PlaceHouse(new HouseInstance { x = x, z = z, rotation = r, variant = v });
+            var zc = sw.ZebraSnap(st.PointAt(0f, 0f)); if (zc.HasValue) sw.PlaceHouse(zc.Value);
+            for (int k = 0; k < 4; k++) sw.PlacePerson(new Vector3(-0.15f + k * 0.08f, 0f, k % 2 == 0 ? -0.038f : 0.038f), k, 900 + k);
+            var focus2 = sw.transform.TransformPoint(st.PointAt(0f, 0f));
+            cam.transform.position = focus2 + new Vector3(-0.04f, 0.17f, -0.07f);
+            cam.transform.rotation = Quaternion.LookRotation(focus2 - cam.transform.position);
+            WonderlandRenders.Capture(cam, "living-street-zebra.png", 1400, 900);
             if (Application.isBatchMode) EditorApplication.Exit(0);
         }
     }

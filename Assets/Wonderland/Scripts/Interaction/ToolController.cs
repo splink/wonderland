@@ -1098,7 +1098,7 @@ namespace Wonderland
                 if (carrying && !heldByTrigger && input.GripUp) { DropCarried(); Say("Point at the land to put it down - it's back where it was", 4f); Haptic(0.7f, 0.1f); RefreshOptions(); }
                 return;
             }
-            if (BuildGrid.Snap && !Catalog.IsStation(HouseVariant) && HouseVariant is not (Catalog.Harbour or Catalog.Jetty))
+            if (BuildGrid.Snap && !Catalog.IsStation(HouseVariant) && HouseVariant is not (Catalog.Harbour or Catalog.Jetty or Catalog.Zebra))
             {
                 // On the grid: beside a road, facing it and lined up along it; elsewhere on the grid, in quarter turns.
                 var bp = Catalog.Get(HouseVariant);
@@ -1109,7 +1109,14 @@ namespace Wonderland
             }
             var candidate = new HouseInstance { x = local.x, z = local.z, rotation = houseRotation, variant = HouseVariant, style = houseStyle };
             string error;
-            if (HouseVariant is Catalog.Harbour or Catalog.Jetty)
+            if (HouseVariant == Catalog.Zebra)
+            {
+                // A zebra crossing goes across the street nearest the pointer.
+                var snapped = World.ZebraSnap(local);
+                if (snapped.HasValue) { candidate = snapped.Value; local = new Vector3(candidate.x, local.y, candidate.z); houseRotation = candidate.rotation; error = World.ValidateHouse(candidate); }
+                else error = "Point at a street - the crossing goes across it";
+            }
+            else if (HouseVariant is Catalog.Harbour or Catalog.Jetty)
             {
                 // A harbour or a landing stage finds the shore: it turns to face the water and settles on the bank.
                 var snapped = World.ShoreSnap(local, HouseVariant, houseStyle);

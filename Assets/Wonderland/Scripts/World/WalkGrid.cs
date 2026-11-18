@@ -17,12 +17,12 @@ namespace Wonderland
     public sealed class WalkGrid
     {
         public const float Cell = 0.025f;
-        private const byte Open = 1, East = 2, North = 4, Way = 8;
-        private const float WayCost = 0.5f;
+        private const byte Open = 1, East = 2, North = 4, Way = 8, Road = 16, Crossing = 32;
+        private const float WayCost = 0.5f, RoadCost = 3.5f;   // paths and pavements are easy; a carriageway is crossed where it must be (a zebra is easy)
 
         private readonly Func<Vector2, bool> walkable;
         private readonly Func<Vector2, Vector2, bool> barrier;
-        private readonly Func<Vector2, bool> onWay;
+        private readonly Func<Vector2, int> surface;
         private readonly Func<Rect> bounds;
 
         // The finished grid (queries) and the one being built.
@@ -44,9 +44,10 @@ namespace Wonderland
         public float LastBuildMs { get; private set; }
         private float buildMs;
 
-        public WalkGrid(Func<Vector2, bool> walkable, Func<Vector2, Vector2, bool> barrier, Func<Vector2, bool> onWay, Func<Rect> bounds)
+        /// <param name="surface">What a point is underfoot: 0 nothing, 1 a path or pavement, 2 a carriageway, 3 a zebra crossing.</param>
+        public WalkGrid(Func<Vector2, bool> walkable, Func<Vector2, Vector2, bool> barrier, Func<Vector2, int> surface, Func<Rect> bounds)
         {
-            this.walkable = walkable; this.barrier = barrier; this.onWay = onWay; this.bounds = bounds;
+            this.walkable = walkable; this.barrier = barrier; this.surface = surface; this.bounds = bounds;
         }
 
         /// <summary>The world changed: start again (a rebuild already under way restarts).</summary>
@@ -96,7 +97,8 @@ namespace Wonderland
             var c = CentreOf(bx0, bz0, x, z);
             if (!walkable(c)) return;
             byte f = Open;
-            if (onWay(c)) f |= Way;
+            int s = surface(c);
+            if (s == 1) f |= Way; else if (s == 2) f |= Road; else if (s == 3) f |= Crossing | Way;
             // A link to the east / north neighbour when the halfway point is walkable and no fence is in between; the
             // neighbour's own centre is checked when it is classified (both must be open for the link to count).
             if (x + 1 < bnx && walkable(c + new Vector2(Cell * 0.5f, 0f)) && !barrier(c, c + new Vector2(Cell, 0f))) f |= East;
@@ -228,7 +230,7 @@ namespace Wonderland
         private readonly List<int> cells = new();
         public int LastExpanded { get; private set; }
 
-        private float CostOf(int c) => (flags[c] & Way) != 0 ? WayCost : 1f;
+        private float CostOf(int c) => (flags[c] & Way) != 0 ? WayCost : (flags[c] & Road) != 0 ? RoadCost : 1f;
 
         /// <summary>
         /// A walking route (waypoints after <paramref name="from"/>, ending at <paramref name="to"/>), or null when there

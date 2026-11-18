@@ -113,7 +113,7 @@ namespace Wonderland
         public void Init(WonderlandWorld owner, Material lit)
         {
             world = owner; material = lit;
-            Grid = new WalkGrid(Walkable, (a, b) => world.Paths.CrossesBarrier(a, b), p => world.Paths.WayDistance(p, out _) < 0f, GridBounds);
+            Grid = new WalkGrid(Walkable, (a, b) => world.Paths.CrossesBarrier(a, b), p => world.Paths.Walking(p), GridBounds);
         }
 
         public void SetPeople(IEnumerable<PersonInstance> people)
@@ -1099,7 +1099,7 @@ namespace Wonderland
             var din = w0 - a.Position; var dout = w1 - w0;
             if (din.sqrMagnitude < 1e-8f || dout.sqrMagnitude < 1e-8f) return true;
             if (Vector2.Dot(din.normalized, dout.normalized) < 0.5f) return false;
-            return Walkable(Vector2.Lerp(a.Position, w1, 0.5f)) && !world.Paths.CrossesBarrier(a.Position, w1);
+            return Walkable(Vector2.Lerp(a.Position, w1, 0.5f)) && !world.Paths.CrossesBarrier(a.Position, w1) && !IntoRoad(w0, a.Position, w1);
         }
 
         /// <summary>
@@ -1117,11 +1117,22 @@ namespace Wonderland
             {
                 Vector2 prev = pts[i - 1], at = pts[i], next = pts[i + 1];
                 var q = Vector2.Lerp(at, prev, 0.3f); var r = Vector2.Lerp(at, next, 0.3f);
-                bool ok = Walkable(q) && Walkable(r) && !world.Paths.CrossesBarrier(q, r) && (soft.Count == 0 || !world.Paths.CrossesBarrier(soft[^1], q));
+                bool ok = Walkable(q) && Walkable(r) && !world.Paths.CrossesBarrier(q, r) && (soft.Count == 0 || !world.Paths.CrossesBarrier(soft[^1], q))
+                    && !IntoRoad(at, q, r);   // (a corner by a road isn't cut across the carriageway: people cross at the crossing)
                 if (ok) { soft.Add(q); soft.Add(r); } else soft.Add(at);
             }
             soft.Add(pts[^1]);
             return soft;
+        }
+
+        /// <summary>Whether cutting the corner at <paramref name="at"/> from q to r would take someone across a carriageway.</summary>
+        private bool IntoRoad(Vector2 at, Vector2 q, Vector2 r)
+        {
+            if (world.Paths.Lines.Count == 0) return false;
+            int s = world.Paths.Walking(at);
+            for (float t = 0.25f; t < 1f; t += 0.25f)
+                if (world.Paths.Walking(Vector2.Lerp(q, r, t)) == 2 && s != 2) return true;
+            return s == 3 || world.Paths.Walking(q) == 3 || world.Paths.Walking(r) == 3;   // (a zebra is crossed straight)
         }
 
         private void Walk(Agent a, float dt)
