@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace Wonderland
 {
-    public enum VehicleKind { Car = 0, Motorbike = 1, Bicycle = 2, Ambulance = 3, Police = 4, FireEngine = 5, Taxi = 6, Van = 7, Bus = 8, Truck = 9, Tanker = 10 }
+    public enum VehicleKind { Car = 0, Motorbike = 1, Bicycle = 2, Ambulance = 3, Police = 4, FireEngine = 5, Taxi = 6, Van = 7, Bus = 8, Truck = 9, Tanker = 10, Flatbed = 11 }
 
     /// <summary>
     /// Storybook road vehicles at the villagers' scale (a car is 5 cm long): rounded cars in four colours, a motorbike and
@@ -17,18 +17,18 @@ namespace Wonderland
         public static readonly VehicleKind[] Placeable = { VehicleKind.Car, VehicleKind.Taxi, VehicleKind.Van, VehicleKind.Bus, VehicleKind.Truck, VehicleKind.Tanker };
 
         /// <summary>Big vehicles keep to the slow lane of a highway.</summary>
-        public static bool Heavy(VehicleKind k) => k is VehicleKind.Bus or VehicleKind.Truck or VehicleKind.Tanker or VehicleKind.FireEngine;
+        public static bool Heavy(VehicleKind k) => k is VehicleKind.Bus or VehicleKind.Truck or VehicleKind.Tanker or VehicleKind.FireEngine or VehicleKind.Flatbed;
         private static Mesh beacon;
 
         public static float Length(VehicleKind k) => k switch
         {
             VehicleKind.Motorbike => 0.026f, VehicleKind.Bicycle => 0.022f, VehicleKind.FireEngine => 0.075f, VehicleKind.Ambulance => 0.058f,
-            VehicleKind.Van => 0.056f, VehicleKind.Bus => 0.1f, VehicleKind.Truck => 0.088f, VehicleKind.Tanker => 0.088f, _ => 0.05f,
+            VehicleKind.Van => 0.056f, VehicleKind.Bus => 0.1f, VehicleKind.Truck => 0.088f, VehicleKind.Tanker => 0.088f, VehicleKind.Flatbed => 0.088f, _ => 0.05f,
         };
 
         public static Mesh Get(VehicleKind k, int colour = 0)
         {
-            int key = (int)k * 4 + (k is VehicleKind.Car or VehicleKind.Van or VehicleKind.Truck ? colour % 4 : 0);
+            int key = (int)k * 4 + (k is VehicleKind.Car or VehicleKind.Van or VehicleKind.Truck or VehicleKind.Flatbed ? colour % 4 : 0);
             return meshes[key] ??= Build(k, colour % 4);
         }
 
@@ -66,6 +66,7 @@ namespace Wonderland
                 case VehicleKind.Bus: Bus(b); break;
                 case VehicleKind.Truck: Lorry(b, CarColours[colour], false); break;
                 case VehicleKind.Tanker: Lorry(b, Pal.Hex("#3E6FB0"), true); break;
+                case VehicleKind.Flatbed: Flatbed(b, CarColours[colour]); break;
                 default: Bike(b, false); break;
             }
             return b.ToMesh(k + "_" + colour);
@@ -203,6 +204,94 @@ namespace Wonderland
                 var box = Pal.Hex("#F2EFE8");
                 b.AddBox(new Vector3(0f, 0.0215f, -0.011f), new Vector3(W + 0.001f, 0.026f, 0.064f), box, box, Pal.Shade(box, 0.8f));
                 foreach (int s in new[] { -1, 1 }) b.AddBox(new Vector3(s * (W / 2 + 0.0008f), 0.0215f, -0.011f), new Vector3(0.0004f, 0.008f, 0.05f), body);   // a coloured band
+            }
+        }
+
+        /// <summary>An open lorry: a cab and a flat bed with low sides, so what it carries shows (see <see cref="Load"/>).</summary>
+        private static void Flatbed(MeshBuilder b, Color body)
+        {
+            const float L = 0.088f, W = 0.025f;
+            var glass = Pal.Hex("#5A7090"); var chassis = Pal.Hex("#2E2E34"); var wood = Pal.Hex("#9A6B42");
+            Wheels(b, W / 2 - 0.0012f, new[] { -0.03f, -0.019f, 0.03f }, 0.0055f);
+            b.AddBox(new Vector3(0f, 0.0065f, 0f), new Vector3(W - 0.006f, 0.004f, L - 0.004f), chassis);
+            b.AddBox(new Vector3(0f, 0.017f, L / 2 - 0.009f), new Vector3(W, 0.02f, 0.018f), body, Pal.Shade(body, 1.1f), Pal.Shade(body, 0.7f));
+            b.AddBox(new Vector3(0f, 0.021f, L / 2 + 0.0002f), new Vector3(W - 0.004f, 0.007f, 0.0008f), glass);
+            foreach (int s in new[] { -1, 1 }) b.AddBox(new Vector3(s * (W / 2 + 0.0002f), 0.021f, L / 2 - 0.007f), new Vector3(0.0006f, 0.006f, 0.008f), glass);
+            Lights(b, W / 2, 0.01f, L / 2 + 0.0004f, -L / 2 - 0.0004f);
+            // The bed: planks, low sides and a headboard behind the cab.
+            b.AddBox(new Vector3(0f, BedTop - 0.0009f, BedCentre), new Vector3(W, 0.0018f, BedLength), wood, Pal.Shade(wood, 1.1f), Pal.Shade(wood, 0.75f));
+            foreach (int s in new[] { -1, 1 }) b.AddBox(new Vector3(s * (W / 2 - 0.0006f), BedTop + 0.0022f, BedCentre), new Vector3(0.0012f, 0.0044f, BedLength), body);
+            b.AddBox(new Vector3(0f, BedTop + 0.0022f, BedCentre - BedLength / 2 + 0.0006f), new Vector3(W, 0.0044f, 0.0012f), body);
+            b.AddBox(new Vector3(0f, BedTop + 0.006f, BedCentre + BedLength / 2 - 0.0008f), new Vector3(W, 0.012f, 0.0016f), Pal.Shade(body, 0.85f));
+        }
+
+        /// <summary>The flat bed of a <see cref="VehicleKind.Flatbed"/>: its top, its middle (z) and its length.</summary>
+        public const float BedTop = 0.0105f, BedCentre = -0.012f, BedLength = 0.06f;
+
+        private static readonly Mesh[] loads = new Mesh[64];
+        private static Mesh one;
+
+        /// <summary>
+        /// A load on a flat bed: <paramref name="crates"/> crates of produce, cardboard boxes of goods, logs, or mail sacks,
+        /// two by three, centred on the bed (local to the lorry).
+        /// </summary>
+        public static Mesh Load(Cargo cargo, int crates)
+        {
+            int kind = cargo switch { Cargo.Goods => 1, Cargo.Timber => 2, Cargo.Mail => 3, _ => 0 };
+            crates = Mathf.Clamp(crates, 0, 6);
+            int key = kind * 8 + crates;
+            if (loads[key] != null) return loads[key];
+            var b = new MeshBuilder();
+            if (kind == 2)
+            {
+                // Logs lie lengthwise, a pile that grows with the load.
+                for (int i = 0; i < crates * 2; i++)
+                {
+                    int row = i < 5 ? 0 : i < 9 ? 1 : 2, inRow = i < 5 ? i : i < 9 ? i - 5 : i - 9, of = row == 0 ? 5 : row == 1 ? 4 : 3;
+                    float x = (inRow - (of - 1) / 2f) * 0.0046f;
+                    b.Push(new Vector3(x, BedTop + 0.0023f + row * 0.004f, BedCentre), Quaternion.Euler(90f, 0f, 0f));
+                    b.AddCylinder(new Vector3(0f, -0.026f, 0f), 0.0023f, 0.0023f, 0.052f, 7, Pal.Hex("#8A5A34"), Pal.Hex("#D8B27A"), true, true);
+                    b.Pop();
+                }
+            }
+            else
+                for (int i = 0; i < crates; i++)
+                {
+                    var at = new Vector3((i % 2 - 0.5f) * 0.011f, BedTop, BedCentre + BedLength / 2 - 0.011f - i / 2 * 0.0185f);
+                    Crate(b, at, kind, i);
+                }
+            return loads[key] = b.ToMesh("Load");
+        }
+
+        /// <summary>One crate (or box, or sack) on its own, its bottom at the origin: what is carried across when loading.</summary>
+        public static Mesh OneCrate(Cargo cargo) => cargo == Cargo.Produce ? one ??= Single(0) : Single(cargo switch { Cargo.Goods => 1, Cargo.Timber => 2, _ => 3 });
+
+        private static Mesh Single(int kind)
+        {
+            var b = new MeshBuilder();
+            if (kind == 2) { b.Push(Vector3.up * 0.0023f, Quaternion.Euler(90f, 0f, 0f)); b.AddCylinder(new Vector3(0f, -0.012f, 0f), 0.0023f, 0.0023f, 0.024f, 7, Pal.Hex("#8A5A34"), Pal.Hex("#D8B27A"), true, true); b.Pop(); }
+            else Crate(b, Vector3.zero, kind, 1);
+            return b.ToMesh("Crate");
+        }
+
+        private static void Crate(MeshBuilder b, Vector3 at, int kind, int i)
+        {
+            switch (kind)
+            {
+                case 1:   // a cardboard box, taped
+                    b.AddBox(at + new Vector3(0f, 0.0045f, 0f), new Vector3(0.0096f, 0.009f, 0.0096f), Pal.Hex("#C9A06A"), Pal.Hex("#D8B27A"), Pal.Hex("#A9804E"));
+                    b.AddBox(at + new Vector3(0f, 0.00905f, 0f), new Vector3(0.0022f, 0.0002f, 0.0098f), Pal.Hex("#E8D9B0"));
+                    break;
+                case 3:   // a mail sack
+                    b.AddBlob(at + new Vector3(0f, 0.004f, 0f), new Vector3(0.0045f, 0.004f, 0.004f), 1, 0.1f, 30 + i, (_, __) => Pal.Hex("#B89A6A"));
+                    break;
+                default:  // a wooden crate heaped with fruit and veg
+                    var wood = Pal.Hex("#B07A45");
+                    b.AddBox(at + new Vector3(0f, 0.0032f, 0f), new Vector3(0.0096f, 0.0064f, 0.0096f), wood, Pal.Shade(wood, 1.1f), Pal.Shade(wood, 0.7f));
+                    var colours = new[] { "#D9473A", "#E8B84A", "#6FA84A", "#E07B39" };
+                    for (int k = 0; k < 4; k++)
+                        b.AddBlob(at + new Vector3((k % 2 - 0.5f) * 0.0044f, 0.0068f, (k / 2 - 0.5f) * 0.0044f), Vector3.one * 0.0019f, 0, 0f, 40 + i * 4 + k, (_, __) => Pal.Hex(colours[(i + k) % 4]));
+                    break;
             }
         }
 

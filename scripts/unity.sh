@@ -35,6 +35,7 @@ case "$task" in
   trainflow) method=Wonderland.Editor.WonderlandJourney.TrainFlow ;;
   trackshape) method=Wonderland.Editor.WonderlandJourney.TrackShape ;;
   trackshaperender) method=Wonderland.Editor.WonderlandJourney.TrackShapeRenders; graphics=() ;;
+  living) method=Wonderland.Editor.WonderlandJourney.TestLiving ;;
   shops) method=Wonderland.Editor.WonderlandTownGallery.Run; graphics=() ;;
   trackprobe) method=Wonderland.Editor.WonderlandTrackProbe.Run ;;
   budget) method=Wonderland.Editor.WonderlandTrackProbe.Budget ;;

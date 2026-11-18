@@ -52,6 +52,18 @@ namespace Wonderland
             }
             return null;
         }
+        /// <summary>What a kind of place takes part in, in a few words ("makes produce · its lorry delivers it").</summary>
+        private static string PlaceRoles(Blueprint bp)
+        {
+            var parts = new List<string>();
+            static string Cargo(Cargo c) => c switch { Wonderland.Cargo.Produce => "produce", Wonderland.Cargo.Goods => "goods", Wonderland.Cargo.Timber => "timber", Wonderland.Cargo.Mail => "post", _ => "produce and goods" };
+            if (bp.Makes != Wonderland.Cargo.None) parts.Add("makes " + Cargo(bp.Makes));
+            if (bp.Takes != Wonderland.Cargo.None) parts.Add("takes in " + Cargo(bp.Takes));
+            if (bp.Lorries > 0) parts.Add(bp.Lorries == 1 ? "a lorry is based here" : $"{bp.Lorries} lorries are based here");
+            if (bp.Taxis > 0) parts.Add(bp.Taxis == 1 ? "a taxi waits here" : $"{bp.Taxis} taxis wait here");
+            return parts.Count > 0 ? string.Join(" · ", parts) : null;
+        }
+
         /// <summary>What the buttons do to what is pointed at, for the palette's hint line.</summary>
         private string PeekDo(bool movable, string card = "its card") =>
             Tool == Tool.Select ? $"  ·  trigger: {card}" + (movable ? "  ·  grip: move it" : "") : movable ? "  ·  grip: move it  ·  Select: " + card : "  ·  Select: " + card;
@@ -246,6 +258,16 @@ namespace Wonderland
                 {
                     var c = World.People.PlaceCardOf(i);
                     string place = PlaceBody(c, i);
+                    // What it takes part in, and what is happening for it now.
+                    var does = PlaceRoles(Catalog.Get(h.variant));
+                    string deliveries = World.Traffic.DeliveriesFor(i);
+                    if (does != null || deliveries != null)
+                    {
+                        var roles = new CardText().Section("Activities");
+                        if (does != null) roles.Row("Here", does);
+                        if (deliveries != null) roles.Row("Now", deliveries, CardText.Good);
+                        place = roles + place;
+                    }
                     int cam = World.Cctv.CameraOn(i);
                     if (h.variant == Catalog.Camera && cam >= 0)
                     {

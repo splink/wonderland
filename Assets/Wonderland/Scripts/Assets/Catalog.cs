@@ -9,6 +9,12 @@ namespace Wonderland
     /// <summary>What a place does with the village's produce: farms grow it, shops and the café sell it, stations ship it.</summary>
     public enum Goods { None, Grows, Sells, Ships }
 
+    /// <summary>
+    /// What a place makes or takes, for the lorries: produce from the farms, goods from the works, timber from the
+    /// sawmill. A lorry carries its depot's kind from wherever it is ready to wherever it is taken.
+    /// </summary>
+    [Flags] public enum Cargo { None = 0, Produce = 1, Goods = 2, Timber = 4, Mail = 8 }
+
     /// <summary>What people do at an activity spot.</summary>
     public enum SpotKind { Door, Sit, Gather, Play, Ride, Watch, Browse }
 
@@ -55,6 +61,10 @@ namespace Wonderland
         public bool WorksIndoors;            // the teacher in the school, the clerk in the town hall: lights on, nobody at the door
         public Goods Goods;
         public bool Boat;                    // not a building: a boat, set on a pond (see BoatSystem)
+        // Capabilities: what the place offers the world's activities (who comes, what is carried, what lives here).
+        public Cargo Makes, Takes;           // lorries collect what it makes, and bring what it takes
+        public int Lorries;                  // lorries based here (by a road), carrying what it makes
+        public int Taxis;                    // taxis waiting here for fares
         public bool Dwelling => Residents > 0;
         public bool Ride => Category == PlaceCategory.Fun && RotorSpeed != 0f && !OwnClock;
         public bool OpenAt(float hour) => Within(hour, Opens, Closes);
@@ -246,6 +256,14 @@ namespace Wonderland
             list[Restaurant].Rhythm = new[] { 0f, 0f, 0f, 0.05f, 0.85f, 0.35f, 1f, 0.8f, 0f };
             list[Disco].Rhythm = new[] { 0.9f, 0f, 0f, 0f, 0f, 0f, 0.3f, 1f, 1f };
             list[Playground].Kids = true;
+            // What is carried where: farms make produce, the factory goods; kitchens and shops take them in, and the
+            // station sends them on by goods train. Lorries live at the barn and the factory.
+            foreach (int id in new[] { Barn, WheatField, Garden, Greenhouse, Windmill }) list[id].Makes = Cargo.Produce;
+            list[Factory].Makes = Cargo.Goods;
+            foreach (int id in new[] { Bakery, Cafe, Restaurant }) list[id].Takes = Cargo.Produce;
+            list[Grocer].Takes = Cargo.Produce | Cargo.Goods;
+            list[Station].Takes = Cargo.Produce | Cargo.Goods;
+            list[Barn].Lorries = 1; list[Factory].Lorries = 1;
             return list.ToArray();
         }
 

@@ -44,6 +44,10 @@ namespace Wonderland
             private static int made;
             public int Colour;
             public readonly List<bool> Fast = new();   // per path point: on a highway (faster)
+            public int Depot = -1;             // lorries: the place they belong to (building index)
+            public Cargo Cargo;                // ...and what they carry
+            public Delivery Job;               // the delivery under way, or null
+            public MeshFilter Load;            // what shows on the bed
         }
 
         [System.Serializable]
@@ -77,10 +81,10 @@ namespace Wonderland
             checkTimer -= dt;
             if (checkTimer <= 0f)
             {
-                checkTimer = 1f; Refresh();
+                checkTimer = 1f; Refresh(); CheckDeliveries();
                 foreach (var v in Vehicles) if (v.Driver != 0 && (StillIn == null || !StillIn(v.Driver))) v.Driver = 0;   // (they came out: not in the car)
             }
-            blink += dt;
+            blink += dt; freightClock += dt;
             DrawLights(dt);
             foreach (var v in Vehicles) Drive(v, dt);
             Return(dt);
@@ -217,7 +221,7 @@ namespace Wonderland
         /// <summary>Homes near a road get a vehicle (half a car, the rest a bicycle or a motorbike, by where the house stands); stations their own.</summary>
         private void Populate()
         {
-            var wanted = new List<(VehicleKind kind, Vector2 home, int colour, int station, string owner)>();
+            var wanted = new List<(VehicleKind kind, Vector2 home, int colour, int station, string owner, int depot)>();
             var houses = world.Buildings.Houses;
             int privateCount = 0;
             for (int i = 0; i < houses.Count; i++)
@@ -228,10 +232,13 @@ namespace Wonderland
                 if (bp.Base)
                 {
                     var kind = bp.Id == Catalog.Hospital ? VehicleKind.Ambulance : VehicleKind.Police;
-                    if (NearestNode(door, 0.16f, true) >= 0) wanted.Add((kind, door, 0, i, bp.Name));
+                    if (NearestNode(door, 0.16f, true) >= 0) wanted.Add((kind, door, 0, i, bp.Name, -1));
                     continue;
                 }
-                if (bp.Id == Catalog.FireStation) { if (NearestNode(door, 0.16f, true) >= 0) wanted.Add((VehicleKind.FireEngine, door, 0, i, bp.Name)); continue; }
+                if (bp.Id == Catalog.FireStation) { if (NearestNode(door, 0.16f, true) >= 0) wanted.Add((VehicleKind.FireEngine, door, 0, i, bp.Name, -1)); continue; }
+                // Lorries live where something is made (by a road): they carry it to where it is wanted.
+                if (bp.Lorries > 0 && NearestNode(door, 0.16f, true) >= 0)
+                    for (int n = 0; n < bp.Lorries; n++) wanted.Add((VehicleKind.Flatbed, door + new Vector2(n * 0.03f, 0f), (i + n) % 4, -1, bp.Name, i));
                 if (!bp.Dwelling || privateCount >= MaxPrivate) continue;
                 uint hash = (uint)Mathf.RoundToInt(h.x * 7919f) * 2654435761u ^ (uint)Mathf.RoundToInt(h.z * 6271f) * 40503u;
                 hash ^= hash >> 13;
@@ -239,7 +246,7 @@ namespace Wonderland
                 var k = roll < 5 ? VehicleKind.Car : roll < 6 ? VehicleKind.Motorbike : roll < 8 ? VehicleKind.Bicycle : (VehicleKind)(-1);
                 if ((int)k < 0) continue;
                 if (NearestNode(door, Reach, k != VehicleKind.Bicycle) < 0) continue;
-                wanted.Add((k, door, (int)(hash >> 8) % 4, -1, bp.Name));
+                wanted.Add((k, door, (int)(hash >> 8) % 4, -1, bp.Name, -1));
                 privateCount++;
             }
             // Keep the vehicles that are still wanted (they go home); add the new ones; take away the rest.
@@ -249,6 +256,7 @@ namespace Wonderland
                 var v = Vehicles.Find(x => x.Kind == w.kind && (x.Home - w.home).sqrMagnitude < 1e-6f && !keep.Contains(x));
                 if (v == null) v = Spawn(w.kind, w.home, w.colour);
                 v.Base = w.station; v.Owner = w.owner;
+                v.Depot = w.depot; v.Cargo = w.depot >= 0 ? Catalog.Get(houses[w.depot].variant).Makes : Cargo.None;
                 if (w.station >= 0) v.BasePos = new Vector2(houses[w.station].x, houses[w.station].z);
                 keep.Add(v);
             }
@@ -313,6 +321,7 @@ namespace Wonderland
             var side = new Vector2(dir.y, -dir.x);
             if (Vector2.Dot(v.Home - p, side) < 0f) side = -side;   // the kerb on the home's side
             v.State = Mode.Parked; v.Path.Clear(); v.Siren = false; v.Speed = 0f; v.ToHome = false; v.Driver = 0;   // (home: the driver goes in)
+            if (v.Job != null) { v.Job = null; ShowLoad(v); ShowHop(v, Vector2.zero, -1f); }   // (a delivery called off: home empty)
             Place(v, p + side * 0.022f, Mathf.Atan2(dir.x, dir.y) * Mathf.Rad2Deg);
         }
 
@@ -403,6 +412,7 @@ namespace Wonderland
             {
                 case Mode.Parked:
                     if (v.Roams) { v.Timer -= dt; if (v.Timer <= 0f) Roam(v); return; }
+                    if (v.Depot >= 0) { Freight(v, dt); return; }
                     if (v.Base < 0 && !visiting.Contains(v)) ConsiderTrip(v, dt);
                     return;
                 case Mode.AtScene:
@@ -503,6 +513,7 @@ namespace Wonderland
         private void Arrive(Vehicle v)
         {
             v.Speed = 0f;
+            if (v.Job != null) { JobArrived(v); return; }
             if (v.Roams) { Trips++; Roam(v); return; }
             if (v.Base >= 0 && Responding(v)) { OnScene(v); return; }
             if (v.ToHome) { Trips++; GoHome(v, true); v.Timer = v.Rng.Range(20f, 60f); return; }
@@ -571,6 +582,7 @@ namespace Wonderland
         /// <summary>One line on a vehicle for the palette.</summary>
         public string Describe(Vehicle v)
         {
+            if (v.Depot >= 0) return LorryLine(v);
             string what = v.Kind switch
             {
                 VehicleKind.Car => "A car", VehicleKind.Motorbike => "A motorbike", VehicleKind.Bicycle => "A bicycle",

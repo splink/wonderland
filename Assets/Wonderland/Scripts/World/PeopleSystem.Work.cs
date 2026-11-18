@@ -353,6 +353,48 @@ namespace Wonderland
         /// <summary>Crates on a station's platform waiting for a goods train.</summary>
         public float WaitingAt(int house) => PlaceAt(house)?.Stock.Waiting ?? 0f;
 
+        // ------------------------------------------------------------------ lorries (see TrafficSystem.Freight.cs)
+
+        /// <summary>Crates ready to be collected at a place that makes something (whole crates), or 0.</summary>
+        public int ReadyAt(int house)
+        {
+            var p = PlaceAt(house);
+            return p == null || p.Bp.Makes == Cargo.None ? 0 : Mathf.FloorToInt(p.Stock.Have);
+        }
+
+        /// <summary>How many crates a place that takes something would welcome now (0: none).</summary>
+        public int WantedAt(int house)
+        {
+            var p = PlaceAt(house);
+            if (p == null || p.Bp.Takes == Cargo.None) return 0;
+            if (p.Bp.Goods == Goods.Ships) return p.Stock.Waiting < TrainHolds && ExportWanted(p.WorkRegion) ? 3 : 0;   // for the goods train
+            return Mathf.FloorToInt(StockCap - p.Stock.Have);
+        }
+
+        /// <summary>A lorry loads up to <paramref name="most"/> crates; how many it got.</summary>
+        public int TakeCrates(int house, int most)
+        {
+            var p = PlaceAt(house);
+            if (p == null) return 0;
+            int n = Mathf.Clamp(Mathf.FloorToInt(p.Stock.Have), 0, most);
+            p.Stock.Have -= n;
+            return n;
+        }
+
+        /// <summary>A lorry unloads crates at a place (on the shelves, or on the platform for the goods train).</summary>
+        public void BringCrates(int house, int n, string what)
+        {
+            var to = PlaceAt(house);
+            if (to == null || n <= 0) return;
+            if (to.Bp.Goods == Goods.Ships) { to.Stock.Waiting += n; return; }
+            to.Stock.Have = Mathf.Min(StockCap + 1f, to.Stock.Have + n);
+            if (!to.Stock.Supplied && to.Bp.Goods == Goods.Sells) News = $"The first lorry of {what} arrived at the {to.Bp.Name.ToLower()}";
+            to.Stock.Supplied = true;
+        }
+
+        /// <summary>What a place makes, in words ("sacks of wheat").</summary>
+        public static string Produce(int variant) => ProduceOf(Catalog.Get(variant));
+
         /// <summary>The villager who works at a place, or -1.</summary>
         public int WorkerAt(int house) => PlaceAt(house)?.Worker?.Index ?? -1;
 
