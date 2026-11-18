@@ -107,7 +107,7 @@ namespace Wonderland
             int st = world.Trains.Stations.FindIndex(s => s.House == c.House);
             Train train = null;
             if (st >= 0) foreach (var t in world.Trains.Trains) if (t.Kind == TrainKind.Goods && t.AtStation == st) { train = t; break; }
-            bool unload = train != null && train.Cargo > 0 && train.LoadedAt != st && world.People.WantsAt(st);
+            bool unload = train != null && train.Cargo > 0 && train.LoadedAt != st;   // (what it brought from another yard comes off here; the yard's lorry takes it on)
             bool load = train != null && !unload && waiting >= 1 && train.Cargo < PeopleSystem.TrainHolds;
             if (c.T < 0f)
             {

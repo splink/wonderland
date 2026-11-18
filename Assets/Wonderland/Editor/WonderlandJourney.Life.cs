@@ -308,7 +308,7 @@ namespace Wonderland.Editor
             for (float s = 0f; s < seconds; s += Dt)
             {
                 w.Clock.Tick(Dt);
-                if (trains) w.Trains.Step(Dt);
+                if (trains) { w.Trains.Step(Dt); w.Freight.Step(Dt); }   // (freight yards' cranes load the goods trains)
                 w.People.Step(Dt);
             }
         }

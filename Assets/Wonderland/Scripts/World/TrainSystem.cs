@@ -25,6 +25,7 @@ namespace Wonderland
         public float S;
         public int Side;
         public Vector2 House;
+        public bool Freight;          // a freight yard: goods trains call here, passenger trains pass by (and the other way round)
     }
 
     /// <summary>One train on the network.</summary>
@@ -1057,7 +1058,7 @@ namespace Wonderland
                     for (int si = 0; si < Stations.Count; si++)
                     {
                         var st = Stations[si];
-                        if (st.Edge != seg.Edge || si == skip) continue;
+                        if (st.Edge != seg.Edge || si == skip || !CallsHere(t, si)) continue;
                         float s = st.S;
                         if (l.Closed) { float lo = Mathf.Min(seg.S0, seg.S1); s = lo + Mathf.Repeat(s - lo, l.Length); }
                         float along = (s - seg.S0) * seg.Dir;
@@ -1072,6 +1073,9 @@ namespace Wonderland
         }
 
         /// <summary>Whether a train is bound for a station within its next few (up to four) calls.</summary>
+        /// <summary>Goods trains call at freight yards only, passenger trains at stations and halts only.</summary>
+        public bool CallsHere(Train t, int station) => station >= 0 && station < Stations.Count && Stations[station].Freight == (t.Kind == TrainKind.Goods);
+
         public bool CallsAt(Train t, int station, int within = 3)
         {
             // Asked every frame by everyone on the platform: worked out again only once the train or a switch moved.
@@ -1127,7 +1131,7 @@ namespace Wonderland
                 for (int si = 0; si < Stations.Count; si++)
                 {
                     var st = Stations[si];
-                    if (st.Edge != sp.Edge) continue;
+                    if (st.Edge != sp.Edge || !CallsHere(t, si)) continue;
                     float s = st.S;
                     if (l.Closed)
                     {

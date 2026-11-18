@@ -334,6 +334,22 @@ namespace Wonderland.Editor
             Check(w.Freight.Lifted - lifted0 >= 3 && cargoMax >= 3 && craneBusy > 5f && held > 8f,
                 $"The goods train holds at the freight yard while the crane lifts the crates across ({w.Freight.Lifted - lifted0} lifted, {cargoMax} aboard, crane busy {craneBusy:0} s, stood {held:0} s): {busy}");
             Check(shown && left, $"...its open wagon shows them, and it goes on with them ({w.Trains.Describe(train)})");
+            // A passenger station on the same loop and a passenger train: each train calls only where it belongs.
+            var ps = w.StationAt(t.PointAt(0f, 0.3f), 0);
+            if (ps.HasValue) w.PlaceHouse(ps.Value);
+            w.PlaceTrain(t.PointAt(-0.5f, 0f), TrainKind.Passenger, Vector3.forward, out var coach);
+            int yardStop = w.Trains.Stations.FindIndex(x => x.Freight), passengerStop = w.Trains.Stations.FindIndex(x => !x.Freight);
+            bool goodsAtStation = false, coachAtYard = false, coachStopped = false, goodsStopped = false;
+            for (float s = 0f; s < 200f; s += Dt)
+            {
+                w.Clock.Tick(Dt); w.People.Step(Dt); w.Trains.Step(Dt); w.Freight.Step(Dt);
+                goodsAtStation |= train.AtStation == passengerStop && passengerStop >= 0;
+                coachAtYard |= coach != null && coach.AtStation == yardStop && yardStop >= 0;
+                coachStopped |= coach != null && coach.AtStation == passengerStop && passengerStop >= 0;
+                goodsStopped |= train.AtStation == yardStop;
+            }
+            Check(ps.HasValue && coach != null && !goodsAtStation && !coachAtYard && coachStopped && goodsStopped,
+                $"Goods trains call at the freight yard but pass the station; passenger trains the other way round [goods at station {goodsAtStation}, passenger at yard {coachAtYard}, passenger stopped {coachStopped}, goods stopped {goodsStopped}]");
             UnityEngine.Object.DestroyImmediate(w.gameObject);
         }
 

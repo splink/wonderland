@@ -312,14 +312,14 @@ namespace Wonderland
             foreach (int id in new[] { Bakery, Cafe, Restaurant, IceCream, Pub }) list[id].Takes = Cargo.Produce;
             list[Sawmill].Makes = Cargo.Timber; list[Sawmill].Lorries = 1;
             list[FurnitureShop].Takes = Cargo.Timber;
-            list[Station].Takes |= Cargo.Timber;
+
             Work(FreightYard, "crane driver", 6.5f, 19.5f, false, Goods.Ships);
             list[FreightYard].Takes = list[FreightYard].Makes = Cargo.Produce | Cargo.Goods | Cargo.Timber;
             list[FreightYard].Lorries = 1;
             Work(Harbour, "dock worker", 6f, 20f, false, Goods.Ships);
             list[Harbour].Takes = Cargo.Produce | Cargo.Goods | Cargo.Timber; list[Harbour].Makes = Cargo.Goods; list[Harbour].Lorries = 1;
             list[Grocer].Takes = Cargo.Produce | Cargo.Goods;
-            list[Station].Takes = Cargo.Produce | Cargo.Goods;
+            list[Station].Goods = Goods.None;   // (passengers only: goods trains call at freight yards)
             list[Barn].Lorries = 1; list[Factory].Lorries = 1;
             list[Station].Taxis = 1; list[TaxiRank].Taxis = 2;
             list[WheatField].Tractors = 1;

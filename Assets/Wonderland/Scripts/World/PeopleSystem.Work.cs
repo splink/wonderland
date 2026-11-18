@@ -37,7 +37,8 @@ namespace Wonderland
         private sealed class Stock { public float Have, Waiting; public bool Supplied; public int BareDay = -1; }
         private readonly Dictionary<long, Stock> stocks = new();
         private readonly Dictionary<int, float> regionWant = new();
-        private readonly HashSet<int> regionStation = new();
+        private readonly HashSet<int> regionStation = new();   // sides of the line with a passenger station (a train ride away)
+        private readonly HashSet<int> regionYard = new();      // ...and with a freight yard (goods go by rail)
         private readonly List<Place> stationPlace = new();
         private readonly List<(float d, Agent a, Place p)> jobPairs = new();
         private float supplyClock = -1f;
@@ -166,7 +167,7 @@ namespace Wonderland
                     if (q.Bp.Goods == Goods.Sells && Grid.SameRegion(p.WorkRegion, q.WorkRegion)) Consider(p, q, false);
                 if (plan.What == Intent.Kind.None && p.Bp.Goods == Goods.Grows && ExportWanted(p.WorkRegion))
                     foreach (var s in stationPlace)
-                        if (s != null && Grid.SameRegion(p.WorkRegion, s.WorkRegion)) Consider(p, s, true);
+                        if (s != null && s.Bp.Id == Catalog.FreightYard && Grid.SameRegion(p.WorkRegion, s.WorkRegion)) Consider(p, s, true);
             }
             if (p.Bp.Goods == Goods.Sells && StockCap - p.Stock.Have >= 2f)
                 foreach (var q in places)
@@ -186,11 +187,11 @@ namespace Wonderland
         /// <summary>Crates wanted on the far side of the line (where a station is), and a goods train to take them.</summary>
         private bool ExportWanted(int from)
         {
-            if (!regionStation.Contains(from)) return false;
+            if (!regionYard.Contains(from)) return false;
             bool goods = false;
             foreach (var t in world.Trains.Trains) goods |= t.Running && t.Kind == TrainKind.Goods;
             if (!goods) return false;
-            foreach (var kv in regionWant) if (kv.Key != from && kv.Value >= 2f && regionStation.Contains(kv.Key)) return true;
+            foreach (var kv in regionWant) if (kv.Key != from && kv.Value >= 2f && regionYard.Contains(kv.Key)) return true;
             return false;
         }
 
@@ -265,7 +266,7 @@ namespace Wonderland
             float hours = supplyClock < 0f ? 0f : Mathf.Clamp(Clock.Total - supplyClock, 0f, 2f);
             if (Clock.Total < supplyClock) hours = 0f;
             supplyClock = Clock.Total;
-            regionWant.Clear(); regionStation.Clear();
+            regionWant.Clear(); regionStation.Clear(); regionYard.Clear();
             foreach (var p in places)
             {
                 if (p.Bp.Goods != Goods.Sells) continue;
@@ -273,7 +274,7 @@ namespace Wonderland
                 if (p.Stock.Have < VanFloor) p.Stock.Have = Mathf.Min(VanFloor, p.Stock.Have + VanRate * hours);   // (the van only keeps shelves from going bare: the rest comes by lorry or by hand)
                 regionWant[p.WorkRegion] = (regionWant.TryGetValue(p.WorkRegion, out float w) ? w : 0f) + StockCap - p.Stock.Have;
             }
-            foreach (var s in stationPlace) if (s != null) regionStation.Add(s.WorkRegion);
+            foreach (var s in stationPlace) if (s != null) (s.Bp.Id == Catalog.FreightYard ? regionYard : regionStation).Add(s.WorkRegion);
             UpdateChimneys();
             foreach (var t in world.Trains.Trains)
             {

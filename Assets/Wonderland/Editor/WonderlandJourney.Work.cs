@@ -175,8 +175,8 @@ namespace Wonderland.Editor
             };
             int okCount = 0;
             foreach (var (id, x, z, rot) in build) if (Put(w, id, x, z, rot) == null) okCount++;
-            var inner = w.StationAt(t.PointAt(0.28f, -0.02f), 0);
-            var outer = w.StationAt(t.PointAt(-0.56f, -0.02f), 1);
+            var inner = w.StationAt(t.PointAt(0.28f, -0.02f), 0, Catalog.FreightYard);
+            var outer = w.StationAt(t.PointAt(-0.56f, -0.02f), 0, Catalog.FreightYard);
             string stationError = inner.HasValue && outer.HasValue ? w.PlaceHouse(inner.Value) ?? w.PlaceHouse(outer.Value) : "no railway";
             var top = Main(w).Points[Main(w).Points.Count / 4];
             string trainError = w.PlaceTrain(top, TrainKind.Goods, Vector3.forward, out _);
@@ -185,11 +185,11 @@ namespace Wonderland.Editor
             people.Step(Dt);
             int Find(int id) => w.Buildings.Houses.FindIndex(h => h.variant == id);
             int field = Find(Catalog.WheatField), bakery = Find(Catalog.Bakery), grocer = Find(Catalog.Grocer);
-            int innerStation = w.Buildings.Houses.FindIndex(h => h.variant == Catalog.Station && inner.HasValue && Mathf.Abs(h.x - inner.Value.x) < 1e-4f);
-            int outerStation = w.Buildings.Houses.FindIndex(h => h.variant == Catalog.Station && outer.HasValue && Mathf.Abs(h.x - outer.Value.x) < 1e-4f);
+            int innerStation = w.Buildings.Houses.FindIndex(h => h.variant == Catalog.FreightYard && inner.HasValue && Mathf.Abs(h.x - inner.Value.x) < 1e-4f);
+            int outerStation = w.Buildings.Houses.FindIndex(h => h.variant == Catalog.FreightYard && outer.HasValue && Mathf.Abs(h.x - outer.Value.x) < 1e-4f);
             int farmer = people.WorkerAt(field);
             Check(rail.Ok && okCount == build.Count && stationError == null && trainError == null && farmer >= 0,
-                $"A farm inside a railway loop, a bakery outside, two stations and a goods train ({okCount}/{build.Count} places{(stationError ?? trainError ?? "")}; farmer {(farmer >= 0 ? people.NameOf(farmer) : "none")})");
+                $"A farm inside a railway loop, a bakery outside, two freight yards and a goods train ({okCount}/{build.Count} places{(stationError ?? trainError ?? "")}; farmer {(farmer >= 0 ? people.NameOf(farmer) : "none")})");
             people.SetStock(field, 3f);
             people.SetStock(bakery, 0f); people.SetStock(grocer, 0f);
             w.Clock.Hour = 8f;
@@ -204,8 +204,8 @@ namespace Wonderland.Editor
                 mostArrived = Mathf.Max(mostArrived, people.StockAt(outerStation));
                 fetched = news.Exists(n => n.Contains("brought the first") && (n.Contains("bakery") || n.Contains("grocer")));
             }
-            Check(mostWaiting >= 1f, $"The farmer carries crates to the station for the goods train (up to {mostWaiting:0} waiting on the platform)");
-            Check(mostCargo > 0 && mostArrived >= 1f, $"The goods train loads them and unloads at the far station ({mostCargo} aboard, {mostArrived:0} unloaded)");
+            Check(mostWaiting >= 1f, $"The farmer carries crates to the freight yard for the goods train (up to {mostWaiting:0} waiting on the yard)");
+            Check(mostCargo > 0 && mostArrived >= 1f, $"The yard's crane loads them onto the goods train, and the far yard's crane unloads them ({mostCargo} aboard, {mostArrived:0} unloaded)");
             Check(fetched, $"...where the shopkeeper fetches them (\"{news.Find(n => n.Contains("brought the first"))}\")");
             UnityEngine.Object.DestroyImmediate(w.gameObject);
         }
@@ -286,7 +286,7 @@ namespace Wonderland.Editor
             for (float s = 0f; s < seconds; s += Dt)
             {
                 w.Clock.Tick(Dt);
-                if (trains) w.Trains.Step(Dt);
+                if (trains) { w.Trains.Step(Dt); w.Freight.Step(Dt); }
                 w.People.Step(Dt);
                 int fresh = w.People.NewsVersion - seen;
                 if (fresh > 0) { seen = w.People.NewsVersion; for (int k = Mathf.Max(0, log.Count - fresh); k < log.Count; k++) if (log[k] != null) news.Add(log[k]); }

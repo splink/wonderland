@@ -442,7 +442,7 @@ namespace Wonderland
                 float s0 = s - platform / 2f, s1 = s + platform / 2f;
                 if (!layout.Closed) { s0 = Mathf.Max(0.02f, s0); s1 = Mathf.Min(layout.Length - 0.02f, s1); }
                 HouseFactory.Platform(b, layout, s0, s1, side);
-                Trains.Stations.Add(new StationStop { Edge = edge, S = s, Side = side, House = new Vector2(h.x, h.z) });
+                Trains.Stations.Add(new StationStop { Edge = edge, S = s, Side = side, House = new Vector2(h.x, h.z), Freight = h.variant == Catalog.FreightYard });
             }
             b.ToMesh("Platforms", mesh);
             mesh.RecalculateBounds();

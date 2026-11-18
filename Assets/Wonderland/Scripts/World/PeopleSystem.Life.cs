@@ -145,13 +145,13 @@ namespace Wonderland
             }
             // Whoever lives over a shop keeps it: a grown-up.
             foreach (var a in agents) SetChild(a, a.SeedChild && !(a.HomeHouse >= 0 && places[a.HomeHouse].Bp.Job != null));
-            stationRegion.Clear(); stationPlace.Clear(); regionStation.Clear();
+            stationRegion.Clear(); stationPlace.Clear(); regionStation.Clear(); regionYard.Clear();
             foreach (var st in stations)
             {
                 int region = Grid.RegionAt(PlatformSpot(st, 0f));
                 stationRegion.Add(region);
-                regionStation.Add(region);
                 var at = places.Find(p => p.Centre == st.House);
+                (at != null && at.Bp.Id == Catalog.FreightYard ? regionYard : regionStation).Add(region);   // (passengers from stations, goods from freight yards)
                 if (at != null) at.WorkRegion = region;   // the station's goods go from the platform
                 stationPlace.Add(at);
             }

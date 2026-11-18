@@ -117,7 +117,7 @@ PASS  The village clock runs a day in 7.6 minutes (360 s of daylight, 97 s of ni
 PASS  The daily rhythm: shops in the morning, lunch at midday, the fair in the afternoon, the square in the evening
 PASS  A railway loop divides the land
 PASS  A village goes up around the railway (13/13 places, 8 residents moved in)
-PASS  The walk grid sees the railway as a divide (2 regions over 6972 cells, built in 23 ms)
+PASS  The walk grid sees the railway as a divide (2 regions over 6972 cells, built in 22 ms)
 PASS  Every resident knows their home (8/8; 2 live inside the loop)
 PASS  The baker lives over the bakery
 PASS  At two in the morning everyone is asleep at home (8/8)
@@ -140,8 +140,8 @@ PASS  ...get off at the far station and walk on to where they were going
 PASS  A lane with a level crossing joins the two sides (1 regions)
 PASS  ...and people from inside the loop walk over it to the village
 PASS  Save/load keeps the time (10:00), the clock speed, needs and homes (8/8)
-PASS  40 villagers: 0.27 ms per frame on average, worst 5.7 ms, 1.5 decisions/s, slowest decision 2.2 ms, places directory 5.5 ms (editor timing)
-PASS  After an edit the walk grid rebuilds over 32 frames (60 ms of work, worst frame 3.2 ms)
+PASS  40 villagers: 0.26 ms per frame on average, worst 2.6 ms, 1.5 decisions/s, slowest decision 2.1 ms, places directory 0.4 ms (editor timing)
+PASS  After an edit the walk grid rebuilds over 34 frames (70 ms of work, worst frame 8.5 ms)
 PASS  With no places at all, villagers wander by day and sleep under the stars at night
 PASS  A working village goes up (15/15 places, 10 villagers)
 PASS  Opening hours: the bakery opens at half six and shuts at six, the carousel stops in the evening, the fountain never closes
@@ -158,9 +158,9 @@ PASS  A fête at the fountain - everyone's invited! - 5 of 10 gather at the foun
 PASS  The fête ends after 2.5 hours and everyone gets on with their day (0 still gathering)
 PASS  A decider from outside fills the café (4 of 5 spots, asked 5 times); one handing out nonsense is ignored
 PASS  Deciders that are done are dropped
-PASS  A farm inside a railway loop, a bakery outside, two stations and a goods train (6/6 places; farmer Greta)
-PASS  The farmer carries crates to the station for the goods train (up to 2 waiting on the platform)
-PASS  The goods train loads them and unloads at the far station (2 aboard, 4 unloaded)
+PASS  A farm inside a railway loop, a bakery outside, two freight yards and a goods train (6/6 places; farmer Greta)
+PASS  The farmer carries crates to the freight yard for the goods train (up to 2 waiting on the yard)
+PASS  The yard's crane loads them onto the goods train, and the far yard's crane unloads them (2 aboard, 2 unloaded)
 PASS  ...where the shopkeeper fetches them ("Finn brought the first goods to the bakery")
 PASS  A loop with a branch line, a station on each and a train (1 switch)
 PASS  The destination board follows the switches: set for the loop the train won't call at the branch station; set for the branch it will
@@ -201,7 +201,7 @@ PASS  Save and load keep where the cameras look (71 / 15 degrees; loaded 71 / 15
 PASS  Erasing a camera leaves the other selected, still aimed where it was
 PASS  Sound: 4 sources near the crossroads (at most 8); off means silent; five barks in a row play once; a meow out of earshot isn't played
 PASS  Taking a road away re-routes or parks the traffic (worst 1.4 cm off the remaining roads)
-PASS  A busy town (40 villagers, 8 vehicles, 2 animals, sound and a camera feed): 0.25 ms per frame on average, worst 2.7 ms (editor timing, simulation only)
+PASS  A busy town (40 villagers, 8 vehicles, 2 animals, sound and a camera feed): 0.25 ms per frame on average, worst 6.3 ms (editor timing, simulation only)
 PASS  A road crosses the railway at a level crossing; homes on both sides have vehicles (5 places, 4 vehicles)
 PASS  Vehicles wait at the level crossing while a train goes by (245 waits, 7 trips), and are never on it with the train
 PASS  A loop drawn in two halves closes (1 pieces, 0 dead ends)
@@ -223,11 +223,11 @@ PASS  ...nor a branch off the old part (built)
 PASS  Every piece has a direction - the new loop and the old part too (its wrong-way branch is never taken); the old part is still counted as one that can't run one way everywhere (1)
 PASS  A loop with a branch, a signal, a station and two trains
 PASS  Carriages couple on behind the engine (41 -> 67 cm, engine still); more than the most is refused ("That's as long as this train gets (6 carriages)")
-PASS  Wagons uncouple (Goods train, 1 wagon - running at 100 %, next stop Hazelbank)
+PASS  Wagons uncouple (Goods train, 1 wagon - running at 100 %)
 PASS  The automatic signal turns red as a train passes and green once the line is clear
-PASS  Two trains share the network without touching (closest 10.1 cm), and keep off the dead-end branch (one way, they couldn't come back out)
+PASS  Two trains share the network without touching (closest 6.8 cm), and keep off the dead-end branch (one way, they couldn't come back out)
 PASS  Pointing at a train says what it is doing ("Steam train, 4 carriages - at Hazelbank station")
-PASS  Held at red, the signal stops a train, and the train says so ("Goods train, 1 wagon - waiting at a red signal (tap it for automatic), next stop Hazelbank")
+PASS  Held at red, the signal stops a train, and the train says so ("Goods train, 1 wagon - waiting at a red signal (tap it for automatic)")
 PASS  Save and load keep the network (2 pieces, 1 switch), the held signal, the station (Hazelbank) and each train's carriages
 INFO  Joining two loops: 54/60 built; 4x "Tracks must cross at a wider angle"; 2x "Too close to the other track - leave a little gap"
 PASS  What the drawing shows while the trigger is held is what letting go builds (60/60 agree)
@@ -343,5 +343,5 @@ PASS  Land still grows with bad room data
 PASS  Trimmed land grows back (1.19 -> 1.04 -> 1.16 m2)
 INFO  terrain: 6 chunk meshes, 17 k triangles, land 3.49 m2 of a 4.8 x 4.8 m grid
 INFO  static budget of this world: 346 mesh renderers (~draw calls per eye pass before batching, excl. shadows/UI), 1166 k triangles, ground cover 5538 tufts
-INFO  trees 131, forest chunks 30, houses 3, track 3.43 m, undo depth 9, journey simulated in 75.9 s wall time
+INFO  trees 131, forest chunks 30, houses 3, track 3.43 m, undo depth 9, journey simulated in 75.1 s wall time
 RESULT: PASS
