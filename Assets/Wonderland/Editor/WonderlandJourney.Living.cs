@@ -415,8 +415,9 @@ namespace Wonderland.Editor
         {
             var w = Scratch("Shipping", 240f);
             Lake(w, -0.55f, 0.55f, 0.22f);
-            var a = HarbourSpot(w, -0.5f, -0.25f, 0.18f, 0.45f);
-            var b = HarbourSpot(w, 0.25f, 0.5f, 0.18f, 0.45f);
+            // Pointing roughly at the shore is enough: the harbour turns to the water and settles on the bank.
+            var a = w.ShoreSnap(w.Terrain.PointAt(-0.4f, 0.24f), Catalog.Harbour, 0);
+            var b = w.ShoreSnap(w.Terrain.PointAt(0.4f, -0.27f), Catalog.Harbour, 0);
             string ea = a.HasValue ? w.PlaceHouse(a.Value) : "no spot", eb = b.HasValue ? w.PlaceHouse(b.Value) : "no spot";
             w.People.Grid.Complete(); w.Clock.Hour = 9f; w.People.Step(Dt); w.Harbours.Step(Dt); w.Harbours.Step(2.1f);
             Check(ea == null && eb == null && w.Harbours.ShipCount == 1, $"Two harbours on one lake get a container ship ({w.Harbours.ShipCount} ships{(ea != null ? ", A: " + ea : "")}{(eb != null ? ", B: " + eb : "")})");
@@ -433,7 +434,7 @@ namespace Wonderland.Editor
                 if (ship != null && w.Terrain.WaterAt(ship.localPosition.x, ship.localPosition.z) < 0.3f) overLand = true;
             });
             Check(w.Harbours.Voyages >= 1 && w.Harbours.Lifted >= 4 && !overLand && said.Exists(x => x.Contains("unloading")),
-                $"The ship is unloaded by the crane, sails over the water to the other harbour and is unloaded there ({w.Harbours.Voyages} voyages, {w.Harbours.Lifted} containers lifted): {string.Join(" / ", said)}");
+                $"The ship is unloaded by the crane, sails over the water to the other harbour and is unloaded there ({w.Harbours.Voyages} voyages, {w.Harbours.Lifted} containers lifted): {string.Join(" / ", said)} [{w.Harbours.ShipState()}]");
             Check(w.People.StockAt(ib) >= 1f || w.People.StockAt(ia) >= 1f, $"...the containers wait on the quay for the harbour's lorry ({w.People.StockAt(ia):0} and {w.People.StockAt(ib):0})");
             // A harbour on a pond of its own: no ship, and its card says why.
             var w2 = Scratch("Pond harbour", 280f);

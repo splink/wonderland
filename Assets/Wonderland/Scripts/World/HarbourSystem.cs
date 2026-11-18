@@ -140,10 +140,17 @@ namespace Wonderland
             {
                 var s = ships[k];
                 bool ok = true;
-                foreach (var p in s.Route) if (!Navigable(p)) { ok = false; break; }
+                for (int q = 1; q < s.Route.Count - 1; q++) if (!Navigable(s.Route[q])) { ok = false; break; }   // (the moorings themselves lie by the quay)
                 if (ok) continue;
                 var r = HouseOf(s.A) >= 0 && HouseOf(s.B) >= 0 ? Route(Mooring(s.A, out _), Mooring(s.B, out _)) : null;
-                if (r != null) { s.Route = r; s.Next = 0; continue; }
+                if (r != null)
+                {
+                    // The water changed: a new way, carrying on from the point nearest the ship.
+                    s.Route = r;
+                    int near = 0; for (int q = 1; q < r.Count; q++) if ((r[q] - s.Pos).sqrMagnitude < (r[near] - s.Pos).sqrMagnitude) near = q;
+                    s.Next = s.ToB ? near : r.Count - 1 - near;
+                    continue;
+                }
                 Gone(s.Root.gameObject); ships.RemoveAt(k);
             }
         }
@@ -225,7 +232,7 @@ namespace Wonderland
             int last = s.Route.Count - 1;
             var target = s.Route[s.ToB ? s.Next : last - s.Next];
             var to = target - s.Pos;
-            if (to.magnitude < 0.01f)
+            if (to.magnitude < (s.Next < last ? 0.02f : 0.01f))
             {
                 if (s.Next < last) { s.Next++; return; }
                 var harbour = s.ToB ? s.B : s.A;
@@ -242,8 +249,8 @@ namespace Wonderland
             float turn = Mathf.DeltaAngle(s.Heading, want);
             s.Heading += Mathf.Clamp(turn, -25f * dt, 25f * dt);
             bool arriving = s.Next == last;
-            float speed = ShipSpeed * Mathf.Clamp01(1.1f - Mathf.Abs(turn) / 90f) * (arriving ? Mathf.Clamp01(to.magnitude / 0.08f) * 0.7f + 0.3f : 1f);
-            s.Speed = Mathf.MoveTowards(s.Speed, speed, 0.01f * dt);
+            float speed = ShipSpeed * Mathf.Clamp(1.1f - Mathf.Abs(turn) / 60f, 0.08f, 1f) * (arriving ? Mathf.Clamp01(to.magnitude / 0.08f) * 0.7f + 0.3f : 1f);
+            s.Speed = Mathf.MoveTowards(s.Speed, speed, (speed < s.Speed ? 0.04f : 0.01f) * dt);   // (it slows quickly for a sharp turn: no circling round a point it can't turn into)
             var f = new Vector2(Mathf.Sin(s.Heading * Mathf.Deg2Rad), Mathf.Cos(s.Heading * Mathf.Deg2Rad));
             s.Pos += f * s.Speed * dt;
             Pose(s);
@@ -322,6 +329,16 @@ namespace Wonderland
             int house = HouseOf(p.House);
             int n = house < 0 ? 0 : Mathf.Min(8, Mathf.FloorToInt(world.People.WaitingAt(house)) + Mathf.Max(0, Mathf.FloorToInt(world.People.StockAt(house))));
             p.Stack.GetComponent<MeshFilter>().sharedMesh = HouseFactory.ShipDeck(n);
+        }
+
+        /// <summary>The first ship's state in numbers (tests).</summary>
+        public string ShipState()
+        {
+            if (ships.Count == 0) return "no ship";
+            var s = ships[0];
+            int last = s.Route.Count - 1;
+            var target = s.Route[s.ToB ? Mathf.Min(s.Next, last) : Mathf.Max(0, last - s.Next)];
+            return $"at ({s.Pos.x:0.000}, {s.Pos.y:0.000}) heading {s.Heading:0} speed {s.Speed * 100f:0.0} cm/s, point {s.Next}/{last} at ({target.x:0.000}, {target.y:0.000}) {(target - s.Pos).magnitude * 100f:0.0} cm away, docked {s.Docked}, to B {s.ToB}";
         }
 
         // ------------------------------------------------------------------ cards

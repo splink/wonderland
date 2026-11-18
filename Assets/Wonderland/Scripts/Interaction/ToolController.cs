@@ -1098,7 +1098,7 @@ namespace Wonderland
                 if (carrying && !heldByTrigger && input.GripUp) { DropCarried(); Say("Point at the land to put it down - it's back where it was", 4f); Haptic(0.7f, 0.1f); RefreshOptions(); }
                 return;
             }
-            if (BuildGrid.Snap && !Catalog.IsStation(HouseVariant))
+            if (BuildGrid.Snap && !Catalog.IsStation(HouseVariant) && HouseVariant is not (Catalog.Harbour or Catalog.Jetty))
             {
                 // On the grid: beside a road, facing it and lined up along it; elsewhere on the grid, in quarter turns.
                 var bp = Catalog.Get(HouseVariant);
@@ -1109,7 +1109,14 @@ namespace Wonderland
             }
             var candidate = new HouseInstance { x = local.x, z = local.z, rotation = houseRotation, variant = HouseVariant, style = houseStyle };
             string error;
-            if (Catalog.IsStation(HouseVariant))
+            if (HouseVariant is Catalog.Harbour or Catalog.Jetty)
+            {
+                // A harbour or a landing stage finds the shore: it turns to face the water and settles on the bank.
+                var snapped = World.ShoreSnap(local, HouseVariant, houseStyle);
+                if (snapped.HasValue) { candidate = snapped.Value; local = new Vector3(candidate.x, local.y, candidate.z); houseRotation = candidate.rotation; error = null; }
+                else error = HouseVariant == Catalog.Harbour ? "Point at the shore of a big lake - a harbour faces open water" : "Point at a pond's edge";
+            }
+            else if (Catalog.IsStation(HouseVariant))
             {
                 // Stations snap beside the rails, facing them, on the side the pointer is on.
                 var snapped = World.StationAt(local, houseStyle, HouseVariant);

@@ -1143,6 +1143,37 @@ namespace Wonderland
             return null;
         }
 
+        /// <summary>
+        /// A harbour (or a landing stage) where the pointer is, snapped to the shore: turned to face the open water nearest
+        /// it and moved on or off the bank until it fits. Null if there is no water near enough.
+        /// </summary>
+        public HouseInstance? ShoreSnap(Vector3 local, int variant, int style)
+        {
+            var at = new Vector2(local.x, local.z);
+            var options = new List<(float score, Vector2 dir)>();
+            for (int k = 0; k < 24; k++)
+            {
+                float a = k * 15f * Mathf.Deg2Rad;
+                var d = new Vector2(Mathf.Sin(a), Mathf.Cos(a));
+                float wet = 0f;
+                for (float r = 0.04f; r <= 0.24f; r += 0.02f) wet += Terrain.WaterAt(at.x + d.x * r, at.y + d.y * r);
+                if (wet > 0.5f) options.Add((wet, d));
+            }
+            options.Sort((p, q) => q.score.CompareTo(p.score));
+            foreach (var (_, d) in options)
+            {
+                float yaw = Mathf.Atan2(-d.x, -d.y) * Mathf.Rad2Deg;   // its front (-Z) to the water
+                for (float shift = 0f; shift <= 0.16f; shift += 0.01f)
+                    foreach (float sign in new[] { -1f, 1f })
+                    {
+                        var p = at + d * (sign * shift);
+                        var h = new HouseInstance { x = p.x, z = p.y, rotation = yaw, variant = variant, style = style };
+                        if (ValidateHouse(h) == null) return h;
+                    }
+            }
+            return null;
+        }
+
         /// <summary>A harbour stands on the shore, its front to open water deep and wide enough for a ship to moor.</summary>
         private string ValidateHarbour(HouseInstance h)
         {
