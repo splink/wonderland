@@ -179,13 +179,19 @@ namespace Wonderland
             return Mathf.Sqrt(best);
         }
 
-        /// <summary>Distance to the nearest stream (infinite without streams) and its water level there.</summary>
-        public float DistanceTo(Vector2 p, out float level)
+        /// <summary>
+        /// Distance to the nearest stream (infinite without streams) and its water level there. Streams farther than
+        /// <paramref name="within"/> are skipped by their bounding boxes (and count as infinitely far).
+        /// </summary>
+        public float DistanceTo(Vector2 p, out float level, float within = float.MaxValue)
         {
             float best = float.MaxValue; level = -1f;
-            foreach (var s in Streams)
+            bool skip = within < float.MaxValue;
+            if (skip && (boxes.Count != Streams.Count || boxedPoints != PointCount())) Box();
+            for (int i = 0; i < Streams.Count; i++)
             {
-                float d = Nearest(s, p, out float l, out _);
+                if (skip) { var b = boxes[i]; if (p.x < b.xMin - within || p.x > b.xMax + within || p.y < b.yMin - within || p.y > b.yMax + within) continue; }
+                float d = Nearest(Streams[i], p, out float l, out _);
                 if (d < best) { best = d; level = l; }
             }
             return best;
@@ -238,6 +244,7 @@ namespace Wonderland
         /// <summary>Flowing ribbons of water along every stream (UV.y = distance downstream drives the flow).</summary>
         public void Rebuild()
         {
+            boxes.Clear();   // (the streams may have changed: boxed again when next needed)
             Join(Streams);
             foreach (var r in ribbons) { if (Application.isPlaying) { Destroy(r.go); Destroy(r.mesh); } else { DestroyImmediate(r.go); DestroyImmediate(r.mesh); } }
             ribbons.Clear();

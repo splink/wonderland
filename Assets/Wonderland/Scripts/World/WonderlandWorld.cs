@@ -439,7 +439,7 @@ namespace Wonderland
         public float WaterLevelFor(Vector2 p)
         {
             if (Terrain.WaterAt(p.x, p.y) > 0.3f) return Terrain.WaterLevelAt(p.x, p.y);
-            if (Streams != null && Streams.DistanceTo(p, out float level) < StreamSystem.HalfWidth + 0.008f) return level;
+            if (Streams != null && Streams.DistanceTo(p, out float level, StreamSystem.HalfWidth + 0.008f) < StreamSystem.HalfWidth + 0.008f) return level;
             return -1f;
         }
 
