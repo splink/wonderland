@@ -707,6 +707,7 @@ namespace Wonderland.Editor
                 new[] { Catalog.TaxiRank, Catalog.Letterbox, Catalog.CarPark, Catalog.FreightYard, Catalog.Harbour },
                 new[] { Catalog.Zoo, Catalog.FairyCastle, Catalog.Stadium },
                 new[] { Catalog.FairyCastle },
+                new[] { Catalog.Bakery, Catalog.Cafe, Catalog.Grocer, Catalog.Restaurant },
             };
             for (int set = 0; set < sets.Length; set++)
             {
@@ -720,7 +721,7 @@ namespace Wonderland.Editor
                     WonderlandRenders.Place(root, HouseFactory.Get(id, 0), WonderlandMaterials.Lit, new Vector3(x + w / 2f, 0f, 0f), Quaternion.identity);
                     x += w;
                 }
-                float back = set == 0 ? 0.95f : set == 1 ? 0.75f : set == 2 ? 0.8f : 0.32f;
+                float back = set == 0 ? 0.95f : set == 1 ? 0.75f : set == 2 ? 0.8f : set == 3 ? 0.32f : 0.5f;
                 cam.transform.position = new Vector3(0f, back * 0.32f, -back); cam.transform.LookAt(new Vector3(0f, 0.04f, 0f));
                 WonderlandRenders.Capture(cam, $"living-buildings-{set + 1}.png", 2400, 1100);
                 UnityEngine.Object.DestroyImmediate(root.gameObject);
@@ -860,6 +861,7 @@ namespace Wonderland.Editor
             cam.transform.position = focus2 + new Vector3(-0.04f, 0.17f, -0.07f);
             cam.transform.rotation = Quaternion.LookRotation(focus2 - cam.transform.position);
             WonderlandRenders.Capture(cam, "living-street-zebra.png", 1400, 900);
+            BuildGrid.Snap = true;   // (a saved setting: back as it was)
             if (Application.isBatchMode) EditorApplication.Exit(0);
         }
     }

@@ -31,20 +31,21 @@ namespace Wonderland
             switch (variant)
             {
                 case Catalog.Bakery:
-                    RoofBoard(b, "BAKERY", 0.072f, 0.062f, 0.011f, Pal.Hex("#8E2F25"), Gold);
-                    Loaf(b, new Vector3(0f, 0.118f, 0.004f));
+                    RoofBoard(b, "BAKERY", 0.072f, 0.062f, 0.013f, Pal.Hex("#8E2F25"), Gold);
+                    Big(b, new Vector3(0f, 0.126f, 0.004f), at => Loaf(b, at));
                     break;
                 case Catalog.Cafe:
-                    RoofBoard(b, "CAFE", 0.072f, 0.062f, 0.012f, Pal.Hex("#2E4E7A"), Cream);
-                    Cup(b, new Vector3(0f, 0.114f, 0.004f));
+                    RoofBoard(b, "CAFE", 0.072f, 0.062f, 0.014f, Pal.Hex("#2E4E7A"), Cream);
+                    Big(b, new Vector3(0f, 0.124f, 0.004f), at => Cup(b, at));
                     break;
                 case Catalog.Grocer:
-                    RoofBoard(b, "GROCER", 0.072f, 0.062f, 0.011f, Pal.Hex("#2E6B3A"), Cream);
-                    Apple(b, new Vector3(0f, 0.12f, 0.004f));
+                    RoofBoard(b, "GROCER", 0.072f, 0.062f, 0.013f, Pal.Hex("#2E6B3A"), Cream);
+                    Big(b, new Vector3(0f, 0.13f, 0.004f), at => Apple(b, at));
                     break;
                 case Catalog.Restaurant:
                     RoofBoard(b, "RESTAURANT", 0.07f, 0.07f, 0.0092f, Pal.Hex("#5A1E2A"), Gold);
-                    Plate(b, new Vector3(0f, 0.124f, 0.002f));
+                    Big(b, new Vector3(0f, 0.132f, 0.002f), at => Plate(b, at));
+                    StringLights(b);
                     break;
                 case Catalog.Disco:
                     DiscoSign(b, null);
@@ -97,6 +98,35 @@ namespace Wonderland
                     RoofBoard(b, "BISCUITS", 0.1f, 0.055f, 0.0095f, Pal.Hex("#F2D49A"), Pal.Hex("#7A3A22"), flat: true, x: -0.03f);
                     break;
             }
+        }
+
+        /// <summary>A shop's big symbol, half as big again, so its trade shows from across the room.</summary>
+        private static void Big(MeshBuilder b, Vector3 at, System.Action<Vector3> symbol)
+        {
+            b.Push(at, Quaternion.identity, Vector3.one * 1.6f);
+            symbol(Vector3.zero);
+            b.Pop();
+        }
+
+        /// <summary>The restaurant's terrace: a pergola of dark beams with strings of warm lights looping between them.</summary>
+        private static void StringLights(MeshBuilder b)
+        {
+            var beam = Pal.Hex("#3A2A20");
+            const float front = -0.1f, back = -0.048f, y = 0.034f;
+            foreach (float x in new[] { -0.058f, 0f, 0.058f })
+            {
+                b.AddBox(new Vector3(x, y / 2f, front), new Vector3(0.002f, y, 0.002f), beam);
+                b.AddBox(new Vector3(x, y, (front + back) / 2f), new Vector3(0.002f, 0.002f, back - front), beam);
+            }
+            b.AddBox(new Vector3(0f, y, front), new Vector3(0.118f, 0.002f, 0.002f), beam);
+            for (int span = 0; span < 2; span++)
+                for (int k = 0; k <= 8; k++)
+                {
+                    float x = -0.058f + span * 0.058f + k * 0.058f / 8f, sag = Mathf.Sin(k / 8f * Mathf.PI) * 0.006f;
+                    b.AddBlob(new Vector3(x, y - 0.002f - sag, front), Vector3.one * 0.0011f, 0, 0f, span * 9 + k, (_, __) => Pal.Glow(Pal.Hex(k % 3 == 0 ? "#FFD27A" : k % 3 == 1 ? "#FF9A6A" : "#FFF2C0")));
+                }
+            // Vines on the beams.
+            for (int k = 0; k < 10; k++) b.AddBlob(new Vector3(-0.055f + k * 0.012f, y + 0.002f, front + 0.006f * (k % 3)), new Vector3(0.004f, 0.002f, 0.004f), 1, 0.3f, 90 + k, (_, __) => Pal.Hex("#4E8A3E"));
         }
 
         /// <summary>A giant ice cream cone: a waffle cone with three scoops.</summary>

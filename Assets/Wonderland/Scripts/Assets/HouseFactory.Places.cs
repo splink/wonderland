@@ -346,6 +346,10 @@ namespace Wonderland
         private static float Shop(MeshBuilder b, ref Rng rng, Style s, int kind)
         {
             const float W = 0.088f, D = 0.072f, H = 0.062f, R = 0.05f;
+            // Each trade its own colours, so a street of shops reads from across the room: a warm bakery, a pale blue café,
+            // a fresh green grocer (the roof still varies from shop to shop).
+            s.Plaster = kind == 0 ? Pal.Hex("#F3DCA0") : kind == 1 ? Pal.Hex("#BFD8EA") : Pal.Hex("#CFE6C2");
+            s.Trim = kind == 0 ? Pal.Hex("#8E2F25") : kind == 1 ? Pal.Hex("#2E4E7A") : Pal.Hex("#2E6B3A");
             Foundation(b, ref rng, W, D);
             Walls(b, W, D, 0f, H, s.Plaster);
             if (kind == 0) TimberFrame(b, W, D, H, s.Timber);
@@ -381,6 +385,39 @@ namespace Wonderland
             Board(b, new Vector3(0f, 0.0445f, -D / 2 - 0.0012f), 0.046f, 0.006f, Pal.Shade(awningA, 0.7f), Pal.Hex("#F7E3A8"));
             StoryRoof(b, ref rng, W, D, H, R, 0.011f, 0.003f, s.Roof, s.Plaster, s.Trim, 6, true);
             Chimney(b, ref rng, new Vector3(0.028f, H, 0.012f), R + 0.016f, Pal.Brick, kind == 0 ? 2 : 1);
+            if (kind == 1)
+            {
+                // The café: a wide glass front and bistro tables with chairs on the pavement.
+                b.AddFace(new Vector3(0.012f, 0.02f, -D / 2 - 0.0006f), Vector3.back, Vector3.up, 0.026f, 0.011f, Pal.Glow(Pal.Hex("#FFE9C0")));
+                for (int k = -2; k <= 2; k++) b.AddBox(new Vector3(0.012f + k * 0.0125f, 0.02f, -D / 2 - 0.0012f), new Vector3(0.0012f, 0.023f, 0.001f), s.Trim);
+                foreach (float x in new[] { -0.028f, 0.03f })
+                {
+                    var t = new Vector3(x, 0f, -D / 2 - 0.022f);
+                    b.AddCylinder(t, 0.0006f, 0.0006f, 0.008f, 4, Pal.TrainBlack, Pal.TrainBlack, false);
+                    b.AddCylinder(t + Vector3.up * 0.008f, 0.0055f, 0.0055f, 0.0008f, 12, Pal.FlowerWhite, Pal.FlowerWhite, true, true);
+                    b.AddBlob(t + new Vector3(0f, 0.0094f, 0f), new Vector3(0.0012f, 0.0012f, 0.0012f), 0, 0f, 3, (_, __) => Pal.Hex("#F7F3EA"));   // a cup
+                    foreach (int sx in new[] { -1, 1 })
+                    {
+                        b.AddBox(t + new Vector3(sx * 0.0075f, 0.0045f, 0f), new Vector3(0.004f, 0.0006f, 0.004f), Pal.Hex("#2E4E7A"));
+                        b.AddBox(t + new Vector3(sx * 0.0095f, 0.0075f, 0f), new Vector3(0.0006f, 0.006f, 0.004f), Pal.Hex("#2E4E7A"));
+                    }
+                }
+            }
+            if (kind == 2)
+            {
+                // The grocer: two stands of fruit and veg out on the pavement under the awning.
+                var wood = Pal.Hex("#B07A45");
+                var produce = new[] { "#D9473A", "#E8B84A", "#6FA84A", "#E07B39", "#8E3A8A", "#F2D24A" };
+                foreach (float x in new[] { -0.026f, 0.026f })
+                {
+                    b.Push(new Vector3(x, 0.006f, -D / 2 - 0.012f), Quaternion.Euler(-20f, 0f, 0f));
+                    b.AddBox(Vector3.zero, new Vector3(0.026f, 0.002f, 0.014f), wood);
+                    for (int k = 0; k < 6; k++)
+                        b.AddBlob(new Vector3(-0.009f + (k % 3) * 0.009f, 0.0025f, -0.003f + (k / 3) * 0.006f), new Vector3(0.0042f, 0.0022f, 0.0028f), 1, 0.2f, 60 + k, (_, __) => Pal.Hex(produce[(k + (x > 0f ? 3 : 0)) % produce.Length]));
+                    b.Pop();
+                    foreach (int sx in new[] { -1, 1 }) b.AddBox(new Vector3(x + sx * 0.012f, 0.003f, -D / 2 - 0.012f), new Vector3(0.0012f, 0.006f, 0.0012f), wood);
+                }
+            }
             if (kind == 0)
             {
                 // A golden pretzel sign on a bracket and a basket of bread outside.
