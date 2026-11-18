@@ -43,6 +43,7 @@ namespace Wonderland
         private Vector3 lastDrop; private float sinceDrop;
         public bool Draining { get; private set; }
         public bool StreamMode { get; private set; }
+        public float StreamWidth { get; private set; } = 1f;   // 0.6 a creek, 1 a stream, 2.2 a river
         private float waterLevel;
         private float strength = 0.6f, density = 0.6f, houseRotation;
         private int houseStyle;   // each new house gets the next colour style, so a village never repeats itself
@@ -260,6 +261,14 @@ namespace Wonderland
                     o.Add(new PaletteUI.Option("Pond", !Draining && !StreamMode, () => { Draining = false; StreamMode = false; RefreshOptions(); }));
                     o.Add(new PaletteUI.Option("Stream", StreamMode, () => { Draining = false; StreamMode = true; RefreshOptions(); }));
                     o.Add(new PaletteUI.Option("Drain", Draining, () => { Draining = true; StreamMode = false; RefreshOptions(); }));
+                    if (StreamMode)
+                    {
+                        // How wide: a creek, a stream (neither chip lit), or a broad river.
+                        o.Add(new PaletteUI.Option("Creek", StreamWidth < 1f, () => { StreamWidth = StreamWidth < 1f ? 1f : 0.6f; Say(StreamWidth < 1f ? "Creeks: narrow and shallow" : "Streams"); RefreshOptions(); }));
+                        o.Add(new PaletteUI.Option("River", StreamWidth > 1f, () => { StreamWidth = StreamWidth > 1f ? 1f : 2.2f; Say(StreamWidth > 1f ? "Rivers: broad and deep - lead one into a lake" : "Streams"); RefreshOptions(); }));
+                    }
+                    else if (!Draining)
+                        o.Add(new PaletteUI.Option("Lake", Radius > 0.3f, () => { radius[(int)Tool.Water] = Radius > 0.3f ? 0.12f : 0.38f; Say(Radius > 0.3f ? "Lake: a big brush for open water - room for ships" : "Pond"); RefreshOptions(); }));
                     break;
                 case Tool.Forest:
                     o.Add(new PaletteUI.Option("Paint", !ForestErase, () => { ForestErase = false; RefreshOptions(); }));
@@ -664,9 +673,9 @@ namespace Wonderland
                 { drawn.Add(local); World.Track.ShowPreview(drawn, false, false); }
                 if ((input.TriggerUp || !input.Trigger) && drawn.Count > 0)
                 {
-                    string error = World.BuildStream(drawn);
+                    string error = World.BuildStream(drawn, StreamWidth);
                     World.Track.HidePreview();
-                    Say(error ?? "A stream! It flows downhill", 3f);
+                    Say(error ?? (StreamWidth > 1f ? "A river! It flows downhill" : StreamWidth < 1f ? "A creek! It trickles downhill" : "A stream! It flows downhill"), 3f);
                     Haptic(error == null ? 0.5f : 0.8f, error == null ? 0.06f : 0.12f);
                     drawn.Clear();
                 }

@@ -33,6 +33,8 @@ namespace Wonderland.Editor
             catch (Exception e) { Fail("Exception: " + e); }
             try { Attractions(); }
             catch (Exception e) { Fail("Exception: " + e); }
+            try { Waterways(); }
+            catch (Exception e) { Fail("Exception: " + e); }
             BuildGrid.Snap = true;
             Report.AppendLine(failures == 0 ? "RESULT: PASS" : $"RESULT: FAIL ({failures})");
             File.WriteAllText("Logs/living-results.txt", Report.ToString());
@@ -456,6 +458,44 @@ namespace Wonderland.Editor
             UnityEngine.Object.DestroyImmediate(w.gameObject);
         }
 
+        /// <summary>
+        /// Water: a creek, a stream and a river drawn side by side carve channels of growing width; a stream down a steep
+        /// hill gets a waterfall with spray at its foot; widths survive saving and undo.
+        /// </summary>
+        private static void Waterways()
+        {
+            var w = Scratch("Waterways", 360f);
+            var t = w.Terrain;
+            float Channel(float x)
+            {
+                // How wide the carved channel is across the stream at its middle (ground at least 3 mm below its banks).
+                float bank = Mathf.Min(t.SurfaceAt(x - 0.14f, 0.05f), t.SurfaceAt(x + 0.14f, 0.05f)), width = 0f;
+                for (float dx = -0.12f; dx <= 0.12f; dx += 0.002f) if (t.SurfaceAt(x + dx, 0.05f) < bank - 0.003f) width += 0.002f;
+                return width;
+            }
+            string a = w.BuildStream(Line(t, new Vector2(-0.3f, 0.4f), new Vector2(-0.3f, -0.3f)), 0.6f);
+            string b = w.BuildStream(Line(t, new Vector2(0f, 0.4f), new Vector2(0f, -0.3f)), 1f);
+            string c = w.BuildStream(Line(t, new Vector2(0.3f, 0.4f), new Vector2(0.3f, -0.3f)), 2.2f);
+            float ca = Channel(-0.3f), cb = Channel(0f), cc = Channel(0.3f);
+            Check(a == null && b == null && c == null && ca < cb && cb < cc && cc > cb * 1.6f,
+                $"A creek, a stream and a river carve channels of growing width ({ca * 100f:0.0}, {cb * 100f:0.0}, {cc * 100f:0.0} cm){a ?? ""}{b ?? ""}{c ?? ""}");
+            var w2 = Scratch("Waterfall", 400f);
+            var t2 = w2.Terrain;
+            Hold(() => w2.TerrainStroke(TerrainBrush.Raise, new Vector3(0f, 0f, 0.3f), 0.18f, 1f, Dt, 0f), 4f);
+            string fall = w2.BuildStream(Line(t2, new Vector2(0f, 0.3f), new Vector2(0f, -0.35f)), 1f);
+            Check(fall == null && w2.Streams.Waterfalls >= 1, $"A stream tumbling down a steep hill has a waterfall, spray at its foot ({w2.Streams.Waterfalls} falls, hill {t2.SurfaceAt(0f, 0.3f) * 100f:0.0} cm high){fall ?? ""}");
+            // A creek drawn to end on the river joins it: its end on the river's course, full width.
+            string trib = w.BuildStream(Line(t, new Vector2(0.05f, -0.2f), new Vector2(0.27f, -0.12f)), 0.6f);
+            var creek = w.Streams.Streams[^1];
+            float gap = StreamSystem.Nearest(w.Streams.Streams[2], new Vector2(creek.points[^1].x, creek.points[^1].z), out _, out _);
+            Check(trib == null && creek.JoinsAtEnd && gap < 0.003f, $"A creek drawn to the river joins it (its end {gap * 100f:0.0} cm from the river's course){trib ?? ""}");
+            w.Undo();
+            w.Undo(); w.Redo();
+            Check(w.Streams.Streams.Count == 3 && Mathf.Abs(w.Streams.Streams[2].Width - 2.2f) < 0.01f, $"Widths survive undo and redo ({(w.Streams.Streams.Count > 2 ? w.Streams.Streams[2].Width : 0f):0.0})");
+            UnityEngine.Object.DestroyImmediate(w2.gameObject);
+            UnityEngine.Object.DestroyImmediate(w.gameObject);
+        }
+
         /// <summary>The living world's buildings in a row, fronts to the camera (docs/renders/living-buildings*.png).</summary>
         public static void LivingGallery()
         {
@@ -594,6 +634,20 @@ namespace Wonderland.Editor
                 }
             }
             Debug.Log($"Living renders: harbour {harbourShot}, sailing {sailShot}");
+            // A creek tumbling off a hill into a river, the river into a lake.
+            var ww = Scratch("Water render", 180f);
+            ww.Sky.Shown = false;
+            var wt = ww.Terrain;
+            Hold(() => ww.TerrainStroke(TerrainBrush.Raise, new Vector3(-0.35f, 0f, 0.3f), 0.2f, 1f, Dt, 0f), 4f);
+            Lake(ww, 0.15f, 0.45f, 0.2f);
+            ww.BuildStream(Line(wt, new Vector2(-0.35f, 0.32f), new Vector2(-0.3f, 0.05f), new Vector2(-0.15f, -0.05f)), 0.6f);
+            ww.BuildStream(Line(wt, new Vector2(-0.15f, -0.05f), new Vector2(0f, -0.02f), new Vector2(0.15f, 0f)), 2.2f);
+            var focus = ww.transform.TransformPoint(wt.PointAt(-0.12f, 0.05f));
+            cam.transform.position = focus + new Vector3(0.05f, 0.42f, -0.55f);
+            cam.transform.rotation = Quaternion.LookRotation(focus - cam.transform.position);
+            for (int k = 0; k < 120; k++) foreach (var ps in ww.Streams.GetComponentsInChildren<ParticleSystem>()) ps.Simulate(1f / 30f, true, false);
+            WonderlandRenders.Capture(cam, "living-river-waterfall.png", 1400, 900);
+            Debug.Log($"Living renders: water ({ww.Streams.Waterfalls} falls)");
             if (Application.isBatchMode) EditorApplication.Exit(0);
         }
     }

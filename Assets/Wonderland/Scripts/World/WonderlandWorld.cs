@@ -97,6 +97,7 @@ namespace Wonderland
             Streams = Child<StreamSystem>("Streams");
             Streams.Init(materials.Water);
             Streams.Terrain = Terrain;
+            Streams.Smoke = materials.Smoke;
             Paths = Child<PathSystem>("Paths");
             Paths.Init(Terrain, materials.Lit, () => Track.Network);
             Bridges = Child<BridgeSystem>("Bridges");
@@ -498,7 +499,7 @@ namespace Wonderland
         private static List<StreamPath> CopyStreams(List<StreamPath> streams)
         {
             var copy = new List<StreamPath>(streams.Count);
-            foreach (var st in streams) copy.Add(new StreamPath { points = new List<Vector3>(st.points) });
+            foreach (var st in streams) copy.Add(new StreamPath { points = new List<Vector3>(st.points), width = st.width });
             return copy;
         }
 
@@ -609,14 +610,15 @@ namespace Wonderland
         // ------------------------------------------------------------------ streams
 
         /// <summary>Plans a stream from a drawn stroke, carves it and bridges the railway over it. Returns an error or null.</summary>
-        public string BuildStream(IReadOnlyList<Vector3> drawn)
+        public string BuildStream(IReadOnlyList<Vector3> drawn, float width = 1f)
         {
-            var path = StreamSystem.Plan(drawn, Terrain);
+            var path = StreamSystem.Plan(drawn, Terrain, width);
             if (path == null) return "Draw a longer stream";
             foreach (var p in path.points)
-                if (Buildings.Contains(new Vector2(p.x, p.z), StreamSystem.HalfWidth)) return "Streams flow around houses";
+                if (Buildings.Contains(new Vector2(p.x, p.z), StreamSystem.HalfWidth * width)) return "Streams flow around houses";
             Checkpoint();
             Streams.Streams.Add(path);
+            StreamSystem.Join(Streams.Streams);   // (onto another stream it starts or ends at)
             AfterStreamsChanged(StreamSystem.Carve(Terrain, path));
             return null;
         }
