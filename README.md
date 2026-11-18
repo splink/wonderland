@@ -448,6 +448,21 @@ it. Nothing needs connecting by hand, and nothing is invented that the world doe
 - **Water.** Streams come in three widths: a creek, a stream or a river. Streams drawn to another stream join it.
   Steep drops make waterfalls, and the Lake chip paints big open water.
 
+**Since the last round:**
+- **Trains:** goods trains call only at freight yards, and passenger trains only at stations and halts. When a goods
+  train stops, the crane unloads what it brought and loads what waits.
+- **Straight away:** a new place gets a worker straight away, a new farm has a first harvest ready, and a new shop
+  opens two crates short, so the first lorry comes at once.
+- **Streets:**
+  - With the grid on, roads run only straight, square or at 45°.
+  - Streets have pavements that people walk on, and a **Zebra crossing** (Build ▸ Small) snaps across a street,
+    where people cross.
+  - Raising land or digging a pond never pushes through a road or a track.
+- **Harbours** snap to the shore you point at.
+- **Shops** have their own colours and fronts, and bigger roof symbols.
+- **The Build palette** shows long categories seven items a page (‹ ›).
+- **Ponds** have smooth, soft shorelines.
+
 Select anything to see what it's doing:
 - a lorry: "taking 5 crates of milk and eggs to the bakery";
 - a villager: "in a taxi to the café";
