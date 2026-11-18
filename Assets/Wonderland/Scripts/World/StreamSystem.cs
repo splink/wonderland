@@ -267,7 +267,7 @@ namespace Wonderland
                     {
                         float u = k / (float)across, off = (u - 0.5f) * 2f;
                         float depth = (1f - off * off) * 0.75f;
-                        float shore = Mathf.Max(Mathf.Abs(off) > 0.75f ? 1f : 0f, rapids * 0.8f);
+                        float shore = Mathf.Max(Mathf.Abs(off) > 0.75f ? 1f : 0f, rapids * 0.45f);   // (whitewater streaks, not a white block)
                         int v = b.AddVertex(p + side * off * hw + Vector3.up * 0.0004f, Vector3.up, new Color(depth, shore, 0.5f + rapids * 0.5f, 1f));
                         b.Uvs[v] = new Vector2(u * 0.6f, along);
                     }

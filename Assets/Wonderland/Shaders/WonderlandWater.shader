@@ -60,21 +60,26 @@ Shader "Wonderland/Water"
                 float2 p = i.positionWS.xz * 38.0;
                 float2 drift = flow > 0.01 ? float2(0.0, -t * flow * 12.0) : float2(t * 0.25, t * 0.18);
                 float2 q = flow > 0.01 ? float2(i.uv.x * 38.0, i.uv.y * 38.0) + drift : p + drift;
-                float n1 = WL_Noise(q), n2 = WL_Noise(q * 2.3 - drift * 1.7 + 13.0);
-                float2 slope = float2(WL_Noise(q + float2(0.1, 0.0)) - n1, WL_Noise(q + float2(0.0, 0.1)) - n1) * 2.2
-                             + float2(WL_Noise(q * 2.3 + float2(0.1, 0.0) + 13.0) - n2, WL_Noise(q * 2.3 + float2(0.0, 0.1) + 13.0) - n2) * 1.2;
+                // Two layers of ripples turned different ways (and drifting differently), so no crest lines up with
+                // another across the pond.
+                float2 qa = float2(q.x * 0.799 - q.y * 0.602, q.x * 0.602 + q.y * 0.799);
+                float2 qb = float2(q.x * 0.326 + q.y * 0.945, -q.x * 0.945 + q.y * 0.326) * 2.3 - drift * 1.7 + 13.0;
+                float n1 = WL_Noise(qa), n2 = WL_Noise(qb);
+                float2 slope = float2(WL_Noise(qa + float2(0.1, 0.0)) - n1, WL_Noise(qa + float2(0.0, 0.1)) - n1) * 1.8
+                             + float2(WL_Noise(qb + float2(0.1, 0.0)) - n2, WL_Noise(qb + float2(0.0, 0.1)) - n2) * 1.0;
                 half3 normal = normalize(half3(-slope.x, 1.0, -slope.y));
                 half3 viewDir = normalize(GetWorldSpaceViewDir(i.positionWS));
                 Light light = GetMainLight(TransformWorldToShadowCoord(i.positionWS));
-                half3 colour = lerp(SRGBToLinear(_Shallow.rgb), SRGBToLinear(_Deep.rgb), smoothstep(0.0, 1.0, depth));
+                half3 colour = lerp(SRGBToLinear(_Shallow.rgb), SRGBToLinear(_Deep.rgb), smoothstep(0.0, 0.8, depth));
+                colour = lerp(colour * 1.12h, colour, smoothstep(0.0, 0.25, depth));   // a lighter, sunlit fringe in the shallows
                 colour *= lerp(0.75h, 1.05h, light.shadowAttenuation) * (0.85h + 0.15h * n1);
                 half fresnel = pow(1.0h - saturate(dot(normal, viewDir)), 4.0h);
                 colour = lerp(colour, _WL_SkyColor.rgb * 1.25h, fresnel * 0.55h);
                 half3 h = normalize(light.direction + viewDir);
-                half glint = pow(saturate(dot(normal, h)), 180.0h) * 2.5h * light.shadowAttenuation;
+                half glint = pow(saturate(dot(normal, h)), 140.0h) * 1.3h * light.shadowAttenuation;
                 colour += light.color * glint;
                 // Foam: a broken white band along the shore, plus streaks on running water.
-                half foamBand = smoothstep(0.55h, 0.95h, shore + (n2 - 0.5h) * 0.5h);
+                half foamBand = smoothstep(0.7h, 0.98h, shore + (n2 - 0.5h) * 0.4h);
                 half foamFlow = flow > 0.01 ? smoothstep(0.78h, 0.92h, n2) * 0.6h : 0.0h;
                 half foam = saturate(foamBand + foamFlow);
                 colour = lerp(colour, half3(0.95h, 0.97h, 1.0h), foam * 0.85h);
@@ -82,6 +87,7 @@ Shader "Wonderland/Water"
                 half alpha = lerp(0.6h, 0.9h, depth);
                 alpha = max(alpha, foam * 0.9h);
                 alpha *= saturate(depth * 40.0h + shore);   // feather the very edge
+                alpha *= smoothstep(0.0h, 0.7h, i.color.a);    // ...and fade out under the banks (pond water only; streams keep a = 1)
                 return half4(colour, alpha);
             }
             ENDHLSL

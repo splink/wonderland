@@ -5,8 +5,8 @@ using UnityEngine.Rendering;
 namespace Wonderland
 {
     /// <summary>
-    /// Draws the ponds: a flat water surface over every water cell (and a one-cell margin so it meets the banks, where
-    /// the opaque terrain clips it into a natural shoreline). Chunked like the terrain; only touched chunks rebuild.
+    /// Draws the ponds: a flat water surface over every water cell and two cells beyond, under the banks, where the
+    /// opaque terrain clips it into a smooth, natural shoreline. Chunked like the terrain; only touched chunks rebuild.
     /// Vertex colour: r = depth (0 shore .. 1 deep), g = shore (foam), b = flow (0 for still water).
     /// </summary>
     public sealed class WaterRenderer : MonoBehaviour
@@ -40,8 +40,8 @@ namespace Wonderland
         private float LevelNear(int x, int z)
         {
             float best = -1f;
-            for (int oz = -1; oz <= 1; oz++)
-            for (int ox = -1; ox <= 1; ox++)
+            for (int oz = -2; oz <= 2; oz++)
+            for (int ox = -2; ox <= 2; ox++)
             {
                 int xx = x + ox, zz = z + oz;
                 if (xx < 0 || zz < 0 || xx >= field.Nx || zz >= field.Nz) continue;
@@ -79,10 +79,11 @@ namespace Wonderland
                     int i = zz * field.Nx + xx;
                     float depth = Mathf.Clamp01((level - field.Surface[i]) / TerrainField.PondDepth);
                     bool wet = field.Water[i] >= 0.5f;
-                    float shore = wet ? Mathf.Clamp01(1f - depth * 4f) : 1f;
-                    // Outside the pond the surface dips just under the ground, so the terrain clips it into the shoreline.
-                    float y = wet ? level : Mathf.Min(level, field.Surface[i] - 0.0012f);
-                    builder.AddVertex(new Vector3(field.LocalX(xx), y, field.LocalZ(zz)), Vector3.up, new Color(depth, shore, 0f, 1f));
+                    float shore = wet ? Mathf.Clamp01(1f - depth * 4f) : 0.8f;
+                    // Flat all the way out under the banks: the ground cuts it, so the shoreline is the smooth line where
+                    // the land meets the water's level (not the grid's steps).
+                    float y = level;
+                    builder.AddVertex(new Vector3(field.LocalX(xx), y, field.LocalZ(zz)), Vector3.up, new Color(depth, shore, 0f, wet ? 1f : 0f));   // (a: fades out towards dry land - a soft edge, not the grid's steps)
                 }
                 builder.AddTriangle(v, v + 3, v + 2); builder.AddTriangle(v, v + 2, v + 1);
             }
