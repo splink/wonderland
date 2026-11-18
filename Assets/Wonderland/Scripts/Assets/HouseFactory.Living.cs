@@ -17,6 +17,7 @@ namespace Wonderland
                 case Catalog.Sawmill: return SawmillShed(b, ref rng);
                 case Catalog.Letterbox: return PillarBox(b);
                 case Catalog.CarPark: return CarParkBays(b);
+                case Catalog.FreightYard: return FreightYardPad(b, ref rng);
             }
             warp = true;
             switch (id)
@@ -175,6 +176,66 @@ namespace Wonderland
         }
 
         public const int ParkingBays = 8;
+
+        /// <summary>
+        /// The freight yard (its front, -Z, to the railway): a concrete pad, the rail the crane rolls along, a stack of
+        /// crates waiting, and the crane driver's hut. The crane itself moves (see FreightSystem and <see cref="CraneMesh"/>).
+        /// </summary>
+        private static float FreightYardPad(MeshBuilder b, ref Rng rng)
+        {
+            const float W = 0.15f, D = 0.08f;
+            b.AddBox(new Vector3(0f, -0.001f, 0f), new Vector3(W, 0.006f, D), Pal.Hex("#A9A49A"), Pal.Hex("#B9B4AA"), Pal.Hex("#8E8A82"));
+            foreach (float z in new[] { CraneRailZ - 0.004f, CraneRailZ + 0.004f }) b.AddBox(new Vector3(0f, 0.0025f, z), new Vector3(W - 0.004f, 0.001f, 0.0012f), Pal.Hex("#5A5A62"));
+            // The driver's hut, with a lit window.
+            b.AddBox(new Vector3(W / 2 - 0.016f, 0.012f, D / 2 - 0.014f), new Vector3(0.024f, 0.024f, 0.02f), Pal.Hex("#E2B04A"), Pal.Hex("#F2C860"), Pal.Hex("#B88A30"));
+            b.AddBox(new Vector3(W / 2 - 0.016f, 0.0255f, D / 2 - 0.014f), new Vector3(0.028f, 0.003f, 0.024f), Pal.Hex("#5A5A62"));
+            b.AddFace(new Vector3(W / 2 - 0.016f, 0.015f, D / 2 - 0.0241f), Vector3.back, Vector3.up, 0.012f, 0.007f, Pal.Glow(Pal.WindowGlow));
+            // Pallets and a few crates around the yard (the waiting stack itself is drawn by the freight system).
+            for (int k = 0; k < 3; k++) b.AddBox(new Vector3(-W / 2 + 0.014f + k * 0.014f, 0.0028f, D / 2 - 0.012f), new Vector3(0.011f, 0.0016f, 0.011f), Pal.Hex("#B07A45"));
+            return 0.1f;
+        }
+
+        /// <summary>Where the crane's rail runs (local z) and how high its jib is.</summary>
+        public const float CraneRailZ = 0.022f, CraneHeight = 0.085f;
+
+        /// <summary>The crane's jib reaches this far out over the railway (local z, front).</summary>
+        public const float CraneReach = -0.085f;
+
+        private static Mesh crane, trolley;
+
+        /// <summary>The crane: a yellow lattice tower on rail wheels with its jib out over the railway (front, -Z), and a counterweight behind.</summary>
+        public static Mesh CraneMesh()
+        {
+            if (crane != null) return crane;
+            var b = new MeshBuilder();
+            var yellow = Pal.Hex("#F2C12E"); var dark = Pal.Hex("#3A3A40");
+            b.AddBox(new Vector3(0f, 0.004f, 0f), new Vector3(0.022f, 0.006f, 0.016f), dark);
+            foreach (int sx in new[] { -1, 1 })
+            foreach (int sz in new[] { -1, 1 })
+                b.AddBox(new Vector3(sx * 0.005f, CraneHeight / 2f, sz * 0.005f), new Vector3(0.0016f, CraneHeight, 0.0016f), yellow);
+            for (float y = 0.012f; y < CraneHeight; y += 0.012f)
+            {
+                b.AddBox(new Vector3(0f, y, -0.005f), new Vector3(0.011f, 0.001f, 0.001f), yellow);
+                b.AddBox(new Vector3(0f, y, 0.005f), new Vector3(0.011f, 0.001f, 0.001f), yellow);
+                b.AddBox(new Vector3(-0.005f, y, 0f), new Vector3(0.001f, 0.001f, 0.011f), yellow);
+                b.AddBox(new Vector3(0.005f, y, 0f), new Vector3(0.001f, 0.001f, 0.011f), yellow);
+            }
+            float reach = CraneReach - CraneRailZ;
+            b.AddBox(new Vector3(0f, CraneHeight + 0.002f, reach / 2f + 0.006f), new Vector3(0.008f, 0.004f, -reach + 0.03f), yellow);   // the jib
+            b.AddBox(new Vector3(0f, CraneHeight + 0.002f, 0.02f), new Vector3(0.014f, 0.01f, 0.012f), Pal.Hex("#7A7A82"));   // counterweight
+            b.AddBox(new Vector3(0f, CraneHeight - 0.008f, 0.008f), new Vector3(0.012f, 0.01f, 0.01f), Pal.Hex("#E25B4F"));   // the cab
+            b.AddFace(new Vector3(0f, CraneHeight - 0.008f, 0.0029f), Vector3.back, Vector3.up, 0.008f, 0.005f, Pal.Glow(Pal.WindowGlow));
+            return crane = b.ToMesh("Crane");
+        }
+
+        /// <summary>The crane's trolley and hook block (the cable is a separate, stretched part).</summary>
+        public static Mesh TrolleyMesh()
+        {
+            if (trolley != null) return trolley;
+            var b = new MeshBuilder();
+            b.AddBox(new Vector3(0f, 0f, 0f), new Vector3(0.01f, 0.003f, 0.007f), Pal.Hex("#3A3A40"));
+            return trolley = b.ToMesh("Trolley");
+        }
 
         /// <summary>Where bay <paramref name="k"/> of a car park is (local) and which way a car in it faces (degrees).</summary>
         public static Vector3 ParkingBay(int k, out float yaw)

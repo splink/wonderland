@@ -299,6 +299,18 @@ namespace Wonderland
             return loads[key] = b.ToMesh("Load");
         }
 
+        private static readonly Mesh[] wagonLoads = new Mesh[8];
+
+        /// <summary>Crates in an open goods wagon (up to six, two across and three along, on its floor; local to the wagon).</summary>
+        public static Mesh WagonLoad(int crates)
+        {
+            crates = Mathf.Clamp(crates, 0, 6);
+            if (wagonLoads[crates] != null) return wagonLoads[crates];
+            var b = new MeshBuilder();
+            for (int i = 0; i < crates; i++) Crate(b, new Vector3((i % 2 - 0.5f) * 0.0125f, 0.019f, (i / 2 - 1) * 0.024f), i % 3 == 2 ? 1 : 0, i);
+            return wagonLoads[crates] = b.ToMesh("WagonLoad");
+        }
+
         /// <summary>One crate (or box, or sack) on its own, its bottom at the origin: what is carried across when loading.</summary>
         public static Mesh OneCrate(Cargo cargo) => cargo == Cargo.Produce ? one ??= Single(0) : Single(cargo switch { Cargo.Goods => 1, Cargo.Timber => 2, _ => 3 });
 

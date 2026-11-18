@@ -27,6 +27,8 @@ namespace Wonderland.Editor
             catch (Exception e) { Fail("Exception: " + e); }
             try { Town(); }
             catch (Exception e) { Fail("Exception: " + e); }
+            try { FreightByRail(); }
+            catch (Exception e) { Fail("Exception: " + e); }
             BuildGrid.Snap = true;
             Report.AppendLine(failures == 0 ? "RESULT: PASS" : $"RESULT: FAIL ({failures})");
             File.WriteAllText("Logs/living-results.txt", Report.ToString());
@@ -290,6 +292,43 @@ namespace Wonderland.Editor
             UnityEngine.Object.DestroyImmediate(w.gameObject);
         }
 
+        /// <summary>
+        /// Freight by rail: crates waiting at a freight yard beside the railway; a goods train stops there and holds while
+        /// the yard's crane lifts them across one by one into its open wagon (where they show); then it goes on with them.
+        /// </summary>
+        private static void FreightByRail()
+        {
+            var w = Scratch("Freight", 200f);
+            var t = w.Terrain;
+            var plan = w.BuildTrack(Loop(t, 0.5f, 0.38f, 0.97f, false));
+            var st = w.StationAt(t.PointAt(0f, -0.3f), 0, Catalog.FreightYard);
+            string yard = st.HasValue ? w.PlaceHouse(st.Value) : "no railway";
+            int yi = w.Buildings.Houses.FindIndex(h => h.variant == Catalog.FreightYard);
+            w.PlaceTrain(t.PointAt(0f, 0.38f), TrainKind.Goods, Vector3.left, out var train);
+            w.People.Grid.Complete(); w.Clock.Hour = 9f; w.People.Step(Dt); w.Traffic.Refresh(true); w.Freight.Step(Dt);
+            Check(plan.Ok && yard == null && yi >= 0 && train != null, $"A loop, a freight yard beside it and a goods train ({yard ?? ""}{(train == null ? " no train" : "")})");
+            if (yi < 0 || train == null) return;
+            w.People.BringCrates(yi, 5, "crates");
+            int lifted0 = w.Freight.Lifted;
+            float held = 0f, craneBusy = 0f; bool shown = false, left = false; int cargoMax = 0;
+            string busy = null;
+            for (float s = 0f; s < 240f && !(left && cargoMax >= 3); s += Dt)
+            {
+                w.Clock.Tick(Dt); w.People.Step(Dt); w.Traffic.Step(Dt); w.Trains.Step(Dt); w.Freight.Step(Dt);
+                bool there = train.AtStation >= 0 && w.Trains.Stations[train.AtStation].House == new Vector2(st.Value.x, st.Value.z);
+                if (there) held += Dt;
+                string c = w.Freight.CraneFor(yi);
+                if (c.Contains("loading")) { craneBusy += Dt; busy = c; }
+                cargoMax = Mathf.Max(cargoMax, train.Cargo);
+                if (!shown) foreach (var mf in w.Trains.GetComponentsInChildren<MeshFilter>()) shown |= mf.name == "Load" && mf.sharedMesh != null;
+                if (cargoMax >= 3 && !there && train.Speed > 0.01f) left = true;
+            }
+            Check(w.Freight.Lifted - lifted0 >= 3 && cargoMax >= 3 && craneBusy > 5f && held > 8f,
+                $"The goods train holds at the freight yard while the crane lifts the crates across ({w.Freight.Lifted - lifted0} lifted, {cargoMax} aboard, crane busy {craneBusy:0} s, stood {held:0} s): {busy}");
+            Check(shown && left, $"...its open wagon shows them, and it goes on with them ({w.Trains.Describe(train)})");
+            UnityEngine.Object.DestroyImmediate(w.gameObject);
+        }
+
         /// <summary>The living world's buildings in a row, fronts to the camera (docs/renders/living-buildings*.png).</summary>
         public static void LivingGallery()
         {
@@ -368,6 +407,34 @@ namespace Wonderland.Editor
                 if (!plough && tractor != null && w.People.OnTractor(tractor.Field) && tractor.Speed > 0.01f) { plough = true; Shoot(tractor.Position, new Vector3(-0.09f, 0.08f, -0.1f), "living-tractor.png"); }
             }
             Debug.Log($"Living renders: loading {loading}, taxi {taxi}, plough {plough}");
+            // The freight yard's crane, lifting a crate into a goods train.
+            var f = Scratch("Freight render", 60f);
+            f.Sky.Shown = false;
+            var ft = f.Terrain;
+            f.BuildTrack(Loop(ft, 0.5f, 0.38f, 0.97f, false));
+            var yardAt = f.StationAt(ft.PointAt(0f, -0.3f), 0, Catalog.FreightYard);
+            if (yardAt.HasValue) f.PlaceHouse(yardAt.Value);
+            int fy = f.Buildings.Houses.FindIndex(h => h.variant == Catalog.FreightYard);
+            f.PlaceTrain(ft.PointAt(0f, 0.38f), TrainKind.Goods, Vector3.left, out var goods);
+            f.People.Grid.Complete(); f.Clock.Hour = 9f; f.People.Step(Dt); f.Freight.Step(Dt);
+            if (fy >= 0) f.People.BringCrates(fy, 6, "crates");
+            bool shot = false;
+            for (float s = 0f; s < 240f && !shot && fy >= 0; s += Dt)
+            {
+                f.Clock.Tick(Dt); f.People.Step(Dt); f.Trains.Step(Dt); f.Freight.Step(Dt);
+                if (goods.Cargo >= 2 && f.Freight.CraneFor(fy).Contains("loading"))
+                {
+                    var crate = f.Freight.transform.Find("Freight yard crane/Crate");
+                    if (crate == null || !crate.gameObject.activeSelf) continue;
+                    var h = f.Buildings.Houses[fy];
+                    var p = f.transform.TransformPoint(new Vector3(h.x, ft.SurfaceAt(h.x, h.z) + 0.04f, h.z - 0.04f));
+                    cam.transform.position = p + Quaternion.Euler(0f, h.rotation, 0f) * new Vector3(0.16f, 0.12f, 0.12f);
+                    cam.transform.rotation = Quaternion.LookRotation(p - cam.transform.position);
+                    WonderlandRenders.Capture(cam, "living-freight-crane.png", 1400, 900);
+                    shot = true;
+                }
+            }
+            Debug.Log($"Living renders: crane {shot}");
             if (Application.isBatchMode) EditorApplication.Exit(0);
         }
     }

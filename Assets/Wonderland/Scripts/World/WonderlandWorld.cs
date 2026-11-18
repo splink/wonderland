@@ -37,6 +37,7 @@ namespace Wonderland
         public TrafficSystem Traffic { get; private set; }
         public SoundSystem Sounds { get; private set; }
         public CctvSystem Cctv { get; private set; }
+        public FreightSystem Freight { get; private set; }
         public BoatSystem Boats { get; private set; }
         public SkySystem Sky { get; private set; }
         /// <summary>The village's time of day (villagers' routines, the rides, the light).</summary>
@@ -116,6 +117,8 @@ namespace Wonderland
             Sky.Init(this, materials.Lit, seed);
             Boats = Child<BoatSystem>("Boats");
             Boats.Init(this, materials.Lit);
+            Freight = Child<FreightSystem>("Freight");
+            Freight.Init(this, materials.Lit);
             Boats.Waiting = People.WaitingForBoat;
             Boats.Landed = People.EndBoatTrip;
             People.BoatSeat = Boats.SeatOf;

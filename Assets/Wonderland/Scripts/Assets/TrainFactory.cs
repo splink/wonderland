@@ -334,7 +334,7 @@ namespace Wonderland
             return b.ToMesh("Axle" + r.ToString("0.0000"));
         }
 
-        /// <summary>Goods wagons: 0 open wagon with logs, 1 covered van, 2 tank wagon, 3 open wagon with coal.</summary>
+        /// <summary>Goods wagons: 0 open wagon (its crates show when it has some), 1 covered van, 2 tank wagon, 3 open wagon with coal.</summary>
         private static Mesh BuildWagon(int variant)
         {
             var b = new MeshBuilder();
@@ -369,7 +369,8 @@ namespace Wonderland
                         for (int r = 0; r < 3; r++)
                             b.AddBox(new Vector3(s * (W / 2f + 0.0002f), 0.0205f + r * 0.0048f, 0f), new Vector3(0.0003f, 0.0004f, L), Pal.Shade(plank, 0.7f));
                     }
-                    if (variant == 0)
+                    if (variant == 0) { }   // (an empty open wagon: what it carries shows when it carries it - see FreightSystem)
+                    else if (variant == -1)
                     {
                         // A load of logs, chained down.
                         var rng = new Rng(17);

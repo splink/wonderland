@@ -277,6 +277,7 @@ namespace Wonderland
                 int st = t.AtStation;
                 if (st < 0) { t.HandledStop = -1; continue; }
                 if (st == t.HandledStop || st >= stationPlace.Count || stationPlace[st] == null) continue;
+                if (stationPlace[st].Bp.Id == Catalog.FreightYard) continue;   // (the yard's crane does it, crate by crate: see FreightSystem)
                 t.HandledStop = st;
                 var sp = stationPlace[st];
                 if (t.Cargo > 0 && st != t.LoadedAt && regionWant.TryGetValue(sp.WorkRegion, out float want) && want >= 1f)
@@ -391,6 +392,21 @@ namespace Wonderland
             if (!to.Stock.Supplied && to.Bp.Goods == Goods.Sells) News = $"The first lorry of {what} arrived at the {to.Bp.Name.ToLower()}";
             to.Stock.Supplied = true;
         }
+
+        /// <summary>The crane lifts one waiting crate off a freight yard's stack (onto a goods train): whether there was one.</summary>
+        public bool TakeWaiting(int house)
+        {
+            var p = PlaceAt(house);
+            if (p == null || p.Stock.Waiting < 1f) return false;
+            p.Stock.Waiting -= 1f;
+            return true;
+        }
+
+        /// <summary>The crane sets a crate down at a freight yard from a goods train: arrived, for collecting.</summary>
+        public void Receive(int house, int n) { if (PlaceAt(house) is { } p) p.Stock.Have = Mathf.Min(StockCap * 2f, p.Stock.Have + n); }
+
+        /// <summary>Whether the side of the line a station is on wants crates (a goods train unloads there).</summary>
+        public bool WantsAt(int station) => station >= 0 && station < stationPlace.Count && stationPlace[station] != null && regionWant.TryGetValue(stationPlace[station].WorkRegion, out float w) && w >= 1f;
 
         /// <summary>What a place makes, in words ("sacks of wheat").</summary>
         public static string Produce(int variant) => ProduceOf(Catalog.Get(variant));

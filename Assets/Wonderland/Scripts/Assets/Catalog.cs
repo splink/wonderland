@@ -104,10 +104,10 @@ namespace Wonderland
             LogPile = 32, Lamp = 33, Bench = 34, FlowerBed = 35, Well = 36, Statue = 37, Signpost = 38, Picnic = 39, HayBales = 40,
             Park = 41, Museum = 42, Restaurant = 43, Disco = 44, Hospital = 45, Police = 46, Factory = 47, Football = 48, Studio = 49,
             Camera = 50, Balloon = 51, Jetty = 52, RowingBoat = 53, SailingBoat = 54, Steamer = 55, Halt = 56, TaxiRank = 57,
-            Sawmill = 58, FurnitureShop = 59, IceCream = 60, Pub = 61, Hotel = 62, PostOffice = 63, Letterbox = 64, CarPark = 65;
+            Sawmill = 58, FurnitureShop = 59, IceCream = 60, Pub = 61, Hotel = 62, PostOffice = 63, Letterbox = 64, CarPark = 65, FreightYard = 66;
 
         /// <summary>A station of any size (the big one, or a country halt): trains stop beside it.</summary>
-        public static bool IsStation(int variant) => variant == Station || variant == Halt;
+        public static bool IsStation(int variant) => variant == Station || variant == Halt || variant == FreightYard;
 
         /// <summary>The kind of boat a catalog item places (or -1 for anything else).</summary>
         public static int BoatOf(int variant) => variant >= RowingBoat && variant <= Steamer ? variant - RowingBoat : -1;
@@ -229,6 +229,8 @@ namespace Wonderland
                 new() { Name = "Letterbox", Short = "Letters", Category = PlaceCategory.Small, Half = new Vector2(0.006f, 0.006f), Height = 0.025f, Pad = false, Small = true, Styles = 1, Hint = "the post van empties it on its round",
                     Spots = new[] { new ActivitySpot(0f, -0.012f, SpotKind.Browse) } },
                 new() { Name = "Car park", Short = "Parking", Category = PlaceCategory.Travel, Half = new Vector2(0.082f, 0.052f), Height = 0.01f, Walkable = true, Styles = 1, Hint = "visitors' cars park here - put it by a road near the shops" },
+                new() { Name = "Freight yard", Short = "Freight", Category = PlaceCategory.Travel, Half = new Vector2(0.075f, 0.04f), Height = 0.1f, Styles = 1,
+                    Hint = "beside the railway: its crane loads goods trains, and its lorry takes what arrives on" },
             };
             for (int i = 0; i < list.Count; i++) list[i].Id = i;
             // What each place is for: the needs it satisfies decide who comes and when (see Needs).
@@ -293,6 +295,9 @@ namespace Wonderland
             list[Sawmill].Makes = Cargo.Timber; list[Sawmill].Lorries = 1;
             list[FurnitureShop].Takes = Cargo.Timber;
             list[Station].Takes |= Cargo.Timber;
+            Work(FreightYard, "crane driver", 6.5f, 19.5f, false, Goods.Ships);
+            list[FreightYard].Takes = list[FreightYard].Makes = Cargo.Produce | Cargo.Goods | Cargo.Timber;
+            list[FreightYard].Lorries = 1;
             list[Grocer].Takes = Cargo.Produce | Cargo.Goods;
             list[Station].Takes = Cargo.Produce | Cargo.Goods;
             list[Barn].Lorries = 1; list[Factory].Lorries = 1;
