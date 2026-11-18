@@ -65,6 +65,7 @@ namespace Wonderland
         public Cargo Makes, Takes;           // lorries collect what it makes, and bring what it takes
         public int Lorries;                  // lorries based here (by a road), carrying what it makes
         public int Taxis;                    // taxis waiting here for fares
+        public int Tractors;                 // farm machines kept at its edge, worked by its farmer
         public bool Dwelling => Residents > 0;
         public bool Ride => Category == PlaceCategory.Fun && RotorSpeed != 0f && !OwnClock;
         public bool OpenAt(float hour) => Within(hour, Opens, Closes);
@@ -268,6 +269,7 @@ namespace Wonderland
             list[Station].Takes = Cargo.Produce | Cargo.Goods;
             list[Barn].Lorries = 1; list[Factory].Lorries = 1;
             list[Station].Taxis = 1; list[TaxiRank].Taxis = 2;
+            list[WheatField].Tractors = 1;
             return list.ToArray();
         }
 

@@ -534,6 +534,7 @@ namespace Wonderland
             var p = PlaceAt(a.SpotHouse);
             if (p == null) return $"at work at {place}";
             if (p.Bp.WorksIndoors) return $"at work in {place} (the {p.Bp.Job})";
+            if (p.Bp.Tractors > 0 && a.Hidden) return $"driving the tractor up and down {place}";
             if (p.Bp.Farm) return $"tending {place}";
             return $"minding {place}";
         }

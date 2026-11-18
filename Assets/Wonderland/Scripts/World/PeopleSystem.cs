@@ -876,6 +876,7 @@ namespace Wonderland
                     a.State = Activity.Working; a.Timer = a.Rng.Range(25f, 45f);
                     a.Approach = a.Position;
                     if (bp.WorksIndoors) Hide(a, true);
+                    else if (bp.Tractors > 0 && world.Traffic != null && world.Traffic.HasTractor(a.SpotHouse)) { Hide(a, true); a.Timer = a.Rng.Range(90f, 150f); }   // onto the tractor, for a good long while
                     NoteVisit(a.SpotHouse, a);
                     return;
                 }

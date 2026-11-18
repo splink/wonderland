@@ -36,6 +36,27 @@ namespace Wonderland
         /// <summary>A little crate of produce, carried in front (the figure's local frame, centred).</summary>
         public static Mesh Crate => crate ??= BuildCrate();
 
+        private static readonly Mesh[] faces = new Mesh[StyleCount];
+
+        /// <summary>
+        /// A passenger seen through a car's back windows (both sides): their face, hair and hat as a flat silhouette just
+        /// outside the glass - the car's windows are painted, so a figure inside wouldn't show. Local to the car.
+        /// </summary>
+        public static Mesh WindowFace(int s) => faces[s % StyleCount] ??= BuildWindowFace(Style(s % StyleCount));
+
+        private static Mesh BuildWindowFace(Outfit o)
+        {
+            var b = new MeshBuilder();
+            foreach (int side in new[] { -1, 1 })
+            {
+                float x = side * 0.0096f;
+                b.AddBlob(new Vector3(x, 0.0163f, -0.0085f), new Vector3(0.0005f, 0.0029f, 0.0026f), 1, 0f, 70 + side, (_, __) => o.Skin);
+                b.AddBlob(new Vector3(x, 0.0182f, -0.0092f), new Vector3(0.00055f, 0.0016f, 0.0028f), 1, 0f, 72 + side, (_, __) => o.HatKind == 0 ? o.Hat : o.Hair);
+                b.AddBlob(new Vector3(x, 0.0128f, -0.0085f), new Vector3(0.0005f, 0.0012f, 0.0034f), 1, 0f, 74 + side, (_, __) => o.Shirt);   // shoulders
+            }
+            return b.ToMesh("WindowFace");
+        }
+
         private static Mesh BuildCrate()
         {
             var b = new MeshBuilder();

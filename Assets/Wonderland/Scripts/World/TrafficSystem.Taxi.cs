@@ -144,7 +144,7 @@ namespace Wonderland
         /// <summary>Whether a villager (by seed) is still in the world (set by the world).</summary>
         public System.Func<int, bool> FareAlive;
 
-        /// <summary>The passenger in the back of the taxi: their own figure, sitting down.</summary>
+        /// <summary>The passenger in the back of the taxi, seen through its back windows.</summary>
         private void ShowPassenger(Vehicle v, bool on)
         {
             if (v.Passenger == null)
@@ -152,14 +152,14 @@ namespace Wonderland
                 var go = new GameObject("Passenger");
                 go.layer = WonderlandWorld.MiniatureLayer;
                 go.transform.SetParent(v.Root, false);
-                go.transform.localPosition = new Vector3(0.003f, -0.0085f, -0.008f);
+
                 go.AddComponent<MeshFilter>();
                 var r = go.AddComponent<MeshRenderer>();
                 r.sharedMaterial = material; r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
                 v.Passenger = go.transform;
             }
             v.Passenger.gameObject.SetActive(on);
-            if (on && v.Fare != null) v.Passenger.GetComponent<MeshFilter>().sharedMesh = PersonFactory.Body(v.Fare.Style);
+            if (on && v.Fare != null) v.Passenger.GetComponent<MeshFilter>().sharedMesh = PersonFactory.WindowFace(v.Fare.Style);
         }
 
         private string TaxiLine(Vehicle v)

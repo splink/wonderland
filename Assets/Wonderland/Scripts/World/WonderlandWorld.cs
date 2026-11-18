@@ -102,6 +102,10 @@ namespace Wonderland
             Traffic = Child<TrafficSystem>("Traffic");
             Traffic.Init(this, materials.Lit);
             Traffic.FareAlive = seed => People.IndexOfSeed(seed) >= 0;
+            Traffic.Operating = house => People.OnTractor(house);
+            Traffic.FarmerStyle = house => People.WorkerOf(house).style;
+            Traffic.FarmerSeed = house => People.WorkerOf(house).seed;
+            Traffic.FarmerName = house => People.WorkerOf(house).name;
             Traffic.TakeDriver = (home, seconds) => People.TakeDriver(home, seconds);
             Traffic.StillIn = seed => People.Indoors(seed);
             Sounds = Child<SoundSystem>("Sound");

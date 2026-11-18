@@ -23,6 +23,8 @@ namespace Wonderland.Editor
             catch (Exception e) { Fail("Exception: " + e); }
             try { Taxis(); }
             catch (Exception e) { Fail("Exception: " + e); }
+            try { Tractors(); }
+            catch (Exception e) { Fail("Exception: " + e); }
             BuildGrid.Snap = true;
             Report.AppendLine(failures == 0 ? "RESULT: PASS" : $"RESULT: FAIL ({failures})");
             File.WriteAllText("Logs/living-results.txt", Report.ToString());
@@ -186,6 +188,96 @@ namespace Wonderland.Editor
             Live(w, 60f);
             Check(back.TrueForAll(v => v.Fare == null), $"The taxi is free again afterwards ({string.Join(", ", back.ConvertAll(v => w.Traffic.Describe(v)))})");
             UnityEngine.Object.DestroyImmediate(w.gameObject);
+        }
+
+        /// <summary>
+        /// Tractors: a wheat field has a tractor at its corner; when its farmer comes to work they climb aboard (seen at
+        /// the wheel) and drive it up and down the field in rows, staying inside the field; after the shift it goes back
+        /// to its corner and the farmer climbs down.
+        /// </summary>
+        private static void Tractors()
+        {
+            var w = Scratch("Tractors", 120f);
+            w.PlaceHouse(new HouseInstance { x = -0.3f, z = 0.25f, variant = Catalog.Cottage });
+            string field = w.PlaceHouse(new HouseInstance { x = 0.15f, z = 0.05f, variant = Catalog.WheatField });
+            int fi = w.Buildings.Houses.FindIndex(h => h.variant == Catalog.WheatField);
+            w.People.Grid.Complete(); w.Clock.Hour = 7f; w.People.Step(Dt); w.Traffic.Refresh(true);
+            var tractor = w.Traffic.Vehicles.Find(v => v.Kind == VehicleKind.Tractor);
+            Check(field == null && tractor != null, $"A wheat field keeps a tractor at its corner ({(tractor != null ? w.Traffic.Describe(tractor) : "none")}{field ?? ""})");
+            if (tractor == null) return;
+            var start = tractor.Position;
+            var said = new List<string>();
+            float roamed = 0f, outside = 0f; bool driver = false, farmerHidden = false;
+            var h = w.Buildings.Houses[fi];
+            var half = Catalog.Get(h.variant).Half;
+            Live(w, 400f, s =>
+            {
+                string line = w.Traffic.Describe(tractor);
+                if (said.Count == 0 || said[^1] != line) said.Add(line);
+                roamed = Mathf.Max(roamed, (tractor.Position - start).magnitude);
+                var local = Quaternion.Euler(0f, -h.rotation, 0f) * new Vector3(tractor.Position.x - h.x, 0f, tractor.Position.y - h.z);
+                if (Mathf.Abs(local.x) > half.x + 0.01f || Mathf.Abs(local.z) > half.y + 0.03f) outside = Mathf.Max(outside, Mathf.Max(Mathf.Abs(local.x) - half.x, Mathf.Abs(local.z) - half.y));
+                if (w.People.OnTractor(fi)) { driver |= tractor.Passenger != null && tractor.Passenger.gameObject.activeSelf; int f = w.People.WorkerAt(fi); farmerHidden |= f >= 0 && w.People.IsHidden(f); }
+            });
+            string story = string.Join(" / ", said);
+            Check(said.Exists(x => x.Contains("ploughing")) && roamed > half.x && driver && farmerHidden && outside < 0.03f,
+                $"Its farmer climbs aboard and drives it up and down the field, staying in it ({roamed * 100f:0} cm about, {outside * 100f:0.0} cm past the edge): {story}");
+            int farmer = w.People.WorkerAt(fi);
+            Check(farmer >= 0, $"...the farmer is someone who lives here ({(farmer >= 0 ? w.People.CardOf(farmer).Now : "nobody took the job")})");
+            w.Clock.Hour = 18f;
+            Live(w, 90f);
+            Check(!w.People.OnTractor(fi) && (tractor.Position - start).magnitude < 0.02f && (tractor.Passenger == null || !tractor.Passenger.gameObject.activeSelf),
+                $"After the shift it goes back to its corner and the farmer climbs down ({w.Traffic.Describe(tractor)})");
+            UnityEngine.Object.DestroyImmediate(w.gameObject);
+        }
+
+        /// <summary>Close-ups of the living world: a lorry loading at the barn, a taxi with its passenger, the farmer on the tractor.</summary>
+        public static void LivingRenders()
+        {
+            EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            WonderlandLighting.CreateKeyLight();
+            BuildGrid.Snap = false;
+            var w = Scratch("Living renders", 0f);
+            var t = w.Terrain;
+            w.Sky.Shown = false;
+            w.BuildPath(Line(t, new Vector2(-0.7f, 0f), new Vector2(0.7f, 0f)), PathKind.Road);
+            w.PlaceHouse(new HouseInstance { x = -0.45f, z = 0.11f, variant = Catalog.Barn });
+            w.PlaceHouse(new HouseInstance { x = 0.45f, z = 0.11f, variant = Catalog.Bakery });
+            w.PlaceHouse(new HouseInstance { x = -0.1f, z = -0.06f, rotation = 180f, variant = Catalog.TaxiRank });
+            w.PlaceHouse(new HouseInstance { x = 0.05f, z = 0.3f, variant = Catalog.WheatField });
+            w.PlaceHouse(new HouseInstance { x = -0.3f, z = 0.4f, variant = Catalog.Cottage });
+            w.PlaceHouse(new HouseInstance { x = -0.45f, z = 0.55f, variant = Catalog.Cottage });
+            w.PlaceHouse(new HouseInstance { x = 0.4f, z = 0.55f, variant = Catalog.Thatched });
+            w.PlacePerson(new Vector3(-0.6f, 0f, 0.07f), 2, 777);
+            int bi = w.Buildings.Houses.FindIndex(h => h.variant == Catalog.Barn), ki = w.Buildings.Houses.FindIndex(h => h.variant == Catalog.Bakery);
+            int ci = w.Buildings.Houses.FindIndex(h => h.variant == Catalog.Bakery);
+            w.People.Grid.Complete(); w.Clock.Hour = 7.5f; w.People.Step(Dt); w.Traffic.Refresh(true);
+            w.People.SetStock(bi, 6f); w.People.SetStock(ki, 0f);
+            w.People.PreferTaxi = true;
+            w.People.Deciders.Add(new SendOnce { Seed = 777, House = ci });
+            var cam = new GameObject("Camera").AddComponent<Camera>();
+            cam.clearFlags = CameraClearFlags.SolidColor; cam.backgroundColor = new Color(0.32f, 0.3f, 0.28f);
+            cam.nearClipPlane = 0.01f; cam.fieldOfView = 30f;
+            void Shoot(Vector2 at, Vector3 from, string file)
+            {
+                var p = w.transform.TransformPoint(new Vector3(at.x, t.SurfaceAt(at.x, at.y) + 0.01f, at.y));
+                cam.transform.position = p + from;
+                cam.transform.rotation = Quaternion.LookRotation(p - cam.transform.position);
+                WonderlandRenders.Capture(cam, file, 1400, 900);
+            }
+            var lorry = w.Traffic.Vehicles.Find(v => v.Kind == VehicleKind.Flatbed);
+            var tractor = w.Traffic.Vehicles.Find(v => v.Kind == VehicleKind.Tractor);
+            bool loading = false, taxi = false, plough = false;
+            for (float s = 0f; s < 400f && !(loading && taxi && plough); s += Dt)
+            {
+                w.Clock.Tick(Dt); w.People.Step(Dt); w.Traffic.Step(Dt);
+                if (!loading && lorry?.Job is { Stage: 1, Shown: >= 3 }) { loading = true; Shoot(lorry.Position, new Vector3(-0.12f, 0.1f, -0.14f), "living-lorry-loading.png"); }
+                var cab = w.Traffic.TaxiOf(777);
+                if (!taxi && cab != null && cab.Speed > 0.02f) { taxi = true; Shoot(cab.Position, new Vector3(0.1f, 0.08f, -0.12f), "living-taxi-passenger.png"); }
+                if (!plough && tractor != null && w.People.OnTractor(tractor.Field) && tractor.Speed > 0.01f) { plough = true; Shoot(tractor.Position, new Vector3(-0.09f, 0.08f, -0.1f), "living-tractor.png"); }
+            }
+            Debug.Log($"Living renders: loading {loading}, taxi {taxi}, plough {plough}");
+            if (Application.isBatchMode) EditorApplication.Exit(0);
         }
     }
 }

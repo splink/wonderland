@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace Wonderland
 {
-    public enum VehicleKind { Car = 0, Motorbike = 1, Bicycle = 2, Ambulance = 3, Police = 4, FireEngine = 5, Taxi = 6, Van = 7, Bus = 8, Truck = 9, Tanker = 10, Flatbed = 11 }
+    public enum VehicleKind { Car = 0, Motorbike = 1, Bicycle = 2, Ambulance = 3, Police = 4, FireEngine = 5, Taxi = 6, Van = 7, Bus = 8, Truck = 9, Tanker = 10, Flatbed = 11, Tractor = 12 }
 
     /// <summary>
     /// Storybook road vehicles at the villagers' scale (a car is 5 cm long): rounded cars in four colours, a motorbike and
@@ -23,7 +23,7 @@ namespace Wonderland
         public static float Length(VehicleKind k) => k switch
         {
             VehicleKind.Motorbike => 0.026f, VehicleKind.Bicycle => 0.022f, VehicleKind.FireEngine => 0.075f, VehicleKind.Ambulance => 0.058f,
-            VehicleKind.Van => 0.056f, VehicleKind.Bus => 0.1f, VehicleKind.Truck => 0.088f, VehicleKind.Tanker => 0.088f, VehicleKind.Flatbed => 0.088f, _ => 0.05f,
+            VehicleKind.Van => 0.056f, VehicleKind.Bus => 0.1f, VehicleKind.Truck => 0.088f, VehicleKind.Tanker => 0.088f, VehicleKind.Flatbed => 0.088f, VehicleKind.Tractor => 0.034f, _ => 0.05f,
         };
 
         public static Mesh Get(VehicleKind k, int colour = 0)
@@ -67,6 +67,7 @@ namespace Wonderland
                 case VehicleKind.Truck: Lorry(b, CarColours[colour], false); break;
                 case VehicleKind.Tanker: Lorry(b, Pal.Hex("#3E6FB0"), true); break;
                 case VehicleKind.Flatbed: Flatbed(b, CarColours[colour]); break;
+                case VehicleKind.Tractor: Tractor(b); break;
                 default: Bike(b, false); break;
             }
             return b.ToMesh(k + "_" + colour);
@@ -224,6 +225,41 @@ namespace Wonderland
             b.AddBox(new Vector3(0f, BedTop + 0.0022f, BedCentre - BedLength / 2 + 0.0006f), new Vector3(W, 0.0044f, 0.0012f), body);
             b.AddBox(new Vector3(0f, BedTop + 0.006f, BedCentre + BedLength / 2 - 0.0008f), new Vector3(W, 0.012f, 0.0016f), Pal.Shade(body, 0.85f));
         }
+
+        /// <summary>
+        /// A little red tractor: big ridged back wheels, small front ones, a long bonnet with a chimney, an open seat
+        /// (the farmer sits at <see cref="TractorSeat"/>) under a roll bar.
+        /// </summary>
+        private static void Tractor(MeshBuilder b)
+        {
+            var red = Pal.Hex("#C8392E"); var tyre = Pal.TrainBlack; var hub = Pal.Hex("#E8C24A"); var metal = Pal.Hex("#4A4A52");
+            foreach (int s in new[] { -1, 1 })
+            {
+                b.Push(new Vector3(s * 0.0105f, 0.0085f, -0.007f), Quaternion.Euler(0f, 0f, 90f));
+                b.AddCylinder(new Vector3(0f, -0.0028f, 0f), 0.0085f, 0.0085f, 0.0056f, 14, tyre, tyre, true, true);
+                b.AddCylinder(new Vector3(0f, -0.003f, 0f), 0.0045f, 0.0045f, 0.006f, 10, hub, hub, true, true);
+                b.Pop();
+                b.Push(new Vector3(s * 0.008f, 0.0048f, 0.011f), Quaternion.Euler(0f, 0f, 90f));
+                b.AddCylinder(new Vector3(0f, -0.0018f, 0f), 0.0048f, 0.0048f, 0.0036f, 12, tyre, tyre, true, true);
+                b.AddCylinder(new Vector3(0f, -0.002f, 0f), 0.0024f, 0.0024f, 0.004f, 8, hub, hub, true, true);
+                b.Pop();
+                b.AddBox(new Vector3(s * 0.0105f, 0.0175f, -0.007f), new Vector3(0.0066f, 0.0012f, 0.017f), red);   // mudguards
+            }
+            b.AddBox(new Vector3(0f, 0.0105f, 0.007f), new Vector3(0.011f, 0.009f, 0.022f), red, Pal.Shade(red, 1.1f), Pal.Shade(red, 0.75f));   // bonnet
+            b.AddBox(new Vector3(0f, 0.0105f, 0.0182f), new Vector3(0.0102f, 0.008f, 0.0008f), metal);   // grille
+            b.AddBox(new Vector3(0f, 0.012f, -0.007f), new Vector3(0.012f, 0.005f, 0.012f), red);
+            b.AddBox(new Vector3(0f, 0.016f, -0.009f), new Vector3(0.007f, 0.0014f, 0.006f), Pal.TrainBlack);   // seat
+            b.AddBox(new Vector3(0f, 0.0195f, -0.0118f), new Vector3(0.007f, 0.006f, 0.0012f), Pal.TrainBlack);
+            b.AddCylinder(new Vector3(0f, 0.015f, -0.0015f), 0.0006f, 0.0006f, 0.006f, 4, metal, metal, false);
+            b.AddCylinder(new Vector3(0f, 0.021f, -0.0015f), 0.002f, 0.002f, 0.0006f, 8, Pal.TrainBlack, Pal.TrainBlack, true, true);   // steering wheel
+            b.AddCylinder(new Vector3(0.0035f, 0.015f, 0.012f), 0.0008f, 0.0008f, 0.012f, 6, metal, Pal.TrainBlack, true, true);   // chimney
+            foreach (int s in new[] { -1, 1 }) b.AddBox(new Vector3(s * 0.0072f, 0.0255f, -0.0125f), new Vector3(0.0012f, 0.019f, 0.0012f), metal);   // roll bar
+            b.AddBox(new Vector3(0f, 0.0348f, -0.0125f), new Vector3(0.0156f, 0.0012f, 0.0012f), metal);
+            foreach (int s in new[] { -1, 1 }) b.AddBlob(new Vector3(s * 0.0035f, 0.0128f, 0.0185f), Vector3.one * 0.0011f, 0, 0f, 60 + s, (_, __) => Pal.Glow(Pal.Hex("#FFF2C0")));
+        }
+
+        /// <summary>Where the farmer sits on the tractor (local, the figure's feet).</summary>
+        public static readonly Vector3 TractorSeat = new(0f, 0.005f, -0.009f);
 
         /// <summary>The flat bed of a <see cref="VehicleKind.Flatbed"/>: its top, its middle (z) and its length.</summary>
         public const float BedTop = 0.0105f, BedCentre = -0.012f, BedLength = 0.06f;

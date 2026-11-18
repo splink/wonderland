@@ -395,6 +395,12 @@ namespace Wonderland
         /// <summary>What a place makes, in words ("sacks of wheat").</summary>
         public static string Produce(int variant) => ProduceOf(Catalog.Get(variant));
 
+        /// <summary>Whether a field's farmer is at work on its tractor now.</summary>
+        public bool OnTractor(int house) => PlaceAt(house) is { Worker: { } w } p && p.Bp.Tractors > 0 && AtWork(w, house) && w.Hidden;
+
+        /// <summary>The outfit, seed and name of the villager who works at a place (style 0, seed 0, null if nobody).</summary>
+        public (int style, int seed, string name) WorkerOf(int house) => PlaceAt(house) is { Worker: { } w } ? (w.Style, w.Seed, w.Name) : (0, 0, null);
+
         /// <summary>The villager who works at a place, or -1.</summary>
         public int WorkerAt(int house) => PlaceAt(house)?.Worker?.Index ?? -1;
 

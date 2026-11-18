@@ -50,7 +50,9 @@ namespace Wonderland
             public MeshFilter Load;            // what shows on the bed
             public int Rank = -1;              // taxis: the place they wait at (building index)
             public Fare Fare;                  // ...and the fare they are on, or null
-            public Transform Passenger;        // who sits in the back
+            public Transform Passenger;        // who sits in the back (or at the wheel of a tractor)
+            public int Field = -1;             // tractors: the field they work (building index)
+            public ParticleSystem Exhaust;
         }
 
         [System.Serializable]
@@ -224,7 +226,7 @@ namespace Wonderland
         /// <summary>Homes near a road get a vehicle (half a car, the rest a bicycle or a motorbike, by where the house stands); stations their own.</summary>
         private void Populate()
         {
-            var wanted = new List<(VehicleKind kind, Vector2 home, int colour, int station, string owner, int depot, int rank)>();
+            var wanted = new List<(VehicleKind kind, Vector2 home, int colour, int station, string owner, int depot, int rank, int field)>();
             var houses = world.Buildings.Houses;
             int privateCount = 0;
             for (int i = 0; i < houses.Count; i++)
@@ -235,16 +237,18 @@ namespace Wonderland
                 if (bp.Base)
                 {
                     var kind = bp.Id == Catalog.Hospital ? VehicleKind.Ambulance : VehicleKind.Police;
-                    if (NearestNode(door, 0.16f, true) >= 0) wanted.Add((kind, door, 0, i, bp.Name, -1, -1));
+                    if (NearestNode(door, 0.16f, true) >= 0) wanted.Add((kind, door, 0, i, bp.Name, -1, -1, -1));
                     continue;
                 }
-                if (bp.Id == Catalog.FireStation) { if (NearestNode(door, 0.16f, true) >= 0) wanted.Add((VehicleKind.FireEngine, door, 0, i, bp.Name, -1, -1)); continue; }
+                if (bp.Id == Catalog.FireStation) { if (NearestNode(door, 0.16f, true) >= 0) wanted.Add((VehicleKind.FireEngine, door, 0, i, bp.Name, -1, -1, -1)); continue; }
+                // A field's tractor waits at its corner (no road needed).
+                for (int n = 0; n < bp.Tractors; n++) wanted.Add((VehicleKind.Tractor, TractorPark(h), 0, -1, bp.Name, -1, -1, i));
                 // Taxis wait at a rank (by a road) for fares.
                 if (bp.Taxis > 0 && NearestNode(door, 0.16f, true) >= 0)
-                    for (int n = 0; n < bp.Taxis; n++) wanted.Add((VehicleKind.Taxi, door + new Vector2(n * 0.03f, 0f), 0, -1, bp.Name, -1, i));
+                    for (int n = 0; n < bp.Taxis; n++) wanted.Add((VehicleKind.Taxi, door + new Vector2(n * 0.03f, 0f), 0, -1, bp.Name, -1, i, -1));
                 // Lorries live where something is made (by a road): they carry it to where it is wanted.
                 if (bp.Lorries > 0 && NearestNode(door, 0.16f, true) >= 0)
-                    for (int n = 0; n < bp.Lorries; n++) wanted.Add((VehicleKind.Flatbed, door + new Vector2(n * 0.03f, 0f), (i + n) % 4, -1, bp.Name, i, -1));
+                    for (int n = 0; n < bp.Lorries; n++) wanted.Add((VehicleKind.Flatbed, door + new Vector2(n * 0.03f, 0f), (i + n) % 4, -1, bp.Name, i, -1, -1));
                 if (!bp.Dwelling || privateCount >= MaxPrivate) continue;
                 uint hash = (uint)Mathf.RoundToInt(h.x * 7919f) * 2654435761u ^ (uint)Mathf.RoundToInt(h.z * 6271f) * 40503u;
                 hash ^= hash >> 13;
@@ -252,7 +256,7 @@ namespace Wonderland
                 var k = roll < 5 ? VehicleKind.Car : roll < 6 ? VehicleKind.Motorbike : roll < 8 ? VehicleKind.Bicycle : (VehicleKind)(-1);
                 if ((int)k < 0) continue;
                 if (NearestNode(door, Reach, k != VehicleKind.Bicycle) < 0) continue;
-                wanted.Add((k, door, (int)(hash >> 8) % 4, -1, bp.Name, -1, -1));
+                wanted.Add((k, door, (int)(hash >> 8) % 4, -1, bp.Name, -1, -1, -1));
                 privateCount++;
             }
             // Keep the vehicles that are still wanted (they go home); add the new ones; take away the rest.
@@ -260,9 +264,11 @@ namespace Wonderland
             foreach (var w in wanted)
             {
                 var v = Vehicles.Find(x => x.Kind == w.kind && (x.Home - w.home).sqrMagnitude < 1e-6f && !keep.Contains(x));
+                bool fresh = v == null;
                 if (v == null) v = Spawn(w.kind, w.home, w.colour);
                 v.Base = w.station; v.Owner = w.owner;
-                v.Rank = w.rank;
+                v.Rank = w.rank; v.Field = w.field;
+                if (fresh && v.Field >= 0) GoHome(v, true);   // (a tractor waits in its field's corner, not by a road)
                 v.Depot = w.depot; v.Cargo = w.depot >= 0 ? Catalog.Get(houses[w.depot].variant).Makes : Cargo.None;
                 if (w.station >= 0) v.BasePos = new Vector2(houses[w.station].x, houses[w.station].z);
                 keep.Add(v);
@@ -320,6 +326,7 @@ namespace Wonderland
         /// <summary>Puts a vehicle back at its parking place (beside the road nearest its home), parked.</summary>
         private void GoHome(Vehicle v, bool now)
         {
+            if (v.Field >= 0) { v.State = Mode.Parked; v.Speed = 0f; v.Path.Clear(); v.Next = -1; Place(v, v.Home, v.Heading); return; }   // (a tractor: back in its corner)
             int n = NearestNode(v.Home, Reach + 0.04f, Car(v));
             if (n < 0) { v.State = Mode.Parked; Place(v, v.Home, 0f); return; }
             if (!now) { DriveTo(v, graph[n].P, true); return; }
@@ -427,6 +434,7 @@ namespace Wonderland
                     if (v.Roams) { v.Timer -= dt; if (v.Timer <= 0f) Roam(v); return; }
                     if (v.Depot >= 0) { Freight(v, dt); return; }
                     if (v.Rank >= 0) { StepTaxi(v, dt); return; }
+                    if (v.Field >= 0) { StepTractor(v, dt); return; }
                     if (v.Base < 0 && !visiting.Contains(v)) ConsiderTrip(v, dt);
                     return;
                 case Mode.AtScene:
@@ -599,6 +607,7 @@ namespace Wonderland
         {
             if (v.Depot >= 0) return LorryLine(v);
             if (v.Rank >= 0) return TaxiLine(v);
+            if (v.Field >= 0) return TractorLine(v);
             string what = v.Kind switch
             {
                 VehicleKind.Car => "A car", VehicleKind.Motorbike => "A motorbike", VehicleKind.Bicycle => "A bicycle",
@@ -733,6 +742,7 @@ namespace Wonderland
         {
             if (seed == 0) return null;
             foreach (var v in Vehicles) if (v.Driver == seed) return v;
+            foreach (var v in Vehicles) if (v.Field >= 0 && FarmerSeed != null && Operating != null && Operating(v.Field) && FarmerSeed(v.Field) == seed) return v;   // (on a tractor)
             return TaxiOf(seed);   // (or riding in the back of a taxi)
         }
 
