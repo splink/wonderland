@@ -25,6 +25,8 @@ namespace Wonderland.Editor
             catch (Exception e) { Fail("Exception: " + e); }
             try { Tractors(); }
             catch (Exception e) { Fail("Exception: " + e); }
+            try { Town(); }
+            catch (Exception e) { Fail("Exception: " + e); }
             BuildGrid.Snap = true;
             Report.AppendLine(failures == 0 ? "RESULT: PASS" : $"RESULT: FAIL ({failures})");
             File.WriteAllText("Logs/living-results.txt", Report.ToString());
@@ -229,6 +231,95 @@ namespace Wonderland.Editor
             Check(!w.People.OnTractor(fi) && (tractor.Position - start).magnitude < 0.02f && (tractor.Passenger == null || !tractor.Passenger.gameObject.activeSelf),
                 $"After the shift it goes back to its corner and the farmer climbs down ({w.Traffic.Describe(tractor)})");
             UnityEngine.Object.DestroyImmediate(w.gameObject);
+        }
+
+        /// <summary>
+        /// The working town: the sawmill's lorry takes planks to the furniture shop; the post van empties every letterbox on
+        /// its round and comes back; visitors' cars use the car park by the shops (and leave it again); the ice cream parlour
+        /// has customers in the afternoon and the pub in the evening.
+        /// </summary>
+        private static void Town()
+        {
+            var w = Scratch("Working town", 160f);
+            var t = w.Terrain;
+            w.BuildPath(Line(t, new Vector2(-0.7f, 0f), new Vector2(0.7f, 0f)), PathKind.Road);
+            w.BuildPath(Line(t, new Vector2(0f, 0f), new Vector2(0f, 0.6f)), PathKind.Road);
+            void Put(int id, float x, float z, float rot = 0f) { string e = w.PlaceHouse(new HouseInstance { x = x, z = z, rotation = rot, variant = id }); if (e != null) Report.AppendLine($"INFO  {Catalog.Get(id).Name} at ({x}, {z}): {e}"); }
+            Put(Catalog.Sawmill, -0.5f, 0.12f); Put(Catalog.FurnitureShop, 0.5f, 0.11f);
+            Put(Catalog.PostOffice, -0.25f, -0.11f, 180f);
+            Put(Catalog.Letterbox, 0.3f, -0.04f); Put(Catalog.Letterbox, 0.04f, 0.4f);
+            Put(Catalog.Pub, 0.25f, 0.11f); Put(Catalog.IceCream, -0.2f, 0.11f);
+            Put(Catalog.CarPark, 0.35f, -0.12f, 180f);
+            float[] homes = { -0.55f, -0.4f, 0.55f };
+            foreach (float x in homes) Put(Catalog.Cottage, x, -0.12f, 180f);
+            foreach (float z in new[] { 0.25f, 0.4f, 0.55f }) { Put(Catalog.Townhouse, -0.09f, z, 90f); Put(Catalog.Cottage, 0.1f, z, -90f); }
+            int saw = w.Buildings.Houses.FindIndex(h => h.variant == Catalog.Sawmill), shop = w.Buildings.Houses.FindIndex(h => h.variant == Catalog.FurnitureShop);
+            w.People.Grid.Complete(); w.Clock.Hour = 9.3f; w.People.Step(Dt); w.Traffic.Refresh(true);
+            w.People.SetStock(saw, 6f); w.People.SetStock(shop, 0f);
+            var lorry = w.Traffic.Vehicles.Find(v => v.Kind == VehicleKind.Flatbed);
+            var van = w.Traffic.Vehicles.Find(v => v.Kind == VehicleKind.Van && v.Depot >= 0);
+            Check(lorry != null && lorry.Cargo == Cargo.Timber && van != null, $"The sawmill keeps a timber lorry and the post office a van ({(lorry != null ? w.Traffic.Describe(lorry) : "no lorry")}; {(van != null ? w.Traffic.Describe(van) : "no van")})");
+            var vanSaid = new List<string>(); var lorrySaid = new List<string>();
+            int carPark = w.Buildings.Houses.FindIndex(h => h.variant == Catalog.CarPark);
+            int mostParked = 0, logsShown = 0;
+            Live(w, 420f, s =>
+            {
+                if (van != null) { string l = w.Traffic.Describe(van); if (vanSaid.Count == 0 || vanSaid[^1] != l) vanSaid.Add(l); }
+                if (lorry != null) { string l = w.Traffic.Describe(lorry); if (lorrySaid.Count == 0 || lorrySaid[^1] != l) lorrySaid.Add(l); if (lorry.Job is { Stage: 2 }) logsShown = Mathf.Max(logsShown, lorry.Job.Crates); }
+                mostParked = Mathf.Max(mostParked, w.Traffic.ParkedAt(carPark));
+            });
+            Check(lorrySaid.Exists(x => x.Contains("planks to the furniture shop")) && logsShown >= 2 && w.People.StockAt(shop) >= 1f,
+                $"The sawmill's lorry takes planks to the furniture shop ({logsShown} loads of logs on the bed): {string.Join(" / ", lorrySaid)}");
+            Check(w.Traffic.Rounds >= 1 && vanSaid.Exists(x => x.Contains("emptying the letterbox")) && vanSaid.Exists(x => x.Contains("delivering the post")),
+                $"At half past nine the post van empties the letterboxes, delivers the post and comes back ({w.Traffic.Rounds} rounds): {string.Join(" / ", vanSaid)}");
+            int cars = 0; foreach (var v in w.Traffic.Vehicles) if (v.Kind is VehicleKind.Car or VehicleKind.Motorbike) cars++;
+            Check(mostParked >= 1, $"Visitors' cars park in the car park by the shops (up to {mostParked} at once; {cars} household cars and motorbikes)");
+            // Afternoon at the ice cream parlour, evening at the pub.
+            int ice = w.Buildings.Houses.FindIndex(h => h.variant == Catalog.IceCream), pub = w.Buildings.Houses.FindIndex(h => h.variant == Catalog.Pub);
+            int iceVisits = 0, pubVisits = 0;
+            w.Clock.Hour = 13.5f;
+            float h0 = w.Clock.Hour;
+            Live(w, 120f, s => iceVisits = Mathf.Max(iceVisits, w.People.PlaceCardOf(ice).Visitors + w.People.PlaceCardOf(ice).Today));
+            Report.AppendLine($"INFO  afternoon: {h0:0.0} -> {w.Clock.Hour:0.0} h, {w.People.People.Count} villagers; ice cream: {w.People.DescribePlace(ice)}");
+            w.Clock.Hour = 18.5f;
+            Live(w, 120f, s => pubVisits = Mathf.Max(pubVisits, w.People.PlaceCardOf(pub).Visitors + w.People.PlaceCardOf(pub).Today));
+            Report.AppendLine($"INFO  evening: -> {w.Clock.Hour:0.0} h; pub: {w.People.DescribePlace(pub)}");
+            Check(iceVisits >= 1 && pubVisits >= 1, $"The ice cream parlour has customers in the afternoon ({iceVisits}) and the pub in the evening ({pubVisits})");
+            Live(w, 200f);
+            Check(w.Traffic.ParkedAt(carPark) <= mostParked, $"...and the car park empties again as visits end ({w.Traffic.ParkedAt(carPark)} parked late on)");
+            UnityEngine.Object.DestroyImmediate(w.gameObject);
+        }
+
+        /// <summary>The living world's buildings in a row, fronts to the camera (docs/renders/living-buildings*.png).</summary>
+        public static void LivingGallery()
+        {
+            EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            var key = WonderlandLighting.CreateKeyLight();
+            WonderlandRenders.CreateFloor(4f);
+            var cam = WonderlandRenders.CreateCamera(new Vector3(0f, 0.3f, -0.9f), new Vector3(0f, 0.05f, 0f), 46f);
+            int[][] sets =
+            {
+                new[] { Catalog.Sawmill, Catalog.FurnitureShop, Catalog.IceCream, Catalog.Pub, Catalog.Hotel, Catalog.PostOffice },
+                new[] { Catalog.TaxiRank, Catalog.Letterbox, Catalog.CarPark },
+            };
+            for (int set = 0; set < sets.Length; set++)
+            {
+                var root = new GameObject("Row").transform;
+                float x = 0f; var ids = sets[set];
+                float total = 0f; foreach (int id in ids) total += Catalog.Get(id).Half.x * 2f + 0.03f;
+                x = -total / 2f;
+                foreach (int id in ids)
+                {
+                    float w = Catalog.Get(id).Half.x * 2f + 0.03f;
+                    WonderlandRenders.Place(root, HouseFactory.Get(id, 0), WonderlandMaterials.Lit, new Vector3(x + w / 2f, 0f, 0f), Quaternion.identity);
+                    x += w;
+                }
+                float back = set == 0 ? 0.95f : 0.45f;
+                cam.transform.position = new Vector3(0f, back * 0.32f, -back); cam.transform.LookAt(new Vector3(0f, 0.04f, 0f));
+                WonderlandRenders.Capture(cam, $"living-buildings-{set + 1}.png", 2400, 1100);
+                UnityEngine.Object.DestroyImmediate(root.gameObject);
+            }
+            if (Application.isBatchMode) EditorApplication.Exit(0);
         }
 
         /// <summary>Close-ups of the living world: a lorry loading at the barn, a taxi with its passenger, the farmer on the tractor.</summary>

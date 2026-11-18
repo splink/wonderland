@@ -37,6 +37,7 @@ case "$task" in
   trackshaperender) method=Wonderland.Editor.WonderlandJourney.TrackShapeRenders; graphics=() ;;
   living) method=Wonderland.Editor.WonderlandJourney.TestLiving ;;
   livingrender) method=Wonderland.Editor.WonderlandJourney.LivingRenders; graphics=() ;;
+  livinggallery) method=Wonderland.Editor.WonderlandJourney.LivingGallery; graphics=() ;;
   shops) method=Wonderland.Editor.WonderlandTownGallery.Run; graphics=() ;;
   trackprobe) method=Wonderland.Editor.WonderlandTrackProbe.Run ;;
   budget) method=Wonderland.Editor.WonderlandTrackProbe.Budget ;;

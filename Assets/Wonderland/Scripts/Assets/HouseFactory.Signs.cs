@@ -62,6 +62,25 @@ namespace Wonderland
                 case Catalog.Hospital:
                     RoofBoard(b, "HOSPITAL", 0.09f, 0.105f, 0.011f, Pal.Hex("#F4F2EC"), Pal.Hex("#D7382E"), flat: true);
                     break;
+                case Catalog.FurnitureShop:
+                    RoofBoard(b, "FURNITURE", 0.072f, 0.068f, 0.0085f, Pal.Hex("#5A3A22"), Cream);
+                    break;
+                case Catalog.IceCream:
+                    RoofBoard(b, "ICE CREAM", 0.06f, 0.034f, 0.008f, Pal.Hex("#F2A7C3"), Pal.Hex("#7A3A52"));
+                    Cone(b, new Vector3(0f, 0.08f, 0.004f));
+                    break;
+                case Catalog.Pub:
+                    RoofBoard(b, "THE RED LION", 0.08f, 0.068f, 0.0072f, Pal.Hex("#2E5A3A"), Gold);
+                    break;
+                case Catalog.Hotel:
+                    RoofBoard(b, "HOTEL", 0.08f, 0.102f, 0.012f, Pal.Hex("#5A1E2A"), Gold);
+                    break;
+                case Catalog.PostOffice:
+                    RoofBoard(b, "POST OFFICE", 0.072f, 0.068f, 0.0078f, Pal.Hex("#C8392E"), Pal.Hex("#F2C12E"));
+                    break;
+                case Catalog.Sawmill:
+                    Pylon(b, "SAWMILL", new Vector3(0.06f, 0.05f, -0.055f), 0.008f, Pal.Hex("#6E4A32"), Cream);
+                    break;
                 case Catalog.Police:
                     RoofBoard(b, "POLICE", 0.08f, 0.07f, 0.011f, Pal.Hex("#1F3E7A"), Cream);
                     break;
@@ -78,6 +97,16 @@ namespace Wonderland
                     RoofBoard(b, "BISCUITS", 0.1f, 0.055f, 0.0095f, Pal.Hex("#F2D49A"), Pal.Hex("#7A3A22"), flat: true, x: -0.03f);
                     break;
             }
+        }
+
+        /// <summary>A giant ice cream cone: a waffle cone with three scoops.</summary>
+        private static void Cone(MeshBuilder b, Vector3 at)
+        {
+            b.Push(at, Quaternion.Euler(180f, 0f, 0f));
+            b.AddCylinder(Vector3.zero, 0.0075f, 0.0012f, 0.02f, 10, Pal.Hex("#D9A55A"), Pal.Hex("#C08A42"), true);
+            b.Pop();
+            var scoops = new[] { "#F2A7C3", "#FFF2C0", "#A8D8A8" };
+            for (int k = 0; k < 3; k++) b.AddBlob(at + new Vector3((k - 1) * 0.0045f, 0.004f + (k == 1 ? 0.004f : 0f), 0f), Vector3.one * 0.0052f, 1, 0.05f, 80 + k, (_, __) => Pal.Hex(scoops[k]));
         }
 
         /// <summary>A name board standing on the roof's front edge on two legs (on a flat roof, at its front parapet).</summary>

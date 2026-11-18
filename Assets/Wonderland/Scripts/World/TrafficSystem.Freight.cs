@@ -277,11 +277,13 @@ namespace Wonderland
                 {
                     0 => $"on its way to collect {j.What} from the {Name(j.FromVariant)}",
                     1 => $"loading {j.What} at the {Name(j.FromVariant)}",
-                    2 => $"taking {j.Crates} crate{(j.Crates == 1 ? "" : "s")} of {j.What} to the {Name(j.ToVariant)}",
+                    2 => $"taking {j.Crates} {Unit(v.Cargo, j.Crates)} of {j.What} to the {Name(j.ToVariant)}",
                     _ => $"unloading {j.What} at the {Name(j.ToVariant)}",
                 };
             return $"A lorry from the {depot} - {doing}";
         }
+
+        private static string Unit(Cargo c, int n) => (c switch { Cargo.Timber => "load", Cargo.Goods => "box", _ => "crate" }) + (n == 1 ? "" : c == Cargo.Goods ? "es" : "s");
 
         /// <summary>What lorries are doing for a place (for its card): on their way with something, loading, unloading.</summary>
         public string DeliveriesFor(int house)

@@ -234,7 +234,7 @@ namespace Wonderland
         private static string ProduceOf(Blueprint bp) => bp.Id switch
         {
             Catalog.WheatField => "sacks of wheat", Catalog.Windmill => "flour", Catalog.Garden => "vegetables", Catalog.Greenhouse => "tomatoes",
-            Catalog.Barn => "milk and eggs", Catalog.Factory => "boxes of biscuits", _ => "goods",
+            Catalog.Barn => "milk and eggs", Catalog.Factory => "boxes of biscuits", Catalog.Sawmill => "planks", _ => "goods",
         };
 
         /// <summary>A shopping trip or a meal takes a little off the shelves; bare shelves send people off half satisfied.</summary>

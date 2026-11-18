@@ -52,6 +52,13 @@ namespace Wonderland
             public Fare Fare;                  // ...and the fare they are on, or null
             public Transform Passenger;        // who sits in the back (or at the wheel of a tractor)
             public int Field = -1;             // tractors: the field they work (building index)
+            public Round Round;                // post vans: the round under way, or null
+            public int LastRound = -1;         // ...and the last one started (day and time)
+            public Vector2 CarPark;            // visiting cars: the car park they are using (by where it stands)...
+            public int Bay = -1;               // ...the bay in it (-1: none)
+            public float ParkT, KerbHeading;   // ...how far into the bay, and where it turned in from
+            public int ParkDir;
+            public Vector2 Kerbside;
             public ParticleSystem Exhaust;
         }
 
@@ -246,6 +253,8 @@ namespace Wonderland
                 // Taxis wait at a rank (by a road) for fares.
                 if (bp.Taxis > 0 && NearestNode(door, 0.16f, true) >= 0)
                     for (int n = 0; n < bp.Taxis; n++) wanted.Add((VehicleKind.Taxi, door + new Vector2(n * 0.03f, 0f), 0, -1, bp.Name, -1, i, -1));
+                // The post office's van (by a road) does the rounds.
+                if (bp.Id == Catalog.PostOffice && NearestNode(door, 0.16f, true) >= 0) wanted.Add((VehicleKind.Van, door, 0, -1, bp.Name, i, -1, -1));
                 // Lorries live where something is made (by a road): they carry it to where it is wanted.
                 if (bp.Lorries > 0 && NearestNode(door, 0.16f, true) >= 0)
                     for (int n = 0; n < bp.Lorries; n++) wanted.Add((VehicleKind.Flatbed, door + new Vector2(n * 0.03f, 0f), (i + n) % 4, -1, bp.Name, i, -1, -1));
@@ -336,6 +345,8 @@ namespace Wonderland
             if (Vector2.Dot(v.Home - p, side) < 0f) side = -side;   // the kerb on the home's side
             v.State = Mode.Parked; v.Path.Clear(); v.Siren = false; v.Speed = 0f; v.ToHome = false; v.Driver = 0;   // (home: the driver goes in)
             if (v.Job != null) { v.Job = null; ShowLoad(v); ShowHop(v, Vector2.zero, -1f); }   // (a delivery called off: home empty)
+            if (v.Round != null) { v.Round = null; ShowHop(v, Vector2.zero, -1f); }
+            v.Bay = -1; v.ParkDir = 0;
             if (v.Fare != null)
             {
                 // Hopelessly stuck with a fare: they get out where it got to (the taxi is free once they have).
@@ -419,7 +430,11 @@ namespace Wonderland
                 var door = PeopleSystem.DoorStep(h);
                 float d = (door - v.Home).magnitude;
                 if (d < 0.25f || d > max) continue;
-                if (DriveTo(v, door, false)) { v.Driver = TakeDriver != null ? TakeDriver(v.Home, 0f) : 0; return; }
+                // A car park near the place, with a bay free: drive there instead of the kerb.
+                var aim = door;
+                if (Car(v) && FreeBay(door, out var carPark, out int bay) && Kerb(carPark) is { } kerb) { aim = kerb; v.CarPark = carPark; v.Bay = bay; }
+                if (DriveTo(v, aim, false)) { v.Driver = TakeDriver != null ? TakeDriver(v.Home, 0f) : 0; return; }
+                v.Bay = -1;
             }
         }
 
@@ -432,7 +447,7 @@ namespace Wonderland
             {
                 case Mode.Parked:
                     if (v.Roams) { v.Timer -= dt; if (v.Timer <= 0f) Roam(v); return; }
-                    if (v.Depot >= 0) { Freight(v, dt); return; }
+                    if (v.Depot >= 0) { if (v.Kind == VehicleKind.Van) StepPost(v, dt); else Freight(v, dt); return; }
                     if (v.Rank >= 0) { StepTaxi(v, dt); return; }
                     if (v.Field >= 0) { StepTractor(v, dt); return; }
                     if (v.Base < 0 && !visiting.Contains(v)) ConsiderTrip(v, dt);
@@ -537,10 +552,18 @@ namespace Wonderland
             v.Speed = 0f;
             if (v.Job != null) { JobArrived(v); return; }
             if (v.Fare != null) { TaxiArrived(v); return; }
+            if (v.Round != null) { PostArrived(v); return; }
             if (v.Roams) { Trips++; Roam(v); return; }
             if (v.Base >= 0 && Responding(v)) { OnScene(v); return; }
             if (v.ToHome) { Trips++; GoHome(v, true); v.Timer = v.Rng.Range(20f, 60f); return; }
-            // At the destination: park at the kerb a while, then home.
+            // At the destination: into the car park's bay, or park at the kerb, a while; then home.
+            if (v.Bay >= 0)
+            {
+                v.State = Mode.Parked; v.Kerbside = v.Position; v.KerbHeading = v.Heading; v.ParkT = 0f; v.ParkDir = 1;
+                v.Timer = v.Rng.Range(20f, 45f); v.ToHome = true;
+                visiting.Add(v);
+                return;
+            }
             v.State = Mode.Parked;
             var fwd = new Vector2(Mathf.Sin(v.Heading * Mathf.Deg2Rad), Mathf.Cos(v.Heading * Mathf.Deg2Rad));
             Place(v, v.Position + new Vector2(fwd.y, -fwd.x) * 0.01f, v.Heading);
@@ -559,8 +582,10 @@ namespace Wonderland
             foreach (var v in visiting)
             {
                 if (v.State != Mode.Parked) { (done ??= new List<Vehicle>()).Add(v); continue; }
+                if (StepParking(v, dt, false) && v.ParkDir > 0) continue;   // turning into its bay
                 v.Timer -= dt;
                 if (v.Timer > 0f) continue;
+                if (StepParking(v, dt, true)) continue;                      // backing out of it
                 if (!DriveTo(v, v.Home, true)) GoHome(v, true);
                 (done ??= new List<Vehicle>()).Add(v);
             }
@@ -605,7 +630,7 @@ namespace Wonderland
         /// <summary>One line on a vehicle for the palette.</summary>
         public string Describe(Vehicle v)
         {
-            if (v.Depot >= 0) return LorryLine(v);
+            if (v.Depot >= 0) return v.Kind == VehicleKind.Van ? PostLine(v) : LorryLine(v);
             if (v.Rank >= 0) return TaxiLine(v);
             if (v.Field >= 0) return TractorLine(v);
             string what = v.Kind switch
@@ -616,7 +641,7 @@ namespace Wonderland
             };
             string doing = v.State switch
             {
-                Mode.Parked => v.Base >= 0 ? "waiting at the station" : v.ToHome ? "parked while its driver is out" : "parked at home",
+                Mode.Parked => v.Base >= 0 ? "waiting at the station" : v.Bay >= 0 ? "in the car park while its driver is out" : v.ToHome ? "parked while its driver is out" : "parked at home",
                 Mode.AtScene => "at the scene",
                 _ => v.Siren ? "on a call, lights flashing" : v.Roams ? (v.Speed < 0.003f ? "waiting at the lights" : "driving about town") : v.ToHome ? "heading home" : "out on an errand",
             };

@@ -260,7 +260,7 @@ namespace Wonderland
                     string place = PlaceBody(c, i);
                     // What it takes part in, and what is happening for it now.
                     var does = PlaceRoles(Catalog.Get(h.variant));
-                    string deliveries = World.Traffic.DeliveriesFor(i);
+                    string deliveries = World.Traffic.DeliveriesFor(i) ?? World.Traffic.PostFor(i) ?? World.Traffic.ParkingFor(i);
                     if (does != null || deliveries != null)
                     {
                         var roles = new CardText().Section("Activities");

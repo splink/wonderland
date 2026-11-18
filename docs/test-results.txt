@@ -62,7 +62,7 @@ PASS  The railcar runs along its line the way the arrows point and stops at the 
 PASS  An open line with buffers at both ends
 PASS  Put on a single line facing each other, both run the way the arrows point - no head-on, nobody reverses (closest 7.3 cm)
 PASS  They run on to the buffers (0.9 m, 0.1 m)
-PASS  Every one of the 58 library objects builds (largest: Wheat field, 16552 vertices)
+PASS  Every one of the 66 library objects builds (largest: Wheat field, 16552 vertices)
 PASS  Library objects stay within the vertex budget
 PASS  A village square goes up (9/9 places)
 PASS  New homes and shops bring their residents (5 moved in)
@@ -117,7 +117,7 @@ PASS  The village clock runs a day in 7.6 minutes (360 s of daylight, 97 s of ni
 PASS  The daily rhythm: shops in the morning, lunch at midday, the fair in the afternoon, the square in the evening
 PASS  A railway loop divides the land
 PASS  A village goes up around the railway (13/13 places, 8 residents moved in)
-PASS  The walk grid sees the railway as a divide (2 regions over 6972 cells, built in 24 ms)
+PASS  The walk grid sees the railway as a divide (2 regions over 6972 cells, built in 25 ms)
 PASS  Every resident knows their home (8/8; 2 live inside the loop)
 PASS  The baker lives over the bakery
 PASS  At two in the morning everyone is asleep at home (8/8)
@@ -140,8 +140,8 @@ PASS  ...get off at the far station and walk on to where they were going
 PASS  A lane with a level crossing joins the two sides (1 regions)
 PASS  ...and people from inside the loop walk over it to the village
 PASS  Save/load keeps the time (10:00), the clock speed, needs and homes (8/8)
-PASS  40 villagers: 0.27 ms per frame on average, worst 5.6 ms, 1.5 decisions/s, slowest decision 2.1 ms, places directory 0.5 ms (editor timing)
-PASS  After an edit the walk grid rebuilds over 32 frames (60 ms of work, worst frame 3.2 ms)
+PASS  40 villagers: 0.28 ms per frame on average, worst 5.9 ms, 1.5 decisions/s, slowest decision 3.4 ms, places directory 0.5 ms (editor timing)
+PASS  After an edit the walk grid rebuilds over 31 frames (59 ms of work, worst frame 3.3 ms)
 PASS  With no places at all, villagers wander by day and sleep under the stars at night
 PASS  A working village goes up (15/15 places, 10 villagers)
 PASS  Opening hours: the bakery opens at half six and shuts at six, the carousel stops in the evening, the fountain never closes
@@ -201,7 +201,7 @@ PASS  Save and load keep where the cameras look (71 / 15 degrees; loaded 71 / 15
 PASS  Erasing a camera leaves the other selected, still aimed where it was
 PASS  Sound: 3 sources near the crossroads (at most 8); off means silent; five barks in a row play once; a meow out of earshot isn't played
 PASS  Taking a road away re-routes or parks the traffic (worst 1.4 cm off the remaining roads)
-PASS  A busy town (40 villagers, 8 vehicles, 2 animals, sound and a camera feed): 0.25 ms per frame on average, worst 2.5 ms (editor timing, simulation only)
+PASS  A busy town (40 villagers, 8 vehicles, 2 animals, sound and a camera feed): 0.26 ms per frame on average, worst 2.6 ms (editor timing, simulation only)
 PASS  A road crosses the railway at a level crossing; homes on both sides have vehicles (5 places, 4 vehicles)
 PASS  Vehicles wait at the level crossing while a train goes by (245 waits, 7 trips), and are never on it with the train
 PASS  A loop drawn in two halves closes (1 pieces, 0 dead ends)
@@ -343,5 +343,5 @@ PASS  Land still grows with bad room data
 PASS  Trimmed land grows back (1.19 -> 1.04 -> 1.16 m2)
 INFO  terrain: 6 chunk meshes, 17 k triangles, land 3.49 m2 of a 4.8 x 4.8 m grid
 INFO  static budget of this world: 346 mesh renderers (~draw calls per eye pass before batching, excl. shadows/UI), 1166 k triangles, ground cover 5538 tufts
-INFO  trees 131, forest chunks 30, houses 3, track 3.43 m, undo depth 9, journey simulated in 75.8 s wall time
+INFO  trees 131, forest chunks 30, houses 3, track 3.43 m, undo depth 9, journey simulated in 75.9 s wall time
 RESULT: PASS

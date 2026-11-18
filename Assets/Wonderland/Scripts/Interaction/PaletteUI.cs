@@ -536,11 +536,27 @@ namespace Wonderland
                 hit = info.collider.GetComponent<PaletteButton>();
                 distance = info.distance;
                 if (hit == null && info.collider.transform == transform) distance = info.distance; // panel back: swallow the ray
+                // From a steep angle the ray can graze the edge of a neighbouring chip first: the chip pressed is the one
+                // whose face the pointer actually lands on.
+                if (hit != null && !OnFace(hit, info.collider, ray, out _))
+                    foreach (var other in Physics.RaycastAll(ray, 1.5f, 1 << UiLayer, QueryTriggerInteraction.Collide))
+                        if (other.collider.GetComponent<PaletteButton>() is { } b && b != hit && OnFace(b, other.collider, ray, out float d)) { hit = b; distance = d; break; }
             }
             if (Hovered && Hovered != hit) Hovered.Hovered = false;
             Hovered = hit;
             if (hit) hit.Hovered = true;
             return hit;
+        }
+
+        /// <summary>Whether the ray crosses a button's face (its front plane, within its outline); where, along the ray.</summary>
+        private static bool OnFace(PaletteButton b, Collider c, Ray ray, out float distance)
+        {
+            distance = 0f;
+            if (c is not BoxCollider box) return true;
+            var t = b.transform;
+            if (!new Plane(t.forward, t.TransformPoint(box.center)).Raycast(ray, out distance)) return false;
+            var p = t.InverseTransformPoint(ray.GetPoint(distance)) - box.center;
+            return Mathf.Abs(p.x) <= box.size.x / 2f && Mathf.Abs(p.y) <= box.size.y / 2f;
         }
 
         public void ClearHover()
