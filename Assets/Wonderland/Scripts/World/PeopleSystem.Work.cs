@@ -28,7 +28,7 @@ namespace Wonderland
     {
         public const float StockCap = 6f;
         public const float GrowRate = 0.8f;        // crates per hour of work on a farm
-        public const float SaleSize = 0.25f;       // of a crate, per shopping trip or meal
+        public const float SaleSize = 0.1f;        // of a crate, per shopping trip or meal (the shelves also empty through the day: SoldPerHour)
         public const float VanRate = 0.15f;        // crates per hour a shop gets from beyond the village anyway...
         public const float VanFloor = 2f;          // ...but only up to this: the rest comes from the village's farms and works
         public const float SoldPerHour = 0.35f;    // crates an open shop sells in an hour to customers from round about (a lorry comes twice a day)
@@ -50,7 +50,7 @@ namespace Wonderland
         private Stock StockFor(long key, Blueprint bp)
         {
             if (!stocks.TryGetValue(key, out var s))
-                stocks[key] = s = new Stock { Have = bp.Goods == Goods.Sells ? StockCap : 0f };   // a new shop opens stocked
+                stocks[key] = s = new Stock { Have = bp.Goods == Goods.Sells ? StockCap - 2f : bp.Goods == Goods.Grows ? 3f : 0f };   // a new shop opens two crates short (its first lorry comes at once), a new farm has a first harvest ready
             return s;
         }
 
@@ -79,10 +79,10 @@ namespace Wonderland
             jobPairs.Clear();
             foreach (var a in agents)
             {
-                if (a.HomeHouse < 0 || a.HomeHouse >= places.Count || a.Child) continue;
-                var home = places[a.HomeHouse];
-                if (!Works(a) && home.Bp.Job == null) continue;   // (whoever lives over the shop keeps it)
-                int region = home.Door >= 0 ? home.Region[home.Door] : Grid.RegionAt(a.Home);
+                if (a.HomeHouse >= places.Count || a.Child) continue;
+                var home = a.HomeHouse >= 0 ? places[a.HomeHouse] : null;   // (no home yet: still glad of a job)
+                if (!Works(a) && home?.Bp.Job == null) continue;   // (whoever lives over the shop keeps it)
+                int region = home != null && home.Door >= 0 ? home.Region[home.Door] : Grid.RegionAt(a.Home);
                 foreach (var p in places)
                 {
                     if (p.Bp.Job == null || (!Works(a) && p.House != a.HomeHouse)) continue;
@@ -110,9 +110,26 @@ namespace Wonderland
             foreach (var a in agents)
             {
                 long key = a.Workplace >= 0 ? places[a.Workplace].Key : 0;
-                if (key != 0 && key != a.JobKey && !quiet) News = $"{a.Name} is the new {places[a.Workplace].Bp.Job} at the {places[a.Workplace].Bp.Name.ToLower()}";
+                bool fresh = key != 0 && key != a.JobKey;
+                if (fresh && !quiet) News = $"{a.Name} is the new {places[a.Workplace].Bp.Job} at the {places[a.Workplace].Bp.Name.ToLower()}";
                 a.JobKey = key;
+                if (fresh && !quiet) StartWorkNow(a);
             }
+        }
+
+        /// <summary>Just taken on: if it is their shift and they are free, they set off for work now (not when next they choose).</summary>
+        private void StartWorkNow(Agent a)
+        {
+            if (a.State is Activity.Sleeping or Activity.Riding or Activity.InTaxi or Activity.Hailing or Activity.OnRide or Activity.Working or Activity.Unwell) return;
+            if (a.Workplace < 0 || a.Workplace >= places.Count) return;
+            var p = places[a.Workplace];
+            if (!p.Bp.OnShift(Clock.Hour)) return;
+            var work = new Intent { What = Intent.Kind.Work, For = Need.Work, House = p.House, Spot = p.Door >= 0 && !p.Bp.WorksIndoors ? p.Door : -1, Target = p.Work, FromStation = -1, ToStation = -1, From = -1, Place = p.Bp.Name, Planned = true };
+            int mine = Grid.RegionAt(a.Position);
+            if (work.Spot >= 0 && Taken(p.House, work.Spot)) return;
+            if (!Grid.SameRegion(mine, p.WorkRegion) && !TrainRoute(mine, p.WorkRegion, a.Position, p.Work, out work.FromStation, out work.ToStation)) return;
+            if (a.Hidden || a.Claimed) Stop(a, 0f);
+            Carry(a, work);
         }
 
         // ------------------------------------------------------------------ choosing work

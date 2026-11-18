@@ -63,9 +63,9 @@ namespace Wonderland
             if (v.Job != null) { AtStop(v, dt); return; }
             v.Timer -= dt;
             if (v.Timer > 0f) return;
-            v.Timer = v.Rng.Range(8f, 20f);
+            v.Timer = v.Rng.Range(3f, 8f);
             float hour = world.Clock.Hour;
-            if (hour < 6.5f || hour > 19.5f) return;
+            if (hour < 6f || hour > 22f) return;
             var job = PlanDelivery(v);
             if (job == null) return;
             v.Job = job;

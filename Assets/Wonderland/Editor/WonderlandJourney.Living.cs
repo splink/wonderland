@@ -19,6 +19,8 @@ namespace Wonderland.Editor
             Report.Clear(); failures = 0; BuildGrid.Snap = false;
             EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             WonderlandLighting.CreateKeyLight();
+            try { Immediate(); }
+            catch (Exception e) { Fail("Exception: " + e); }
             try { Deliveries(); }
             catch (Exception e) { Fail("Exception: " + e); }
             try { Taxis(); }
@@ -52,6 +54,37 @@ namespace Wonderland.Editor
                 w.Clock.Tick(Dt); w.People.Step(Dt); w.Traffic.Step(Dt);
                 watch?.Invoke(s);
             }
+        }
+
+        /// <summary>
+        /// Immediate: in a lived-in village at ten in the morning, a barn and a bakery go up by the road. Within a minute
+        /// someone has taken each job and is on the way to work, and the barn's lorry has set off with a first load for the
+        /// bakery - no waiting for tomorrow.
+        /// </summary>
+        private static void Immediate()
+        {
+            var w = Scratch("Immediate", 480f);
+            var t = w.Terrain;
+            w.BuildPath(Line(t, new Vector2(-0.7f, 0f), new Vector2(0.7f, 0f)), PathKind.Road);
+            foreach (var (x, z) in new[] { (-0.3f, -0.12f), (-0.1f, -0.12f), (0.1f, -0.12f), (0.3f, -0.12f) }) w.PlaceHouse(new HouseInstance { x = x, z = z, rotation = 180f, variant = Catalog.Cottage });
+            w.People.Grid.Complete(); w.Clock.Hour = 10f;
+            Live(w, 20f);   // (the village settles in)
+            w.PlaceHouse(new HouseInstance { x = -0.45f, z = 0.11f, variant = Catalog.Barn });
+            w.PlaceHouse(new HouseInstance { x = 0.45f, z = 0.11f, variant = Catalog.Factory });
+            w.PlaceHouse(new HouseInstance { x = 0.2f, z = 0.11f, variant = Catalog.Bakery });
+            int barn = w.Buildings.Houses.FindIndex(h => h.variant == Catalog.Barn), works = w.Buildings.Houses.FindIndex(h => h.variant == Catalog.Factory);
+            float hired = -1f, onTheWay = -1f, lorryOff = -1f;
+            Live(w, 60f, s =>
+            {
+                int worker = w.People.WorkerAt(works);
+                if (hired < 0f && worker >= 0) hired = s;
+                if (onTheWay < 0f && worker >= 0 && w.People.StateOf(worker) is PeopleSystem.Activity.Walking or PeopleSystem.Activity.Working) onTheWay = s;
+                var lorry = w.Traffic.Vehicles.Find(v => v.Kind == VehicleKind.Flatbed);
+                if (lorryOff < 0f && lorry?.Job != null) lorryOff = s;
+            });
+            Check(hired >= 0f && hired < 5f && onTheWay >= 0f && onTheWay < 10f, $"A new factory has a worker at once, on the way to work (hired after {hired:0.0} s, setting off after {onTheWay:0.0} s)");
+            Check(lorryOff >= 0f && lorryOff < 15f, $"The new barn's lorry sets off with a first load at once (after {lorryOff:0.0} s): {w.Traffic.Describe(w.Traffic.Vehicles.Find(v => v.Kind == VehicleKind.Flatbed))}");
+            UnityEngine.Object.DestroyImmediate(w.gameObject);
         }
 
         /// <summary>

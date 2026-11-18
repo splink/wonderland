@@ -112,6 +112,7 @@ namespace Wonderland
             roadsKey = key; buildingsVersion = world.Buildings.Version;
             if (roadsChanged || force) BuildGraph();
             Populate();
+            foreach (var v in Vehicles) if (v.Depot >= 0 && v.Job == null && v.State == Mode.Parked) v.Timer = Mathf.Min(v.Timer, 0.5f);   // something new: lorries look for work at once
         }
 
         private int RoadsKey()
