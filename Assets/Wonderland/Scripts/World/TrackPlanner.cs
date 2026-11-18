@@ -337,7 +337,7 @@ namespace Wonderland
                 }
             if (pts == null || pts.Count < 3) { plan.Error = "Draw a longer track"; return plan; }
             plan.Smoothed = pts.ConvertAll(p => terrain.PointAt(p.x, p.y) + Vector3.up * 0.006f);
-            if (closed && Perimeter(pts, true) < MinLoopLength) { plan.Error = "Make the loop a little bigger"; return plan; }
+            if (closed && Polyline.Perimeter(pts, true) < MinLoopLength) { plan.Error = "Make the loop a little bigger"; return plan; }
             if (radius < MinRadius * 0.85f) { plan.Error = $"A curve is too tight for the train ({radius * 100f:0} cm)"; return plan; }
 
             var dense = CatmullRom(pts, Spacing, closed);
@@ -425,25 +425,9 @@ namespace Wonderland
         private static List<Vector2> Steady(List<Vector2> p, bool closed)
         {
             if (p.Count < 4) return p;
-            var keep = new bool[p.Count]; keep[0] = keep[^1] = true;
-            var stack = new Stack<(int a, int b)>(); stack.Push((0, p.Count - 1));
-            while (stack.Count > 0)
-            {
-                var (a, b) = stack.Pop();
-                float worst = 0f; int at = -1;
-                var ab = p[b] - p[a];
-                for (int i = a + 1; i < b; i++)
-                {
-                    float t = Mathf.Clamp01(Vector2.Dot(p[i] - p[a], ab) / Mathf.Max(ab.sqrMagnitude, 1e-9f));
-                    float d = (p[i] - (p[a] + ab * t)).magnitude;
-                    if (d > worst) { worst = d; at = i; }
-                }
-                if (at >= 0 && worst > 0.015f) { keep[at] = true; stack.Push((a, at)); stack.Push((at, b)); }
-            }
-            var corners = new List<Vector2>();
-            for (int i = 0; i < p.Count; i++) if (keep[i]) corners.Add(p[i]);
+            var corners = Polyline.Simplify(p, 0.015f);
             if (corners.Count < (closed ? 4 : 2)) return p;
-            return corners.Count < 3 ? Resample(corners, 0.01f, closed) : CatmullRom(corners, 0.01f, closed);   // (a smooth line through them, no kinks)
+            return corners.Count < 3 ? Polyline.Resample(corners, 0.01f, closed) : CatmullRom(corners, 0.01f, closed);   // (a smooth line through them, no kinks)
         }
 
         private static List<Vector2> Bezier(Vector2 p0, Vector2 p1, Vector2 p2, Vector2 p3)
@@ -456,7 +440,7 @@ namespace Wonderland
                 float t = i / (float)n, u = 1f - t;
                 pts.Add(u * u * u * p0 + 3f * u * u * t * p1 + 3f * u * t * t * p2 + t * t * t * p3);
             }
-            return Resample(pts, Coarse, false);
+            return Polyline.Resample(pts, Coarse, false);
         }
 
         /// <summary>
@@ -499,11 +483,11 @@ namespace Wonderland
             }
             List<Vector2> Resampled(List<Vector2> q)
             {
-                if (nA == 0 && nB == 0) return Resample(q, Coarse, closed);
+                if (nA == 0 && nB == 0) return Polyline.Resample(q, Coarse, closed);
                 // Keep the pinned leads as they are; resample only what lies between them.
                 int a = Mathf.Max(0, nA - 1), b = q.Count - Mathf.Max(1, nB);
                 if (b - a < 1) return q;
-                var mid = Resample(q.GetRange(a, b - a + 1), Coarse, false);
+                var mid = Polyline.Resample(q.GetRange(a, b - a + 1), Coarse, false);
                 var r = new List<Vector2>();
                 for (int k = 0; k < a; k++) r.Add(q[k]);
                 r.AddRange(mid);
@@ -604,7 +588,7 @@ namespace Wonderland
             // On the grid: the bent line drawn again as standard track, its ends staying where (and as) they meet switches.
             if (BuildGrid.Snap) return GridReshape(network, edge, pts, out dense, out preview, terrain);
             // Coarse line, ends pinned where they meet switches, rounded until the train can take it.
-            var coarse = Resample(pts, Coarse, l.Closed);
+            var coarse = Polyline.Resample(pts, Coarse, l.Closed);
             int keep = 3;
             var head = coarse.GetRange(0, Mathf.Min(keep, coarse.Count)); var tail = coarse.GetRange(Mathf.Max(0, coarse.Count - keep), Mathf.Min(keep, coarse.Count));
             void Pin(List<Vector2> q)
@@ -661,7 +645,7 @@ namespace Wonderland
                         if (l.Closed) { k0 = (k0 % l.Points.Count + l.Points.Count) % l.Points.Count; k1 = (k0 + 1) % l.Points.Count; }
                         else if (k0 < 0 || k1 >= l.Points.Count) continue;
                         var c = new Vector2(l.Points[k0].x, l.Points[k0].z); var e = new Vector2(l.Points[k1].x, l.Points[k1].z);
-                        if (!SegmentsCross(a, b, c, e)) continue;
+                        if (!Polyline.SegmentsCross(a, b, c, e)) continue;
                         var x = Intersection(a, b, c, e);
                         if (NearAttach(x, 0.1f)) continue;
                         float angle = Vector2.Angle(b - a, e - c); angle = Mathf.Min(angle, 180f - angle);
@@ -676,7 +660,7 @@ namespace Wonderland
                 {
                     if (closed && i == 0 && j >= segs - 3) continue;
                     var c = dense[j]; var e = dense[(j + 1) % n];
-                    if (!SegmentsCross(a, b, c, e)) continue;
+                    if (!Polyline.SegmentsCross(a, b, c, e)) continue;
                     var x = Intersection(a, b, c, e);
                     float angle = Vector2.Angle(b - a, e - c); angle = Mathf.Min(angle, 180f - angle);
                     if (angle < MinCrossingAngle) return "Tracks must cross at a wider angle";
@@ -757,13 +741,13 @@ namespace Wonderland
             {
                 int n = p.Count, segs = closed ? n : n - 1;
                 bool changed = false;
-                float total = Perimeter(p, closed);
+                float total = Polyline.Perimeter(p, closed);
                 for (int i = 0; i < segs && !changed; i++)
                 for (int j = i + 2; j < segs && !changed; j++)
                 {
                     if (closed && i == 0 && j == segs - 1) continue;
                     var a = p[i]; var b = p[(i + 1) % n]; var c = p[j]; var d = p[(j + 1) % n];
-                    if (!SegmentsCross(a, b, c, d)) continue;
+                    if (!Polyline.SegmentsCross(a, b, c, d)) continue;
                     var x = Intersection(a, b, c, d);
                     float inner = 0f;
                     for (int k = i + 1; k < j; k++) inner += (p[k + 1] - p[k]).magnitude;
@@ -868,41 +852,6 @@ namespace Wonderland
 
         private static Vector2 Flat(Vector3 v) => new(v.x, v.z);
 
-        private static float Length(List<Vector2> p)
-        {
-            float l = 0f;
-            for (int i = 1; i < p.Count; i++) l += (p[i] - p[i - 1]).magnitude;
-            return l;
-        }
-
-        private static float Perimeter(List<Vector2> p, bool closed) => Length(p) + (closed ? (p[^1] - p[0]).magnitude : 0f);
-
-        /// <summary>Longer than any track or road in a room-sized world: a line this long is a geometry bug.</summary>
-        public const float MaxLine = 200f;
-
-        public static List<Vector2> Resample(List<Vector2> p, float spacing, bool closed)
-        {
-            var src = new List<Vector2>(p);
-            if (closed) src.Add(p[0]);
-            float total = Length(src);
-            // A line kilometres long (or not a number) is a geometry bug, never something drawn on a living-room floor:
-            // hand it back as it is rather than fill the headset's memory with points (the caller refuses it).
-            if (!(total < MaxLine)) { UnityEngine.Debug.LogWarning($"Resample: refusing a line {total} m long"); return src; }
-            int count = Mathf.Max(closed ? 4 : 2, Mathf.RoundToInt(total / spacing));
-            float step = total / count;
-            var result = new List<Vector2>(count + 1) { src[0] };
-            float acc = 0f; int seg = 0; float segLen = (src[1] - src[0]).magnitude;
-            for (int k = 1; k < (closed ? count : count + 1); k++)
-            {
-                float target = k * step;
-                while (acc + segLen < target && seg < src.Count - 2) { acc += segLen; seg++; segLen = (src[seg + 1] - src[seg]).magnitude; }
-                float t = segLen > 1e-7f ? Mathf.Clamp01((target - acc) / segLen) : 0f;
-                result.Add(Vector2.Lerp(src[seg], src[seg + 1], t));
-            }
-            if (!closed) result[^1] = p[^1];
-            return result;
-        }
-
         private static void Taubin(List<Vector2> p, bool closed)
         {
             Laplace(p, closed, 0.5f);
@@ -976,17 +925,10 @@ namespace Wonderland
                 {
                     if (closed && (j + 1) % n == i) continue;
                     if (closed && i == 0 && j >= segs - 2) continue;
-                    if (SegmentsCross(a, b, p[j], p[(j + 1) % n])) return true;
+                    if (Polyline.SegmentsCross(a, b, p[j], p[(j + 1) % n])) return true;
                 }
             }
             return false;
-        }
-
-        private static bool SegmentsCross(Vector2 a, Vector2 b, Vector2 c, Vector2 d)
-        {
-            float Cross(Vector2 o, Vector2 u, Vector2 v) => (u.x - o.x) * (v.y - o.y) - (u.y - o.y) * (v.x - o.x);
-            float d1 = Cross(c, d, a), d2 = Cross(c, d, b), d3 = Cross(a, b, c), d4 = Cross(a, b, d);
-            return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
         }
 
         public static List<Vector2> CatmullRom(List<Vector2> p, float spacing, bool closed)

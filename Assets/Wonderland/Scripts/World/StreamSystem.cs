@@ -50,13 +50,13 @@ namespace Wonderland
             var raw = new List<Vector2>();
             foreach (var p in drawn) if (raw.Count == 0 || (new Vector2(p.x, p.z) - raw[^1]).magnitude > 0.004f) raw.Add(new Vector2(p.x, p.z));
             if (raw.Count < 3 || TrackPlanner.Length(drawn) < 0.15f) return null;
-            var pts = TrackPlanner.Resample(raw, Spacing, false);
+            var pts = Polyline.Resample(raw, Spacing, false);
             for (int it = 0; it < 30; it++)
             {
                 var copy = pts.ToArray();
                 for (int i = 1; i < pts.Count - 1; i++) pts[i] = copy[i] + ((copy[i - 1] + copy[i + 1]) * 0.5f - copy[i]) * 0.5f;
             }
-            pts = TrackPlanner.Resample(pts, Spacing, false);
+            pts = Polyline.Resample(pts, Spacing, false);
             // Water runs downhill: drawn from the lower end (a lower pond) to the higher, it flows the other way.
             if (Target(terrain, pts[^1].x, pts[^1].y) > Target(terrain, pts[0].x, pts[0].y) + 0.003f) pts.Reverse();
             var path = new StreamPath { width = width };

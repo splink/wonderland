@@ -34,7 +34,7 @@ namespace Wonderland.Editor
             // A road with a corner: rounded.
             string e2 = w.BuildPath(Wobbly(new Vector2(-0.6f, -0.6f), new Vector2(-0.6f, -0.25f), new Vector2(-0.2f, -0.25f)), PathKind.Road);
             var bend = w.Paths.Lines[^1];
-            var coarse = TrackPlanner.Resample(bend.points, 0.02f, false);
+            var coarse = Polyline.Resample(bend.points, 0.02f, false);
             float radius = TrackPlanner.MinRadiusOf(coarse, false);
             Check(e2 == null && radius > 0.03f && radius < 0.2f, $"A corner is rounded off ({radius * 100f:0} cm radius)");
             // A crossroads, and a T-junction.
@@ -460,7 +460,7 @@ namespace Wonderland.Editor
         private static (int wiggles, float excess) Wiggles(IReadOnlyList<Vector3> line)
         {
             var p = new List<Vector2>(); foreach (var q in line) p.Add(new Vector2(q.x, q.z));
-            p = TrackPlanner.Resample(p, 0.01f, false);
+            p = Polyline.Resample(p, 0.01f, false);
             int wiggles = 0, last = 0; float sinceChange = 0f, total = 0f;
             for (int i = 1; i + 1 < p.Count; i++)
             {
@@ -582,7 +582,7 @@ namespace Wonderland.Editor
                 {
                     var q = new List<Vector2>(); foreach (var v in pts) q.Add(new Vector2(v.x, v.z));
                     if (!fromJoint) q.Reverse();
-                    q = TrackPlanner.Resample(q, 0.01f, false);
+                    q = Polyline.Resample(q, 0.01f, false);
                     var sb = new System.Text.StringBuilder();
                     for (int i = 1; i + 1 < q.Count && i < 12; i++) sb.Append($"{Vector2.SignedAngle(q[i] - q[i - 1], q[i + 1] - q[i]):0.0} ");
                     return sb.ToString();

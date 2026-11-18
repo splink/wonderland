@@ -108,7 +108,7 @@ namespace Wonderland
                 if (SnapPoint(raw[0], kind, out var a)) raw[0] = a;
                 if (SnapPoint(raw[^1], kind, out var b)) raw[^1] = b;
             }
-            var pts = TrackPlanner.Resample(raw, Spacing * 2f, closed);
+            var pts = Polyline.Resample(raw, Spacing * 2f, closed);
             for (int it = 0; it < 12; it++)
             {
                 var copy = pts.ToArray();
@@ -119,7 +119,7 @@ namespace Wonderland
                     pts[i] = copy[i] + ((prev + next) * 0.5f - copy[i]) * (it % 2 == 0 ? 0.5f : -0.3f);
                 }
             }
-            pts = TrackPlanner.Resample(pts, Spacing, closed);
+            pts = Polyline.Resample(pts, Spacing, closed);
             if (!closed) { pts[0] = raw[0]; pts[^1] = raw[^1]; }
             foreach (var p in pts)
                 if (terrain.EdgeAt(p.x, p.y) < 0.35f) { error = "Keep it on the land"; return null; }
@@ -199,14 +199,8 @@ namespace Wonderland
         {
             float best = float.MaxValue;
             int n = l.points.Count, segs = l.closed ? n : n - 1;
-            for (int i = 0; i < segs; i++)
-            {
-                var a = l.points[i]; var b = l.points[(i + 1) % n];
-                var ab = b - a;
-                float t = Mathf.Clamp01(Vector2.Dot(p - a, ab) / Mathf.Max(ab.sqrMagnitude, 1e-9f));
-                best = Mathf.Min(best, (p - (a + ab * t)).sqrMagnitude);
-            }
-            return Mathf.Sqrt(best);
+            for (int i = 0; i < segs; i++) best = Mathf.Min(best, Polyline.DistanceToSegment(p, l.points[i], l.points[(i + 1) % n]));
+            return best;
         }
 
         /// <summary>Distance to the nearest way (road, lane, path, trail), and its kind.</summary>
@@ -263,7 +257,7 @@ namespace Wonderland
                     if (!IsBarrier(l.kind)) continue;
                     int n = l.points.Count, segs = l.closed ? n : n - 1;
                     for (int i = 0; i < segs; i += 2)
-                        if (SegmentsCross(a, b, l.points[i], l.points[Mathf.Min(i + 2, segs) % n])) return true;
+                        if (Polyline.SegmentsCross(a, b, l.points[i], l.points[Mathf.Min(i + 2, segs) % n])) return true;
                 }
                 return false;
             }
@@ -277,17 +271,10 @@ namespace Wonderland
                 {
                     var l = Lines[li];
                     if (!IsBarrier(l.kind)) continue;
-                    if (SegmentsCross(a, b, l.points[i], l.points[(i + 1) % l.points.Count])) return true;
+                    if (Polyline.SegmentsCross(a, b, l.points[i], l.points[(i + 1) % l.points.Count])) return true;
                 }
             }
             return false;
-        }
-
-        private static bool SegmentsCross(Vector2 a, Vector2 b, Vector2 c, Vector2 d)
-        {
-            float Cross(Vector2 o, Vector2 u, Vector2 v) => (u.x - o.x) * (v.y - o.y) - (u.y - o.y) * (v.x - o.x);
-            float d1 = Cross(c, d, a), d2 = Cross(c, d, b), d3 = Cross(a, b, c), d4 = Cross(a, b, d);
-            return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
         }
 
         /// <summary>The enclosure (closed barrier) containing a point, or -1.</summary>
@@ -404,10 +391,7 @@ namespace Wonderland
                 {
                     var l = Lines[li];
                     if (!filter(li)) continue;
-                    var a = l.points[i]; var b = l.points[(i + 1) % l.points.Count];
-                    var ab = b - a;
-                    float t = Mathf.Clamp01(Vector2.Dot(p - a, ab) / Mathf.Max(ab.sqrMagnitude, 1e-9f));
-                    float d = (p - (a + ab * t)).magnitude;
+                    float d = Polyline.DistanceToSegment(p, l.points[i], l.points[(i + 1) % l.points.Count]);
                     if (d < best) { best = d; line = li; }
                 }
             }

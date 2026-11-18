@@ -188,7 +188,7 @@ namespace Wonderland
                 if (joinB = SnapRoad(raw[^1], out var b)) raw[^1] = b;
             }
             float tolerance = kind == (int)PathKind.Highway ? 0.03f : 0.018f;
-            var corners = closed ? ClosedSimplify(raw, tolerance) : Simplify(raw, tolerance);
+            var corners = closed ? Polyline.ClosedSimplify(raw, tolerance) : Polyline.Simplify(raw, tolerance);
             // Corners closer together than a road's width are hand jitter: merge them.
             for (int i = corners.Count - 2; i >= 1; i--)
                 if ((corners[i] - corners[i - 1]).magnitude < 0.04f && corners.Count > (closed ? 3 : 2)) corners.RemoveAt(i);
@@ -198,7 +198,7 @@ namespace Wonderland
                 if (Vector2.Angle(corners[i] - corners[i - 1], corners[i + 1] - corners[i]) > 150f) corners.RemoveAt(i);
             if (closed && corners.Count < 3) { error = "Draw a bigger ring road"; return null; }
             var pts = Fillet(corners, closed, kind == (int)PathKind.Highway ? HighwayRadius : StreetRadius);
-            pts = TrackPlanner.Resample(pts, Spacing, closed);
+            pts = Polyline.Resample(pts, Spacing, closed);
             if (!closed) { pts[0] = raw[0]; pts[^1] = raw[^1]; }
             foreach (var p in pts)
                 if (terrain.EdgeAt(p.x, p.y) < 0.35f) { error = "Keep the road on the land"; return null; }
@@ -258,50 +258,6 @@ namespace Wonderland
                 for (int i = 0; i < l.points.Count; i++) if ((l.points[i] - p).magnitude < best) { best = (l.points[i] - p).magnitude; snapped = l.points[i]; found = true; }
             }
             return found;
-        }
-
-        /// <summary>Douglas-Peucker: the fewest corners within <paramref name="tolerance"/> of the stroke.</summary>
-        private static List<Vector2> Simplify(List<Vector2> p, float tolerance)
-        {
-            var keep = new bool[p.Count];
-            keep[0] = keep[^1] = true;
-            var stack = new Stack<(int a, int b)>();
-            stack.Push((0, p.Count - 1));
-            while (stack.Count > 0)
-            {
-                var (a, b) = stack.Pop();
-                float worst = 0f; int at = -1;
-                for (int i = a + 1; i < b; i++)
-                {
-                    float d = DistanceToSegment(p[i], p[a], p[b]);
-                    if (d > worst) { worst = d; at = i; }
-                }
-                if (at >= 0 && worst > tolerance) { keep[at] = true; stack.Push((a, at)); stack.Push((at, b)); }
-            }
-            var r = new List<Vector2>();
-            for (int i = 0; i < p.Count; i++) if (keep[i]) r.Add(p[i]);
-            return r;
-        }
-
-        private static List<Vector2> ClosedSimplify(List<Vector2> p, float tolerance)
-        {
-            // Split the ring at its farthest point from the start and simplify both halves.
-            int far = 0; float best = 0f;
-            for (int i = 0; i < p.Count; i++) { float d = (p[i] - p[0]).sqrMagnitude; if (d > best) { best = d; far = i; } }
-            var first = Simplify(p.GetRange(0, far + 1), tolerance);
-            var second = p.GetRange(far, p.Count - far); second.Add(p[0]);
-            second = Simplify(second, tolerance);
-            first.RemoveAt(first.Count - 1);
-            second.RemoveAt(second.Count - 1);
-            first.AddRange(second);
-            return first;
-        }
-
-        private static float DistanceToSegment(Vector2 p, Vector2 a, Vector2 b)
-        {
-            var ab = b - a;
-            float t = Mathf.Clamp01(Vector2.Dot(p - a, ab) / Mathf.Max(ab.sqrMagnitude, 1e-9f));
-            return (p - (a + ab * t)).magnitude;
         }
 
         /// <summary>Straight stretches between the corners, each corner rounded with an arc of (up to) <paramref name="radius"/>.</summary>

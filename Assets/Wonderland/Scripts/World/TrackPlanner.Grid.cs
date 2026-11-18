@@ -146,8 +146,8 @@ namespace Wonderland
             var results = new List<GridShape>();
             bool attached = start.Kind != AttachKind.None || finish.Kind != AttachKind.None;
             var p = Steady(stroke, closed);
-            if (!attached && p.Count >= 2) p = RemoveSmallLoops(Resample(p, Coarse, closed), closed);   // (on a coarse copy: quicker)
-            p = p.Count >= 2 ? Resample(p, Spacing, closed) : p;
+            if (!attached && p.Count >= 2) p = RemoveSmallLoops(Polyline.Resample(p, Coarse, closed), closed);   // (on a coarse copy: quicker)
+            p = p.Count >= 2 ? Polyline.Resample(p, Spacing, closed) : p;
             if (p.Count < 3) { results.Add(new GridShape { Error = "Draw a longer track" }); return results; }
             var dirs = Headings(p, closed);
             bool slideStart = start.Kind == AttachKind.Mid && StraightAt(network, start.Edge, start.S);
@@ -205,7 +205,7 @@ namespace Wonderland
                 if (shown != null && g.Score > shown.Score + 0.03f) break;
                 shown ??= g;
                 var trial = new TrackPlan { Start = g.Start, Finish = g.Finish };
-                string why = closed && Perimeter(g.Path, true) < MinLoopLength ? "Make the loop a little bigger"
+                string why = closed && Polyline.Perimeter(g.Path, true) < MinLoopLength ? "Make the loop a little bigger"
                     : CheckCrossings(Every(g.Path, 2, closed), closed, network, trial) ?? CheckClearance(g.Path, closed, network, trial);
                 if (why == null) { chosen = g; break; }
                 error ??= why;
@@ -863,7 +863,7 @@ namespace Wonderland
                     for (int i = 0; i < stroke.Count; i += 8)
                     {
                         var q = stroke[i];
-                        score += Mathf.Min(DistanceToSegment(q, a.P, v0), Mathf.Min(DistanceToSegment(q, v0, v1), DistanceToSegment(q, v1, b.P)));
+                        score += Mathf.Min(Polyline.DistanceToSegment(q, a.P, v0), Mathf.Min(Polyline.DistanceToSegment(q, v0, v1), Polyline.DistanceToSegment(q, v1, b.P)));
                     }
                     if (score < bestScore) { bestScore = score; best = l; }
                 }
@@ -873,13 +873,6 @@ namespace Wonderland
             m.Enter = OnLine(m, m.Enter); m.Exit = OnLine(m, m.Exit);
             a.Cap = float.MaxValue; m.Cap = float.MaxValue;
             return true;
-        }
-
-        private static float DistanceToSegment(Vector2 p, Vector2 a, Vector2 b)
-        {
-            var ab = b - a;
-            float t = Mathf.Clamp01(Vector2.Dot(p - a, ab) / Mathf.Max(ab.sqrMagnitude, 1e-9f));
-            return (p - (a + ab * t)).magnitude;
         }
 
         /// <summary>
