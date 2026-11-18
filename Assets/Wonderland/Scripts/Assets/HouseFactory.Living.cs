@@ -19,6 +19,9 @@ namespace Wonderland
                 case Catalog.CarPark: return CarParkBays(b);
                 case Catalog.FreightYard: return FreightYardPad(b, ref rng);
                 case Catalog.Harbour: return HarbourQuay(b, ref rng);
+                case Catalog.Zoo: return ZooGrounds(b, ref rng);
+                case Catalog.FairyCastle: return FairyCastle(b, ref rng);
+                case Catalog.Stadium: return StadiumBowl(b);
             }
             warp = true;
             switch (id)
@@ -285,6 +288,150 @@ namespace Wonderland
 
         /// <summary>Where a container goes on a ship's deck, slot <paramref name="k"/> (local to the ship).</summary>
         public static Vector3 DeckSlot(int k) => new((k % 2 - 0.5f) * 0.0125f, 0.013f, 0.04f - k / 2 * 0.026f);
+
+        // ---------------------------------------------------------------- attractions
+
+        /// <summary>The zoo's enclosures (local centre and half size): giraffes, elephants, lions, zebras, and the penguin pool.</summary>
+        public static readonly (Vector2 centre, Vector2 half)[] ZooPens =
+        {
+            (new Vector2(-0.07f, 0.04f), new Vector2(0.045f, 0.035f)), (new Vector2(0.03f, 0.045f), new Vector2(0.045f, 0.03f)),
+            (new Vector2(-0.07f, -0.045f), new Vector2(0.04f, 0.025f)), (new Vector2(0.075f, -0.025f), new Vector2(0.035f, 0.035f)),
+            (new Vector2(-0.005f, -0.035f), new Vector2(0.022f, 0.018f)),
+        };
+
+        /// <summary>
+        /// The zoo: a gate with its name over it at the front, gravel paths between fenced enclosures (grass, a sandy lion
+        /// enclosure, the penguins' pool with its rocks), a keeper's kiosk with a striped awning, and trees. The animals
+        /// themselves move about (see AttractionSystem).
+        /// </summary>
+        private static float ZooGrounds(MeshBuilder b, ref Rng rng)
+        {
+            const float W = 0.24f, D = 0.18f;
+            b.AddBox(new Vector3(0f, 0.0006f, 0f), new Vector3(W, 0.0012f, D), Pal.Hex("#D8C8A0"));   // gravel
+            var fence = Pal.Hex("#6B4630");
+            for (int k = 0; k < ZooPens.Length; k++)
+            {
+                var (c, h) = ZooPens[k];
+                var ground = k == 2 ? Pal.Hex("#E2C88A") : k == 4 ? Pal.Hex("#5A9AC8") : Pal.Hex("#7FB25A");
+                b.AddBox(new Vector3(c.x, 0.0014f, c.y), new Vector3(h.x * 2f, 0.0012f, h.y * 2f), ground);
+                if (k == 4) { for (int r = 0; r < 3; r++) b.AddBlob(new Vector3(c.x - 0.012f + r * 0.012f, 0.003f, c.y + 0.012f), new Vector3(0.006f, 0.004f, 0.005f), 1, 0.2f, 90 + r, (_, __) => Pal.Hex("#B8B4AA")); }
+                // The fence round it: posts and two rails.
+                foreach (int sx in new[] { -1, 1 })
+                {
+                    b.AddBox(new Vector3(c.x + sx * h.x, 0.006f, c.y), new Vector3(0.001f, 0.0008f, h.y * 2f), fence);
+                    b.AddBox(new Vector3(c.x + sx * h.x, 0.0035f, c.y), new Vector3(0.001f, 0.0008f, h.y * 2f), fence);
+                }
+                foreach (int sz in new[] { -1, 1 })
+                {
+                    b.AddBox(new Vector3(c.x, 0.006f, c.y + sz * h.y), new Vector3(h.x * 2f, 0.0008f, 0.001f), fence);
+                    b.AddBox(new Vector3(c.x, 0.0035f, c.y + sz * h.y), new Vector3(h.x * 2f, 0.0008f, 0.001f), fence);
+                }
+                for (float x = -h.x; x <= h.x + 1e-4f; x += h.x / 3f) foreach (int sz in new[] { -1, 1 }) b.AddBox(new Vector3(c.x + x, 0.0035f, c.y + sz * h.y), new Vector3(0.0012f, 0.007f, 0.0012f), fence);
+            }
+            // Trees in the giraffe and elephant enclosures, and round the edge.
+            foreach (var (x, z) in new[] { (-0.1f, 0.06f), (0.06f, 0.06f), (-0.11f, -0.075f), (0.11f, 0.075f), (-0.11f, 0.08f) })
+            {
+                b.AddCylinder(new Vector3(x, 0f, z), 0.0012f, 0.0015f, 0.02f, 5, Pal.Bark, Pal.Bark, false);
+                b.AddBlob(new Vector3(x, 0.024f, z), new Vector3(0.011f, 0.009f, 0.011f), 1, 0.25f, (int)(x * 100f + z * 37f), (_, __) => Pal.Hex("#5E9A4A"));
+            }
+            // The gate at the front, with ZOO over it.
+            foreach (int sx in new[] { -1, 1 }) b.AddBox(new Vector3(sx * 0.016f, 0.016f, -D / 2 + 0.002f), new Vector3(0.006f, 0.032f, 0.006f), Pal.Hex("#8A5A34"));
+            Lettering.Board(b, "ZOO", new Vector3(0f, 0.036f, -D / 2 + 0.002f), Vector3.back, 0.009f, Pal.Hex("#3E7A3A"), Pal.Hex("#F2E3A8"), Pal.Hex("#2A4A2A"));
+            // The keeper's kiosk.
+            b.AddBox(new Vector3(0.085f, 0.009f, -0.075f), new Vector3(0.026f, 0.018f, 0.018f), Pal.Hex("#F2E3C2"), Pal.Hex("#FFF2D8"), Pal.Hex("#C8B898"));
+            Awning(b, new Vector3(0.085f, 0.017f, -0.084f), 0.026f, 0.008f, Pal.Hex("#3E7A3A"), Pal.Hex("#F7F1E6"));
+            return 0.05f;
+        }
+
+        /// <summary>
+        /// A fairy-tale castle: white walls with a gatehouse, slender round towers with tall blue cone roofs and pennants,
+        /// a tall central keep, golden spires, and a drawbridge over a little moat.
+        /// </summary>
+        private static float FairyCastle(MeshBuilder b, ref Rng rng)
+        {
+            var wall = Pal.Hex("#F4EEE2"); var roof = Pal.Hex("#4A6FC8"); var gold = Pal.Brass;
+            const float W = 0.2f, D = 0.15f;
+            b.AddBox(new Vector3(0f, -0.001f, 0f), new Vector3(W + 0.03f, 0.004f, D + 0.03f), Pal.Hex("#5A9AC8"));   // the moat
+            b.AddBox(new Vector3(0f, 0.002f, 0f), new Vector3(W, 0.004f, D), Pal.Hex("#7FB25A"));
+            // Curtain walls with crenellations.
+            void Wall(Vector3 a, Vector3 c)
+            {
+                var mid = (a + c) / 2f; var d = c - a;
+                bool alongX = Mathf.Abs(d.x) > Mathf.Abs(d.z);
+                var size = alongX ? new Vector3(Mathf.Abs(d.x), 0.04f, 0.008f) : new Vector3(0.008f, 0.04f, Mathf.Abs(d.z));
+                b.AddBox(mid + Vector3.up * 0.02f, size, wall, Pal.Shade(wall, 1.05f), Pal.Shade(wall, 0.8f));
+                int n = Mathf.RoundToInt(d.magnitude / 0.008f);
+                for (int k = 0; k < n; k += 2) b.AddBox(Vector3.Lerp(a, c, (k + 0.5f) / n) + Vector3.up * 0.042f, new Vector3(0.004f, 0.004f, 0.004f) + (alongX ? new Vector3(0f, 0f, 0.004f) : new Vector3(0.004f, 0f, 0f)), wall);
+            }
+            float hx = W / 2 - 0.02f, hz = D / 2 - 0.02f;
+            Wall(new Vector3(-hx, 0f, -hz), new Vector3(hx, 0f, -hz)); Wall(new Vector3(-hx, 0f, hz), new Vector3(hx, 0f, hz));
+            Wall(new Vector3(-hx, 0f, -hz), new Vector3(-hx, 0f, hz)); Wall(new Vector3(hx, 0f, -hz), new Vector3(hx, 0f, hz));
+            void Tower(Vector3 at, float r, float h, float cone)
+            {
+                b.AddCylinder(at, r, r, h, 14, wall, Pal.Shade(wall, 1.05f), true);
+                for (int k = 0; k < 3; k++) b.AddFace(at + new Vector3(0f, h * (0.35f + k * 0.22f), -r - 0.0004f), Vector3.back, Vector3.up, r * 0.5f, r * 0.8f, Pal.Glow(Pal.WindowGlow));
+                b.AddCylinder(at + Vector3.up * h, r * 1.18f, 0.0006f, cone, 14, roof, Pal.Shade(roof, 1.2f), true);
+                b.AddCylinder(at + Vector3.up * (h + cone), 0.0005f, 0.0005f, 0.012f, 4, gold, gold, false);
+                b.AddBox(at + new Vector3(0.004f, h + cone + 0.01f, 0f), new Vector3(0.008f, 0.004f, 0.0006f), Pal.Hex("#E25B4F"));   // a pennant
+            }
+            foreach (int sx in new[] { -1, 1 }) foreach (int sz in new[] { -1, 1 }) Tower(new Vector3(sx * hx, 0f, sz * hz), 0.014f, 0.07f, 0.045f);
+            // The keep in the middle, taller, with its own turrets.
+            b.AddBox(new Vector3(0f, 0.045f, 0.015f), new Vector3(0.07f, 0.09f, 0.055f), wall, Pal.Shade(wall, 1.05f), Pal.Shade(wall, 0.8f));
+            for (int k = 0; k < 3; k++) b.AddFace(new Vector3(-0.022f + k * 0.022f, 0.06f, 0.015f - 0.0276f), Vector3.back, Vector3.up, 0.008f, 0.014f, Pal.Glow(Pal.WindowGlow));
+            Tower(new Vector3(0f, 0.09f, 0.015f), 0.018f, 0.05f, 0.06f);
+            foreach (int sx in new[] { -1, 1 }) Tower(new Vector3(sx * 0.035f, 0.09f, -0.01f), 0.009f, 0.025f, 0.03f);
+            // Gatehouse and drawbridge.
+            b.AddBox(new Vector3(0f, 0.03f, -hz), new Vector3(0.036f, 0.06f, 0.016f), wall);
+            b.AddFace(new Vector3(0f, 0.014f, -hz - 0.0081f), Vector3.back, Vector3.up, 0.016f, 0.026f, Pal.Hex("#5A3A22"));
+            b.AddBox(new Vector3(0f, 0.003f, -D / 2 - 0.006f), new Vector3(0.016f, 0.002f, 0.03f), Pal.Hex("#8A5A34"));
+            return 0.25f;
+        }
+
+        public const float PitchHalfX = 0.075f, PitchHalfZ = 0.048f, StandHeight = 0.03f;
+
+        /// <summary>
+        /// The football stadium: a green pitch with its white lines and goals, stepped stands all round (the crowd in
+        /// them comes on match days - see AttractionSystem), a roof over the main stand, and floodlights at the corners.
+        /// </summary>
+        private static float StadiumBowl(MeshBuilder b)
+        {
+            var grass = Pal.Hex("#4E9A44"); var white = Pal.FlowerWhite; var seats = Pal.Hex("#C8392E"); var concrete = Pal.Hex("#B9B4AA");
+            b.AddBox(new Vector3(0f, 0.001f, 0f), new Vector3(PitchHalfX * 2f + 0.012f, 0.002f, PitchHalfZ * 2f + 0.012f), grass);
+            for (int k = 0; k < 8; k++) b.AddBox(new Vector3(-PitchHalfX + (k + 0.5f) * PitchHalfX / 4f, 0.0021f, 0f), new Vector3(PitchHalfX / 4f, 0.0002f, PitchHalfZ * 2f), k % 2 == 0 ? Pal.Shade(grass, 1.08f) : grass);
+            void Line(Vector3 c, Vector3 size) => b.AddBox(c + Vector3.up * 0.0024f, size, white);
+            Line(Vector3.zero, new Vector3(0.0008f, 0.0002f, PitchHalfZ * 2f));
+            foreach (int s in new[] { -1, 1 })
+            {
+                Line(new Vector3(0f, 0f, s * PitchHalfZ), new Vector3(PitchHalfX * 2f, 0.0002f, 0.0008f));
+                Line(new Vector3(s * PitchHalfX, 0f, 0f), new Vector3(0.0008f, 0.0002f, PitchHalfZ * 2f));
+                Line(new Vector3(s * (PitchHalfX - 0.012f), 0f, 0f), new Vector3(0.0008f, 0.0002f, 0.04f));
+                b.AddBox(new Vector3(s * (PitchHalfX + 0.002f), 0.005f, 0f), new Vector3(0.001f, 0.01f, 0.02f), white);   // the goals
+            }
+            b.AddCylinder(new Vector3(0f, 0.0023f, 0f), 0.012f, 0.012f, 0.0002f, 18, white, white, true, true);
+            b.AddCylinder(new Vector3(0f, 0.0024f, 0f), 0.0112f, 0.0112f, 0.0002f, 18, grass, grass, true, true);
+            // Three stepped rows of seats all round.
+            for (int row = 0; row < 3; row++)
+            {
+                float gap = 0.012f + row * 0.01f, y = 0.004f + row * 0.008f;
+                foreach (int s in new[] { -1, 1 })
+                {
+                    b.AddBox(new Vector3(0f, y, s * (PitchHalfZ + gap)), new Vector3(PitchHalfX * 2f + gap * 2f, 0.008f, 0.01f), row % 2 == 0 ? seats : Pal.Shade(seats, 0.85f), seats, concrete);
+                    b.AddBox(new Vector3(s * (PitchHalfX + gap), y, 0f), new Vector3(0.01f, 0.008f, PitchHalfZ * 2f + gap * 2f), row % 2 == 0 ? seats : Pal.Shade(seats, 0.85f), seats, concrete);
+                }
+            }
+            // The main stand's roof (at the back) and the floodlights.
+            b.AddBox(new Vector3(0f, 0.04f, PitchHalfZ + 0.03f), new Vector3(PitchHalfX * 2f + 0.04f, 0.002f, 0.03f), Pal.Hex("#3A3A40"));
+            foreach (int sx in new[] { -1, 1 }) b.AddBox(new Vector3(sx * (PitchHalfX + 0.03f), 0.02f, PitchHalfZ + 0.04f), new Vector3(0.002f, 0.04f, 0.002f), Pal.Hex("#3A3A40"));
+            foreach (int sx in new[] { -1, 1 })
+            foreach (int sz in new[] { -1, 1 })
+            {
+                var at = new Vector3(sx * (PitchHalfX + 0.045f), 0f, sz * (PitchHalfZ + 0.045f));
+                b.AddCylinder(at, 0.0012f, 0.0016f, 0.075f, 6, Pal.Hex("#5A5A62"), Pal.Hex("#5A5A62"), true);
+                b.AddBox(at + new Vector3(0f, 0.077f, 0f), new Vector3(0.012f, 0.008f, 0.003f), Pal.Glow(Pal.Hex("#FFF6D8")));
+            }
+            Lettering.Board(b, "STADIUM", new Vector3(0f, 0.05f, -(PitchHalfZ + 0.046f)), Vector3.back, 0.008f, Pal.Hex("#2F5A8A"), Pal.FlowerWhite, Pal.Hex("#1E3A5A"));
+            return 0.085f;
+        }
 
         /// <summary>Where the crane's rail runs (local z) and how high its jib is.</summary>
         public const float CraneRailZ = 0.022f, CraneHeight = 0.085f;

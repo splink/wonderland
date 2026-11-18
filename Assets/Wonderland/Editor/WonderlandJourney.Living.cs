@@ -31,6 +31,8 @@ namespace Wonderland.Editor
             catch (Exception e) { Fail("Exception: " + e); }
             try { Shipping(); }
             catch (Exception e) { Fail("Exception: " + e); }
+            try { Attractions(); }
+            catch (Exception e) { Fail("Exception: " + e); }
             BuildGrid.Snap = true;
             Report.AppendLine(failures == 0 ? "RESULT: PASS" : $"RESULT: FAIL ({failures})");
             File.WriteAllText("Logs/living-results.txt", Report.ToString());
@@ -396,6 +398,64 @@ namespace Wonderland.Editor
             UnityEngine.Object.DestroyImmediate(w.gameObject);
         }
 
+        /// <summary>
+        /// Attractions: the zoo's animals wander about their enclosures (never out of them) and villagers come to see them;
+        /// at kick-off time a match starts at the stadium - villagers come to watch, the stands fill, the teams play - and
+        /// after the final whistle the crowd goes.
+        /// </summary>
+        private static void Attractions()
+        {
+            var w = Scratch("Attractions", 320f);
+            void Put(int id, float x, float z, float rot = 0f) { string e = w.PlaceHouse(new HouseInstance { x = x, z = z, rotation = rot, variant = id }); if (e != null) Report.AppendLine($"INFO  {Catalog.Get(id).Name}: {e}"); }
+            Put(Catalog.Zoo, -0.3f, 0.25f); Put(Catalog.Stadium, 0.3f, 0.25f); Put(Catalog.FairyCastle, 0f, -0.3f);
+            foreach (var (x, z) in new[] { (-0.5f, -0.1f), (-0.35f, -0.1f), (0.35f, -0.1f), (0.5f, -0.1f), (-0.5f, -0.45f), (0.5f, -0.45f), (-0.2f, 0.0f), (0.2f, 0.0f) }) Put(Catalog.Cottage, x, z);
+            int zoo = w.Buildings.Houses.FindIndex(h => h.variant == Catalog.Zoo), ground = w.Buildings.Houses.FindIndex(h => h.variant == Catalog.Stadium);
+            w.People.Grid.Complete(); w.Clock.Hour = 10f; w.People.Step(Dt); w.Attractions.Step(1.1f);
+            Check(zoo >= 0 && ground >= 0 && w.Attractions.AnimalsAt(zoo) >= 10, $"A zoo full of animals and a stadium ({(zoo >= 0 ? w.Attractions.ZooFor(zoo) : "no zoo")})");
+            if (zoo < 0 || ground < 0) return;
+            var animals = w.Attractions.transform.Find("Zoo animals");
+            var start = new List<Vector3>(); foreach (Transform a in animals) start.Add(a.localPosition);
+            bool escaped = false; int seen = 0;
+            Live(w, 150f, s =>
+            {
+                w.Attractions.Step(Dt);
+                foreach (Transform a in animals)
+                {
+                    var p = a.localPosition;
+                    bool inPen = false;
+                    foreach (var (c, half) in HouseFactory.ZooPens) inPen |= Mathf.Abs(p.x - c.x) <= half.x && Mathf.Abs(p.z - c.y) <= half.y;
+                    escaped |= !inPen;
+                }
+                seen = Mathf.Max(seen, w.People.PlaceCardOf(zoo).Visitors + w.People.PlaceCardOf(zoo).Today);
+            });
+            float moved = 0f; int k = 0; foreach (Transform a in animals) moved = Mathf.Max(moved, (a.localPosition - start[k++]).magnitude);
+            Check(moved > 0.01f && !escaped, $"The zoo's animals wander about their enclosures and stay in them (furthest {moved * 100f:0.0} cm)");
+            Check(seen >= 1, $"Villagers come to see them ({seen} visits)");
+            // A match.
+            w.Clock.Hour = 19.45f;   // (the zoo's afternoon took the clock past three: the evening match)
+            var news = new List<string>(); w.People.NewsLog.Clear();
+            int most = 0; bool crowd = false, playing = false;
+            Live(w, 80f, s =>
+            {
+                w.Attractions.Step(Dt);
+                foreach (var n in w.People.NewsLog) if (!news.Contains(n)) news.Add(n);
+                var c = w.Attractions.transform.Find("Stadium/Crowd");
+                crowd |= c != null && c.gameObject.activeSelf;
+                playing |= w.Attractions.MatchOn(ground);
+                int near = 0;
+                var h = w.Buildings.Houses[ground];
+                for (int i = 0; i < w.People.People.Count; i++) if ((w.People.PositionOf(i) - new Vector2(h.x, h.z)).magnitude < 0.25f) near++;
+                most = Mathf.Max(most, near);
+            });
+            Check(playing && crowd && most >= 3 && news.Exists(n => n.Contains("Kick-off")),
+                $"At kick-off time a match starts: villagers come to watch ({most} at the stadium), the stands fill, the teams play [playing {playing}, crowd {crowd}] ({w.Attractions.StadiumFor(ground)}; {string.Join(" / ", news.FindAll(n => n.Contains("stadium")))})");
+            w.Clock.Hour = 21.1f;
+            Live(w, 10f, s => w.Attractions.Step(Dt));
+            var after = w.Attractions.transform.Find("Stadium/Crowd");
+            Check(!w.Attractions.MatchOn(ground) && after != null && !after.gameObject.activeSelf, $"After the final whistle the stands empty ({w.Attractions.StadiumFor(ground)})");
+            UnityEngine.Object.DestroyImmediate(w.gameObject);
+        }
+
         /// <summary>The living world's buildings in a row, fronts to the camera (docs/renders/living-buildings*.png).</summary>
         public static void LivingGallery()
         {
@@ -406,7 +466,8 @@ namespace Wonderland.Editor
             int[][] sets =
             {
                 new[] { Catalog.Sawmill, Catalog.FurnitureShop, Catalog.IceCream, Catalog.Pub, Catalog.Hotel, Catalog.PostOffice },
-                new[] { Catalog.TaxiRank, Catalog.Letterbox, Catalog.CarPark },
+                new[] { Catalog.TaxiRank, Catalog.Letterbox, Catalog.CarPark, Catalog.FreightYard, Catalog.Harbour },
+                new[] { Catalog.Zoo, Catalog.FairyCastle, Catalog.Stadium },
             };
             for (int set = 0; set < sets.Length; set++)
             {
@@ -420,7 +481,7 @@ namespace Wonderland.Editor
                     WonderlandRenders.Place(root, HouseFactory.Get(id, 0), WonderlandMaterials.Lit, new Vector3(x + w / 2f, 0f, 0f), Quaternion.identity);
                     x += w;
                 }
-                float back = set == 0 ? 0.95f : 0.45f;
+                float back = set == 0 ? 0.95f : set == 1 ? 0.75f : 0.8f;
                 cam.transform.position = new Vector3(0f, back * 0.32f, -back); cam.transform.LookAt(new Vector3(0f, 0.04f, 0f));
                 WonderlandRenders.Capture(cam, $"living-buildings-{set + 1}.png", 2400, 1100);
                 UnityEngine.Object.DestroyImmediate(root.gameObject);

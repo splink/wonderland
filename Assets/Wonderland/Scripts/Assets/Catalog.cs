@@ -104,7 +104,7 @@ namespace Wonderland
             LogPile = 32, Lamp = 33, Bench = 34, FlowerBed = 35, Well = 36, Statue = 37, Signpost = 38, Picnic = 39, HayBales = 40,
             Park = 41, Museum = 42, Restaurant = 43, Disco = 44, Hospital = 45, Police = 46, Factory = 47, Football = 48, Studio = 49,
             Camera = 50, Balloon = 51, Jetty = 52, RowingBoat = 53, SailingBoat = 54, Steamer = 55, Halt = 56, TaxiRank = 57,
-            Sawmill = 58, FurnitureShop = 59, IceCream = 60, Pub = 61, Hotel = 62, PostOffice = 63, Letterbox = 64, CarPark = 65, FreightYard = 66, Harbour = 67;
+            Sawmill = 58, FurnitureShop = 59, IceCream = 60, Pub = 61, Hotel = 62, PostOffice = 63, Letterbox = 64, CarPark = 65, FreightYard = 66, Harbour = 67, Zoo = 68, FairyCastle = 69, Stadium = 70;
 
         /// <summary>A station of any size (the big one, or a country halt): trains stop beside it.</summary>
         public static bool IsStation(int variant) => variant == Station || variant == Halt || variant == FreightYard;
@@ -234,6 +234,19 @@ namespace Wonderland
                 new() { Name = "Harbour", Short = "Harbour", Category = PlaceCategory.Travel, Half = new Vector2(0.075f, 0.05f), Height = 0.1f, Styles = 1,
                     Hint = "on the shore of a big lake, front to the water: container ships sail to any other harbour the water reaches",
                     Spots = new[] { new ActivitySpot(0.05f, -0.035f, SpotKind.Watch, 0f) } },
+                new() { Name = "Zoo", Short = "Zoo", Category = PlaceCategory.Fun, Half = new Vector2(0.122f, 0.092f), Height = 0.05f, Walkable = true, Styles = 1, Kids = true,
+                    Hint = "giraffes, elephants, lions, zebras and penguins - families come to see them",
+                    Spots = new[] { new ActivitySpot(-0.07f, -0.003f, SpotKind.Watch, 0f), new ActivitySpot(0.03f, 0.008f, SpotKind.Watch, 0f), new ActivitySpot(-0.022f, -0.045f, SpotKind.Watch, -90f),
+                        new ActivitySpot(0.032f, -0.025f, SpotKind.Watch, 90f), new ActivitySpot(-0.005f, -0.061f, SpotKind.Watch, 0f), new ActivitySpot(0.012f, -0.061f, SpotKind.Watch, -20f),
+                        new ActivitySpot(0.075f, -0.097f, SpotKind.Sit, 0f), new ActivitySpot(0.095f, -0.097f, SpotKind.Sit, 0f) } },
+                new() { Name = "Fairy-tale castle", Short = "Castle", Category = PlaceCategory.Fun, Half = new Vector2(0.118f, 0.095f), Height = 0.3f, Styles = 1, Kids = true,
+                    Hint = "visitors come to gaze at its towers",
+                    Spots = new[] { new ActivitySpot(-0.05f, -0.112f, SpotKind.Watch, 0f), new ActivitySpot(-0.015f, -0.118f, SpotKind.Watch, 0f), new ActivitySpot(0.02f, -0.116f, SpotKind.Watch, 0f),
+                        new ActivitySpot(0.055f, -0.11f, SpotKind.Watch, 0f), new ActivitySpot(0.13f, -0.03f, SpotKind.Watch, -90f), new ActivitySpot(-0.13f, 0.01f, SpotKind.Watch, 90f) } },
+                new() { Name = "Football stadium", Short = "Stadium", Category = PlaceCategory.Fun, Half = new Vector2(0.135f, 0.1f), Height = 0.09f, Styles = 1,
+                    Hint = "matches at three and half past seven: the crowd fills the stands",
+                    Spots = new[] { new ActivitySpot(-0.06f, -0.105f, SpotKind.Watch, 0f), new ActivitySpot(-0.02f, -0.106f, SpotKind.Watch, 0f), new ActivitySpot(0.02f, -0.106f, SpotKind.Watch, 0f),
+                        new ActivitySpot(0.06f, -0.105f, SpotKind.Watch, 0f), new ActivitySpot(-0.04f, 0.106f, SpotKind.Watch, 180f), new ActivitySpot(0.04f, 0.106f, SpotKind.Watch, 180f) } },
             };
             for (int i = 0; i < list.Count; i++) list[i].Id = i;
             // What each place is for: the needs it satisfies decide who comes and when (see Needs).
@@ -243,8 +256,8 @@ namespace Wonderland
                     Bakery or Grocer or Fuel or Barn or Greenhouse or Garden or FurnitureShop or PostOffice or Letterbox => Need.Errands,
                     Cafe or Picnic or Restaurant or IceCream => Need.Food,
                     Church or TownHall or Fountain or Well or Bandstand or Campsite or Pub => Need.Social,
-                    Carousel or FerrisWheel or Playground or School or Disco or Football or Jetty => Need.Fun,
-                    CastleRuin or Lookout or Crag or Windmill or FireStation or Statue or SignalBox or Park or Museum or Factory or Balloon or Studio or Sawmill => Need.Sights,
+                    Carousel or FerrisWheel or Playground or School or Disco or Football or Jetty or Stadium => Need.Fun,
+                    CastleRuin or Lookout or Crag or Windmill or FireStation or Statue or SignalBox or Park or Museum or Factory or Balloon or Studio or Sawmill or Zoo or FairyCastle => Need.Sights,
                     Bench or LogPile or HayBales => Need.Rest,
                     _ => b.Category == PlaceCategory.Homes ? Need.Rest : Need.None,
                 };
@@ -283,6 +296,8 @@ namespace Wonderland
             Hours(Pub, 16f, 24.5f); Work(Pub, "landlord", 15.5f, 24.5f, false, Goods.Sells);
             Work(Hotel, "hotel keeper", 7f, 21f);
             Hours(PostOffice, 9f, 17.5f); Work(PostOffice, "postmaster", 8f, 17.5f);
+            Hours(Zoo, 9f, 18f); Work(Zoo, "zookeeper", 8f, 18f);
+            Hours(Stadium, 10f, 21.5f); Work(Stadium, "groundsman", 9f, 18f);
             // Their own rhythms: supper in the evening, dancing after dark.
             list[Restaurant].Rhythm = new[] { 0f, 0f, 0f, 0.05f, 0.85f, 0.35f, 1f, 0.8f, 0f };
             list[Disco].Rhythm = new[] { 0.9f, 0f, 0f, 0f, 0f, 0f, 0.3f, 1f, 1f };
