@@ -35,6 +35,8 @@ namespace Wonderland.Editor
             catch (Exception e) { Fail("Exception: " + e); }
             try { Waterways(); }
             catch (Exception e) { Fail("Exception: " + e); }
+            try { Soak(); }
+            catch (Exception e) { Fail("Exception: " + e); }
             BuildGrid.Snap = true;
             Report.AppendLine(failures == 0 ? "RESULT: PASS" : $"RESULT: FAIL ({failures})");
             File.WriteAllText("Logs/living-results.txt", Report.ToString());
@@ -493,6 +495,62 @@ namespace Wonderland.Editor
             w.Undo(); w.Redo();
             Check(w.Streams.Streams.Count == 3 && Mathf.Abs(w.Streams.Streams[2].Width - 2.2f) < 0.01f, $"Widths survive undo and redo ({(w.Streams.Streams.Count > 2 ? w.Streams.Streams[2].Width : 0f):0.0})");
             UnityEngine.Object.DestroyImmediate(w2.gameObject);
+            UnityEngine.Object.DestroyImmediate(w.gameObject);
+        }
+
+        /// <summary>
+        /// Everything at once, for a long while, with things taken away part way: a town with roads, farms, a sawmill, shops,
+        /// a pub, a post office and letterboxes, a taxi rank, a car park, a zoo and a stadium. Nothing may get stuck: no
+        /// delivery, fare or round lasts for ever, nobody waits for a taxi indefinitely, and after the taxi rank, the barn and
+        /// a shop are taken away mid-day everything carries on.
+        /// </summary>
+        private static void Soak()
+        {
+            var w = Scratch("Soak", 440f);
+            var t = w.Terrain;
+            w.BuildPath(Line(t, new Vector2(-0.7f, 0f), new Vector2(0.7f, 0f)), PathKind.Road);
+            w.BuildPath(Line(t, new Vector2(0f, -0.6f), new Vector2(0f, 0.6f)), PathKind.Road);
+            void Put(int id, float x, float z, float rot = 0f) => w.PlaceHouse(new HouseInstance { x = x, z = z, rotation = rot, variant = id });
+            Put(Catalog.Barn, -0.5f, 0.11f); Put(Catalog.WheatField, -0.45f, 0.35f); Put(Catalog.Sawmill, -0.5f, -0.12f, 180f);
+            Put(Catalog.Bakery, 0.15f, 0.1f); Put(Catalog.Grocer, 0.3f, 0.1f); Put(Catalog.FurnitureShop, 0.45f, 0.1f);
+            Put(Catalog.Pub, 0.15f, -0.11f, 180f); Put(Catalog.PostOffice, 0.3f, -0.11f, 180f); Put(Catalog.CarPark, 0.5f, -0.13f, 180f);
+            Put(Catalog.TaxiRank, -0.2f, 0.05f); Put(Catalog.Letterbox, -0.08f, 0.04f); Put(Catalog.Letterbox, 0.04f, 0.3f);
+            Put(Catalog.Zoo, 0.35f, 0.4f); Put(Catalog.Stadium, 0.35f, -0.42f, 180f); Put(Catalog.Factory, -0.3f, -0.45f);
+            foreach (var (x, z) in new[] { (-0.1f, 0.2f), (-0.1f, 0.35f), (-0.1f, 0.5f), (0.1f, 0.25f), (0.1f, 0.42f), (-0.1f, -0.25f), (-0.1f, -0.4f), (0.1f, -0.3f), (-0.25f, 0.2f), (-0.65f, 0.3f) })
+                Put(Catalog.Cottage, x, z, x < 0f ? 90f : -90f);
+            w.People.Grid.Complete(); w.Clock.Hour = 7f; w.People.Step(Dt); w.Traffic.Refresh(true);
+            var started = new Dictionary<object, float>();
+            float longest = 0f; string longestWhat = null;
+            int errors = 0; string firstError = null;
+            void OnLog(string msg, string trace, LogType type) { if (type is LogType.Exception or LogType.Error) { errors++; firstError ??= msg; } }
+            Application.logMessageReceived += OnLog;
+            try
+            {
+                bool removed = false;
+                Live(w, 900f, s =>
+                {
+                    w.Attractions.Step(Dt); w.Freight.Step(Dt); w.Harbours.Step(Dt);
+                    foreach (var v in w.Traffic.Vehicles)
+                    {
+                        object job = (object)v.Job ?? (object)v.Fare ?? v.Round;
+                        if (job == null) continue;
+                        if (!started.ContainsKey(job)) started[job] = s;
+                        float age = s - started[job];
+                        if (age > longest) { longest = age; longestWhat = w.Traffic.Describe(v); }
+                    }
+                    if (!removed && w.Clock.Hour > 12f)
+                    {
+                        removed = true;
+                        foreach (int id in new[] { Catalog.TaxiRank, Catalog.Barn, Catalog.Bakery }) { int k = w.Buildings.Houses.FindIndex(h => h.variant == id); if (k >= 0) w.RemoveHouse(k); }
+                    }
+                });
+            }
+            finally { Application.logMessageReceived -= OnLog; }
+            int hailing = 0; for (int i = 0; i < w.People.People.Count; i++) if (w.People.StateOf(i) is PeopleSystem.Activity.Hailing or PeopleSystem.Activity.InTaxi) hailing++;
+            Check(errors == 0, $"A busy town for a whole day, things taken away at noon: no errors ({errors}{(firstError != null ? ": " + firstError : "")})");
+            Check(longest < 240f, $"No delivery, fare or post round lasts for ever (longest {longest:0} s: {longestWhat})");
+            Check(w.Traffic.Delivered >= 1 && w.Traffic.Rounds >= 1 && hailing == 0,
+                $"Deliveries and post rounds happened and ended, and nobody is left waiting for a taxi ({w.Traffic.Delivered} deliveries, {w.Traffic.Rounds} rounds, {w.Traffic.FaresDone} fares; {hailing} still waiting or riding at the end)");
             UnityEngine.Object.DestroyImmediate(w.gameObject);
         }
 

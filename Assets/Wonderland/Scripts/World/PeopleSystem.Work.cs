@@ -21,14 +21,17 @@ namespace Wonderland
     /// and the café sell a little with every visit (bare shelves draw fewer people), and workers carry it by hand -
     /// the farmer to the shops, the shopkeeper fetching from a farm - within their side of the line. Across it, goods
     /// trains do: crates carried to a station leave with the next goods train and are unloaded where shops want them.
-    /// A van from beyond the village tops shops up slowly, so a village without farms still has bread, just less of it.
+    /// A van from beyond the village tops shops up slowly to a couple of crates, so a village without farms still has
+    /// bread, just less of it; full shelves need the village's own farms and works (and their lorries).
     /// </summary>
     public sealed partial class PeopleSystem
     {
         public const float StockCap = 6f;
         public const float GrowRate = 0.8f;        // crates per hour of work on a farm
         public const float SaleSize = 0.25f;       // of a crate, per shopping trip or meal
-        public const float VanRate = 0.15f;        // crates per hour a shop gets from beyond the village anyway
+        public const float VanRate = 0.15f;        // crates per hour a shop gets from beyond the village anyway...
+        public const float VanFloor = 2f;          // ...but only up to this: the rest comes from the village's farms and works
+        public const float SoldPerHour = 0.35f;    // crates an open shop sells in an hour to customers from round about (a lorry comes twice a day)
         public const int CratesPerTrip = 2, TrainHolds = 12;
 
         private sealed class Stock { public float Have, Waiting; public bool Supplied; public int BareDay = -1; }
@@ -266,7 +269,8 @@ namespace Wonderland
             foreach (var p in places)
             {
                 if (p.Bp.Goods != Goods.Sells) continue;
-                p.Stock.Have = Mathf.Min(StockCap, p.Stock.Have + VanRate * hours);
+                if (p.Bp.OpenAt(Clock.Hour) && p.Stock.Have > VanFloor) p.Stock.Have = Mathf.Max(VanFloor, p.Stock.Have - SoldPerHour * hours);   // the day's custom empties the shelves...
+                if (p.Stock.Have < VanFloor) p.Stock.Have = Mathf.Min(VanFloor, p.Stock.Have + VanRate * hours);   // (the van only keeps shelves from going bare: the rest comes by lorry or by hand)
                 regionWant[p.WorkRegion] = (regionWant.TryGetValue(p.WorkRegion, out float w) ? w : 0f) + StockCap - p.Stock.Have;
             }
             foreach (var s in stationPlace) if (s != null) regionStation.Add(s.WorkRegion);

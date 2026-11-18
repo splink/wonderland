@@ -140,8 +140,8 @@ PASS  ...get off at the far station and walk on to where they were going
 PASS  A lane with a level crossing joins the two sides (1 regions)
 PASS  ...and people from inside the loop walk over it to the village
 PASS  Save/load keeps the time (10:00), the clock speed, needs and homes (8/8)
-PASS  40 villagers: 0.27 ms per frame on average, worst 7.4 ms, 1.5 decisions/s, slowest decision 2.2 ms, places directory 7.1 ms (editor timing)
-PASS  After an edit the walk grid rebuilds over 31 frames (60 ms of work, worst frame 3.3 ms)
+PASS  40 villagers: 0.27 ms per frame on average, worst 5.7 ms, 1.5 decisions/s, slowest decision 2.2 ms, places directory 5.5 ms (editor timing)
+PASS  After an edit the walk grid rebuilds over 32 frames (60 ms of work, worst frame 3.2 ms)
 PASS  With no places at all, villagers wander by day and sleep under the stars at night
 PASS  A working village goes up (15/15 places, 10 villagers)
 PASS  Opening hours: the bakery opens at half six and shuts at six, the carousel stops in the evening, the fountain never closes
@@ -153,7 +153,7 @@ PASS  The village tells the player what changes: The shelves at the grocer are b
 PASS  With no farm, shelves run bare and the village says so ("The shelves at the grocer are bare - a farm nearby would help")
 PASS  ...pointing at the shop shows it ("Bakery: nobody here, 2 on the way - people come for the morning shopping, busiest in the morning · Gus is the baker · shelves bare · open till 18:00")
 PASS  Villagers who spend time together become friends (1 friendships, some made earlier; "")
-PASS  Save and load keep the friendships (1) and what is on the shelves (4.3 crates at the bakery)
+PASS  Save and load keep the friendships (1) and what is on the shelves (2.0 crates at the bakery)
 PASS  A fête at the fountain - everyone's invited! - 5 of 10 gather at the fountain
 PASS  The fête ends after 2.5 hours and everyone gets on with their day (0 still gathering)
 PASS  A decider from outside fills the café (4 of 5 spots, asked 5 times); one handing out nonsense is ignored
@@ -181,10 +181,10 @@ PASS  A town goes up along two crossing roads and a lane (23/23 places, 11 villa
 PASS  The roads make one network, joined where they cross (124 nodes)
 PASS  Homes by the road have vehicles (3 cars, 0 motorbikes, 2 bicycles), and the stations theirs
 PASS  A dog and a cat move in
-PASS  Vehicles drive the roads all day and never leave them (worst 2.2 cm from a road's centre line; 14 trips, 34 stops for traffic or people)
+PASS  Vehicles drive the roads all day and never leave them (worst 2.3 cm from a road's centre line; 14 trips, 59 stops for traffic or people)
 PASS  Households drive to the shops, the restaurant and the park and come home (14 round trips)
-PASS  Supper fills the restaurant terrace (207 in the evening vs 126 in the afternoon)
-PASS  The disco comes alive after dark (54 dancing, 2 night owls; heard 187 times; nobody there by day)
+PASS  Supper fills the restaurant terrace (172 in the evening vs 126 in the afternoon)
+PASS  The disco comes alive after dark (44 dancing, 2 night owls; heard 187 times; nobody there by day)
 PASS  Visitors come to the museum (338) and the park (77)
 PASS  Children go to school and play football: a match with a ball (2.6 m of passes, 17 goals)
 PASS  The factory chimney smokes while it works (Dora works there; next door: Dora (child False, works at 15))
@@ -199,9 +199,9 @@ PASS  Police: "A bicycle has gone missing at the townhouse - the police are comi
 PASS  CCTV: 2 cameras; the watched feed is filmed 15 times a second, the studio's screens 3.3 a second between them
 PASS  Save and load keep where the cameras look (71 / 15 degrees; loaded 71 / 15, 2 cameras), the pets (2), and the vehicles come back with their homes (8 of 8)
 PASS  Erasing a camera leaves the other selected, still aimed where it was
-PASS  Sound: 3 sources near the crossroads (at most 8); off means silent; five barks in a row play once; a meow out of earshot isn't played
+PASS  Sound: 4 sources near the crossroads (at most 8); off means silent; five barks in a row play once; a meow out of earshot isn't played
 PASS  Taking a road away re-routes or parks the traffic (worst 1.4 cm off the remaining roads)
-PASS  A busy town (40 villagers, 8 vehicles, 2 animals, sound and a camera feed): 0.26 ms per frame on average, worst 2.5 ms (editor timing, simulation only)
+PASS  A busy town (40 villagers, 8 vehicles, 2 animals, sound and a camera feed): 0.25 ms per frame on average, worst 2.7 ms (editor timing, simulation only)
 PASS  A road crosses the railway at a level crossing; homes on both sides have vehicles (5 places, 4 vehicles)
 PASS  Vehicles wait at the level crossing while a train goes by (245 waits, 7 trips), and are never on it with the train
 PASS  A loop drawn in two halves closes (1 pieces, 0 dead ends)
