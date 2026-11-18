@@ -143,10 +143,12 @@ namespace Wonderland
             return found;
         }
 
+        /// <summary>Adds a planned line (joining the roads it carries on); the meshes follow with the next <see cref="Rebuild"/>.</summary>
         public void Add(PathLine line)
         {
             if (line.extendsStart >= 0 || line.extendsEnd >= 0) Join(line); else Lines.Add(line);
-            Rebuild();
+            graph = null;
+            Index();
         }
 
         /// <summary>
