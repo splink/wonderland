@@ -863,6 +863,71 @@ be set. The interface hid what it could do and gave buttons different meanings i
 Renders: `docs/renders/editor-label-building.png`, `editor-label-villager.png`, `editor-track-marks.png`, and
 `editor-cards-*.png`.
 
+## The working world
+
+**Assessment of what existed.** The village already had most of what a capability system needs:
+- catalogue entries (`Catalog.cs`) declaring jobs and shifts, opening hours, the needs they serve, goods roles
+  (grows / sells / ships) and activity spots;
+- villagers with homes, workplaces, day plans and an intent system with legs (walk, train platform, pickup), and
+  deciders that can direct them (the fête);
+- a little stock per place (crates), carried by workers and goods trains;
+- a road graph with household cars and emergency vehicles.
+
+**What was added.** I extended those pieces rather than building a parallel engine:
+- **Capabilities on the catalogue:** `Makes`, `Takes` (produce, goods, timber, post), `Lorries`, `Taxis`,
+  `Tractors`. The shared systems read them, so a new building gets its behaviour by declaring them.
+- **Vehicle activities in the traffic system:**
+  - `TrafficSystem.Freight.cs` — deliveries: plan a pickup and a drop both reachable by road, load, carry, unload into
+    stock, go home. Reservations stop two lorries serving the same place, a budget limits lorries out at once, and a
+    served place waits a while before the next delivery.
+  - `.Taxi.cs` — fares.
+  - `.Farm.cs` — tractors.
+  - `.Post.cs` — post rounds.
+  - `.Parking.cs` — car park bays.
+- **Villager side:** `PeopleSystem.Taxi.cs` adds a kerb leg and Hailing / InTaxi states. While riding, a villager's
+  position is the taxi's.
+- **Handover systems:**
+  - `FreightSystem` — the freight yard crane (holds the goods train while it works) and the wagons' loads.
+  - `HarbourSystem` — water routes by grid search, container ships and quay cranes.
+  - `AttractionSystem` — zoo animals, match days with a crowd mesh and players. A `StadiumMatch` decider brings
+    villagers in, as the fête does.
+- **New objects:** taxi rank, sawmill, furniture shop, ice cream parlour, pub, hotel, post office, letterbox, car
+  park, freight yard, harbour, zoo, fairy-tale castle, football stadium; the tractor, the open lorry, the container
+  ship, cranes, crates and containers. There is a new Shops category in Build.
+- **Water:** three stream widths (creek, stream, river), joined stream networks, waterfall spray, a Lake brush.
+
+**What is demonstrably working.** `scripts/unity.sh living` runs nine scenes from start to end, 38 checks, all
+passing:
+- deliveries, including with no road and with the drop removed half way;
+- a taxi journey;
+- tractor work;
+- the working town (sawmill planks, post round, car park, ice cream parlour and pub visitors);
+- freight by rail;
+- shipping, including a lone harbour and a harbour removed;
+- the zoo and a match;
+- waterways;
+- a one-day soak of a busy town with buildings removed at noon: no errors, no activity lasting more than about a
+  minute, nobody stuck.
+
+The journey, town and controller suites pass too. Renders: `docs/renders/living-*.png`.
+
+**The rhythm fix.** The soak test showed that in an ordinary town lorries never had anything to do: shops opened full
+and the van from beyond the village kept them full. Shops now sell a little through the day and the van only keeps
+them from going bare, so lorries come about twice a day.
+
+**Not done, or only partly:**
+- Cable cars.
+- Bicycles as a trip choice: households' bicycles already ride.
+- Fuel-station stops.
+- Hotel guests arriving as tourists.
+- Family groups at the zoo.
+- Ships on rivers: only lakes are navigable.
+- Ships can't be selected; the harbour card describes them.
+- Containers are abstract: a ship carries what its harbour's lorries brought, otherwise empties.
+- Multi-stage freight chains work implicitly (lorry → yard → train → yard → lorry) but aren't tracked as one
+  consignment.
+- Where a creek meets a river, the ribbons still show a small gap.
+
 ## Known defects and risks
 
 - **Station, water, bridges, tunnels, animals and villagers are untested on the device.** They are covered by the

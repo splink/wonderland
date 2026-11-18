@@ -408,6 +408,55 @@ Palette: the tools in four named groups - **Landscape** (Terrain, Water, Forest)
 **Undo · Redo · Save · Load · Move · Help · Settings**. The world saves automatically when the app is paused or closed and is restored
 on the next launch.
 
+## The working world
+
+What you build decides what happens. Buildings declare what they offer (a job, opening hours, what they make and
+take, lorries, taxis or machines kept there), and the village's shared activity systems find what is possible and do
+it. Nothing needs connecting by hand, and nothing is invented that the world doesn't allow.
+
+- **Lorries.** The barn, the factory, the sawmill, the freight yard and the harbour keep an open lorry, if they stand
+  by a road.
+  - It collects crates where they're ready (produce, goods, planks) and takes them where they're wanted: the bakery,
+    the grocer, the café, the pub, the furniture shop, the station or the freight yard.
+  - You can watch it lift the crates onto its bed one by one, carry them, and unload them.
+  - Shops sell through the day, so a lorry comes about twice a day.
+  - With no road there is no delivery. If the place it was driving to is removed, it takes the load somewhere else.
+- **Taxis.** A taxi rank by a road keeps two taxis, and the station keeps one.
+  - A villager going far by day may hail one: they walk to the kerb, wait, and get in. You can see them in the back
+    window.
+  - They ride to the far kerb and walk the rest of the way.
+- **Tractors.** A wheat field keeps a tractor at its corner. Its farmer drives it up and down in rows during their
+  shift, sitting at the wheel.
+- **The post.** The post office's red van does its rounds at 9:30 and 14:30. It empties every letterbox the roads
+  reach, delivers to a few homes, and comes back.
+- **Car parks.** Visitors' cars turn into a free bay in a car park near where they're going, and back out when the
+  visit is over.
+- **Freight by rail.** Lorries bring crates to a freight yard beside the railway.
+  - When a goods train stops there, the yard's crane lifts the crates across one by one, and the train waits for it.
+  - The open wagons show what they carry.
+  - At the other end, crates that side of the line wants are unloaded, and the yard's lorry takes them on.
+- **Ships.** Two harbours on the same lake (with water wide enough all the way) get a container ship that sails
+  between them.
+  - At each harbour the quay crane unloads its containers onto the quay and loads what lorries brought.
+  - A harbour alone on its pond stays quiet.
+- **Shops, pubs and attractions.** The ice cream parlour is busiest on afternoons, and the pub in the evenings.
+  - The hotel houses guests.
+  - At the zoo, giraffes, elephants, lions, zebras and penguins roam their enclosures and villagers come to see them.
+  - Visitors gaze at the fairy-tale castle.
+  - The stadium holds matches at 15:00 and 19:30: the village comes to watch, the stands fill and the teams play.
+    Goals are news.
+- **Water.** Streams come in three widths: a creek, a stream or a river. Streams drawn to another stream join it.
+  Steep drops make waterfalls, and the Lake chip paints big open water.
+
+Select anything to see what it's doing:
+- a lorry: "taking 5 crates of milk and eggs to the bakery";
+- a villager: "in a taxi to the café";
+- a tractor: "Wanda is ploughing the wheat field";
+- a building: "Activities: takes in produce · Now: a lorry is unloading"; a harbour: "the crane is unloading the MV
+  Puffin"; a stadium: "match on: 2 - 1".
+
+The follow camera rides along in the taxi or on the tractor.
+
 ## How it is built
 
 Everything you see is generated at runtime by C# from seeded procedural generators sharing one palette and a few
