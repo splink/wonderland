@@ -293,7 +293,7 @@ namespace Wonderland
             }
             // The hand's wobble out first: the fewest points within 1.5 cm of the stroke, re-filled every 1 cm - so the
             // track is shaped from the line meant, not the jitter (no little S-bends where it leaves or meets a track).
-            if (!OldShaping) path = Steady(path, closed);
+            path = Steady(path, closed);
 
             List<Vector2> pts = null;
             float radius = 0f;
@@ -311,12 +311,7 @@ namespace Wonderland
                 // An attached stroke: the simplest curve that leaves (and meets) each attachment along the track - one or
                 // two gentle Béziers - is preferred whenever it is drivable and stays near what was drawn; and it is the
                 // fallback when the drawn line can't be bent to meet the track at all (a short extension, a link).
-                if (attached && !closed && OldShaping && (best == null || bestR < MinRadius * 0.95f))
-                {
-                    var fit = Fit(path, start, finish);
-                    if (fit != null) { float r = MinRadiusOf(fit, false); if (best == null || r > bestR) { best = fit; bestR = r; } }
-                }
-                else if (attached && !closed)
+                if (attached && !closed)
                 {
                     var fit = Fit(path, start, finish);
                     if (fit != null)
@@ -350,7 +345,7 @@ namespace Wonderland
             if (plan.Finish.Kind != AttachKind.None) dense[^1] = plan.Finish.Point;
             // The spline can overshoot a little where a straight meets a curve (a tiny S-bend next to a switch): smooth
             // the centre line out, keeping each end's first centimetres - and so the way it leaves the track - in place.
-            if (!OldShaping && !closed && dense.Count > 12)
+            if (!closed && dense.Count > 12)
             {
                 var keepA = dense.GetRange(0, 3); var keepB = dense.GetRange(dense.Count - 3, 3);
                 for (int iter = 0; iter < 30; iter++)
@@ -416,34 +411,6 @@ namespace Wonderland
                 }
             }
             return best;
-        }
-
-        /// <summary>Diagnostics: shape track the way it was before strokes were steadied and simple fits preferred.</summary>
-        public static bool OldShaping;
-
-        /// <summary>
-        /// A line's tiny curves: bends that change side again within 8 cm (wiggles, not a deliberate S), and how much it
-        /// turns beyond what it needs (total turning minus the net change of direction, in degrees).
-        /// </summary>
-        public static readonly List<float> WiggleAt = new();   // (diagnostics: how far from the nearer end each wiggle was)
-        public static (int wiggles, float excess) Wiggles(IReadOnlyList<Vector3> line)
-        {
-            var p = new List<Vector2>(); foreach (var q in line) p.Add(new Vector2(q.x, q.z));
-            p = Resample(p, 0.01f, false);
-            int wiggles = 0, last = 0; float sinceChange = 0f, total = 0f;
-            for (int i = 1; i + 1 < p.Count; i++)
-            {
-                var a = p[i] - p[i - 1]; var b = p[i + 1] - p[i];
-                float angle = Vector2.SignedAngle(a, b);
-                total += Mathf.Abs(angle);
-                sinceChange += a.magnitude;
-                if (Mathf.Abs(angle) < 0.15f) continue;   // (about straight)
-                int side = angle > 0 ? 1 : -1;
-                if (last != 0 && side != last) { if (sinceChange < 0.08f) { wiggles++; float along = i * 0.01f; WiggleAt.Add(along < (p.Count - 1) * 0.01f - along ? along : -((p.Count - 1) * 0.01f - along)); } sinceChange = 0f; }
-                last = side;
-            }
-            float net = p.Count > 2 ? Mathf.Abs(Vector2.SignedAngle(p[1] - p[0], p[^1] - p[^2])) : 0f;
-            return (wiggles, Mathf.Max(0f, total - net));
         }
 
         /// <summary>How far a stroke strays from a curve on average.</summary>

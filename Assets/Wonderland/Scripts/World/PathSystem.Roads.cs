@@ -192,19 +192,6 @@ namespace Wonderland
             // Corners closer together than a road's width are hand jitter: merge them.
             for (int i = corners.Count - 2; i >= 1; i--)
                 if ((corners[i] - corners[i - 1]).magnitude < 0.04f && corners.Count > (closed ? 3 : 2)) corners.RemoveAt(i);
-            if (BuildGrid.Snap)
-            {
-                // On the grid: corners (and free ends) on its points - near-straight strokes come out exactly straight,
-                // and roads drawn side by side parallel. Ends that join another road stay where they join it.
-                for (int i = 0; i < corners.Count; i++)
-                    if (closed || !(i == 0 && joinA || i == corners.Count - 1 && joinB)) corners[i] = BuildGrid.Point(corners[i]);
-                for (int i = corners.Count - 1; i >= 1; i--) if ((corners[i] - corners[i - 1]).sqrMagnitude < 1e-8f) corners.RemoveAt(i);
-                for (int i = corners.Count - 2; i >= 1; i--)
-                    if (Vector2.Angle(corners[i] - corners[i - 1], corners[i + 1] - corners[i]) < 1f) corners.RemoveAt(i);   // (now in line)
-                if (corners.Count < 2) { error = "Draw a little longer"; return null; }
-                corners = Octilinear(corners, closed, raw);
-                if (!closed) { raw[0] = corners[0]; raw[^1] = corners[^1]; }
-            }
             // A road never turns straight back on itself (an end snapped onto a road behind the last corner, or the hand
             // doubling back): such a corner goes.
             for (int i = corners.Count - 2; i >= 1 && corners.Count > (closed ? 3 : 2); i--)
@@ -216,41 +203,6 @@ namespace Wonderland
             foreach (var p in pts)
                 if (terrain.EdgeAt(p.x, p.y) < 0.35f) { error = "Keep the road on the land"; return null; }
             return new PathLine { kind = kind, points = pts, closed = closed };
-        }
-
-        /// <summary>
-        /// On the grid, every stretch of road runs straight across it, straight along it or at 45 degrees: a stretch at any
-        /// other angle becomes a straight run and a diagonal (whichever order keeps closer to the stroke drawn).
-        /// </summary>
-        private static List<Vector2> Octilinear(List<Vector2> corners, bool closed, List<Vector2> drawn)
-        {
-            var result = new List<Vector2> { corners[0] };
-            int n = corners.Count;
-            for (int i = 1; i < (closed ? n + 1 : n); i++)
-            {
-                var a = corners[i - 1]; var b = corners[i % n];
-                var d = b - a;
-                float ax = Mathf.Abs(d.x), az = Mathf.Abs(d.y);
-                bool straight = ax < 1e-4f || az < 1e-4f, diagonal = Mathf.Abs(ax - az) < 1e-4f;
-                if (!straight && !diagonal)
-                {
-                    // Straight first and then the diagonal, or the other way round.
-                    var run = ax > az ? new Vector2(Mathf.Sign(d.x) * (ax - az), 0f) : new Vector2(0f, Mathf.Sign(d.y) * (az - ax));
-                    var c1 = a + run; var c2 = b - run;
-                    result.Add(Off(c1, drawn) <= Off(c2, drawn) ? c1 : c2);
-                }
-                if (!closed || i < n) result.Add(b);
-            }
-            for (int i = result.Count - 2; i >= 1; i--)
-                if (Vector2.Angle(result[i] - result[i - 1], result[i + 1] - result[i]) < 1f || (result[i] - result[i - 1]).sqrMagnitude < 1e-8f) result.RemoveAt(i);
-            return result;
-        }
-
-        private static float Off(Vector2 p, List<Vector2> drawn)
-        {
-            float best = float.MaxValue;
-            foreach (var q in drawn) best = Mathf.Min(best, (q - p).sqrMagnitude);
-            return best;
         }
 
         /// <summary>

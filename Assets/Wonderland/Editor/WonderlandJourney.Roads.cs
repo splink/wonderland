@@ -447,12 +447,37 @@ namespace Wonderland.Editor
         }
 
         /// <summary>
-        /// Connections, old shaping vs new (Logs/trackshape-results.txt): branches off a loop, links between two loops,
+        /// Connections (Logs/trackshape-results.txt): branches off a loop, links between two loops,
         /// extensions - hand-drawn with a wobble - and how many S-bends the built pieces have.
         /// </summary>
         private static readonly List<string> WiggleWhere = new();
 
-        /// <summary>Six connections drawn by hand onto loops, old shaping (left) and new (right), seen from above.</summary>
+        /// <summary>
+        /// A line's tiny curves: bends that change side again within 8 cm (wiggles, not a deliberate S), and how much it
+        /// turns beyond what it needs (total turning minus the net change of direction, in degrees).
+        /// </summary>
+        private static readonly List<float> WiggleAt = new();   // (diagnostics: how far from the nearer end each wiggle was)
+        private static (int wiggles, float excess) Wiggles(IReadOnlyList<Vector3> line)
+        {
+            var p = new List<Vector2>(); foreach (var q in line) p.Add(new Vector2(q.x, q.z));
+            p = TrackPlanner.Resample(p, 0.01f, false);
+            int wiggles = 0, last = 0; float sinceChange = 0f, total = 0f;
+            for (int i = 1; i + 1 < p.Count; i++)
+            {
+                var a = p[i] - p[i - 1]; var b = p[i + 1] - p[i];
+                float angle = Vector2.SignedAngle(a, b);
+                total += Mathf.Abs(angle);
+                sinceChange += a.magnitude;
+                if (Mathf.Abs(angle) < 0.15f) continue;   // (about straight)
+                int side = angle > 0 ? 1 : -1;
+                if (last != 0 && side != last) { if (sinceChange < 0.08f) { wiggles++; float along = i * 0.01f; WiggleAt.Add(along < (p.Count - 1) * 0.01f - along ? along : -((p.Count - 1) * 0.01f - along)); } sinceChange = 0f; }
+                last = side;
+            }
+            float net = p.Count > 2 ? Mathf.Abs(Vector2.SignedAngle(p[1] - p[0], p[^1] - p[^2])) : 0f;
+            return (wiggles, Mathf.Max(0f, total - net));
+        }
+
+        /// <summary>Six connections drawn by hand onto loops, seen from above.</summary>
         public static void TrackShapeRenders()
         {
             ShaderUtil.allowAsyncCompilation = false;
@@ -462,12 +487,10 @@ namespace Wonderland.Editor
             var cam = WonderlandRenders.CreateCamera(new Vector3(0f, 2f, 0f), Vector3.zero, 40f);
             WonderlandRenders.Capture(cam, "warmup.png", 64, 64);
             System.IO.File.Delete(System.IO.Path.Combine(WonderlandRenders.Output, "warmup.png"));
-            foreach (bool old in new[] { true, false })
             {
-                TrackPlanner.OldShaping = old;
                 for (int trial = 0; trial < 6; trial++)
                 {
-                    var w = Scratch("Shape " + trial, 800f + trial * 4f + (old ? 0f : 40f));
+                    var w = Scratch("Shape " + trial, 840f + trial * 4f);
                     w.Sky.Shown = false;
                     var t = w.Terrain;
                     var rng = new Rng(100 + trial);
@@ -485,21 +508,18 @@ namespace Wonderland.Editor
                     w.BuildTrack(stroke);
                     var c = w.transform.TransformPoint(new Vector3(start.x, 0f, start.y));
                     cam.transform.position = c + new Vector3(0f, 0.55f, 0f); cam.transform.LookAt(c); cam.fieldOfView = 40f;
-                    WonderlandRenders.Capture(cam, $"editor-trackshape-{trial}-{(old ? "old" : "new")}.png", 600, 600);
+                    WonderlandRenders.Capture(cam, $"editor-trackshape-{trial}.png", 600, 600);
                     Object.DestroyImmediate(w.gameObject);
                 }
             }
-            TrackPlanner.OldShaping = false;
             if (Application.isBatchMode) EditorApplication.Exit(0);
         }
 
         public static void TrackShape()
         {
             var report = new System.Text.StringBuilder();
-            foreach (bool old in new[] { true, false })
             {
-                TrackPlanner.OldShaping = old;
-                TrackPlanner.WiggleAt.Clear(); WiggleWhere.Clear();
+                WiggleAt.Clear(); WiggleWhere.Clear();
                 int built = 0, wiggles = 0, pieces = 0; float excess = 0f;
                 for (int trial = 0; trial < 24; trial++)
                 {
@@ -534,23 +554,22 @@ namespace Wonderland.Editor
                         {
                             if (net.Edges[e].Closed) continue;
                             if (net.Edges[e].Layout.Length > 1.6f) continue;   // (the new connector, not the loops)
-                            int seen = TrackPlanner.WiggleAt.Count;
-                            var (wg, ex) = TrackPlanner.Wiggles(net.Edges[e].Layout.Points); wiggles += wg; excess += ex; pieces++;
+                            int seen = WiggleAt.Count;
+                            var (wg, ex) = Wiggles(net.Edges[e].Layout.Points); wiggles += wg; excess += ex; pieces++;
                             bool isNew = net.Edges[e].Joint[0] < 0 || net.Edges[e].Joint[1] < 0 || trial % 3 == 1 && net.Edges[e].Layout.Length < 1.2f;
-                            for (int k = seen; k < TrackPlanner.WiggleAt.Count; k++)
+                            for (int k = seen; k < WiggleAt.Count; k++)
                             {
-                                bool atStart = TrackPlanner.WiggleAt[k] >= 0f;
+                                bool atStart = WiggleAt[k] >= 0f;
                                 bool switchEnd = net.Edges[e].Joint[atStart ? 0 : 1] >= 0;
                                 WiggleWhere.Add((isNew ? "new piece" : "old track") + (switchEnd ? " by the switch" : " by its free end"));
-                                TrackPlanner.WiggleAt[k] = Mathf.Abs(TrackPlanner.WiggleAt[k]);
+                                WiggleAt[k] = Mathf.Abs(WiggleAt[k]);
                             }
                         }
                     }
                     Object.DestroyImmediate(w.gameObject);
                 }
-                report.AppendLine($"{(old ? "old shaping" : "new shaping")}: {built}/24 built; {wiggles} wiggles on {pieces} new pieces; turning beyond what they need: {excess / Mathf.Max(1, pieces):0} degrees each; wiggles at {string.Join(", ", TrackPlanner.WiggleAt.ConvertAll(x => (x * 100f).ToString("0")))} cm from an end, on: {string.Join(", ", WiggleWhere)}");
+                report.AppendLine($"{built}/24 built; {wiggles} wiggles on {pieces} new pieces; turning beyond what they need: {excess / Mathf.Max(1, pieces):0} degrees each; wiggles at {string.Join(", ", WiggleAt.ConvertAll(x => (x * 100f).ToString("0")))} cm from an end, on: {string.Join(", ", WiggleWhere)}");
             }
-            TrackPlanner.OldShaping = false;
             // One branch off a straight line, in detail: the bend of the first 10 cm, planned and as built.
             {
                 var w = Scratch("Branch", 700f);
