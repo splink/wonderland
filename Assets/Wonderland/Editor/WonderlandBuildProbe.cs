@@ -30,7 +30,7 @@ namespace Wonderland.Editor
             Report.Clear();
             bool gridWas = BuildGrid.Snap;
             BuildGrid.Snap = true;
-            try { Probe(); }
+            try { Probe(); RealWorlds(); }
             catch (Exception e) { Report.AppendLine("EXCEPTION " + e); }
             finally { BuildGrid.Snap = gridWas; }
             File.WriteAllText("Logs/buildprobe-results.txt", Report.ToString());
@@ -104,6 +104,71 @@ namespace Wonderland.Editor
             var trackStroke = Hand(new Vector2(-0.6f, -1.4f), new Vector2(0.0f, -2.1f), rng);
             Preview("track", trackStroke, p => world.PreviewTrack(p, out _, out _));
             UnityEngine.Object.DestroyImmediate(world.gameObject);
+        }
+
+        /// <summary>
+        /// Players' saved worlds (Tests/Saves, pulled from the headset; not in git): what letting go of a branch off their
+        /// railway costs, removing a piece, and undoing - on networks the size players really build.
+        /// </summary>
+        private static void RealWorlds()
+        {
+            if (!Directory.Exists("Tests/Saves")) { Report.AppendLine("No saved worlds in Tests/Saves"); return; }
+            var seen = new HashSet<long>();
+            foreach (var file in Directory.GetFiles("Tests/Saves", "*.json"))
+            {
+                if (!seen.Add(new FileInfo(file).Length)) continue;   // (copies of the same world)
+                var w = new GameObject("Saved world").AddComponent<WonderlandWorld>();
+                w.transform.position = new Vector3(500f, 0f, 0f);
+                try
+                {
+                    w.Deserialize(File.ReadAllText(file), WonderlandJourney.Materials());
+                    var net = w.Track.Network;
+                    int points = 0; foreach (var e in net.Edges) points += e.Layout.Points.Count;
+                    Report.AppendLine($"{Path.GetFileNameWithoutExtension(file)}: {net.Edges.Count} pieces, {points / 100f:0} m of track, {net.Joints.Count} switches, {w.Paths.Lines.Count} roads, {w.Buildings.Houses.Count} houses, {w.Forest.Trees.Count} trees");
+                    Branches(w);
+                }
+                catch (Exception e) { Report.AppendLine($"  {Path.GetFileName(file)}: {e}"); }
+                UnityEngine.Object.DestroyImmediate(w.gameObject);
+            }
+        }
+
+        /// <summary>Branches drawn off the middle of the longest pieces (either side), each built, removed and undone.</summary>
+        private static void Branches(WonderlandWorld w)
+        {
+            var net = w.Track.Network;
+            var order = new List<int>(); for (int e = 0; e < net.Edges.Count; e++) order.Add(e);
+            order.Sort((a, b) => net.Edges[b].Layout.Length.CompareTo(net.Edges[a].Layout.Length));
+            int built = 0, tries = 0;
+            foreach (int e in order)
+            {
+                if (built >= 3 || tries >= 24) break;
+                var l = net.Edges[e].Layout;
+                if (l.Length < 0.6f) continue;
+                foreach (float side in new[] { 1f, -1f })
+                {
+                    if (built >= 3) break;
+                    tries++;
+                    var p = l.Evaluate(l.Length * 0.5f, out var t);
+                    var a = new Vector2(p.x, p.z); var d = new Vector2(t.x, t.z).normalized; var n = new Vector2(-d.y, d.x) * side;
+                    var stroke = new List<Vector3>();
+                    for (int i = 0; i <= 40; i++) { float u = i / 40f; var q = a + d * (u * 0.5f) + n * (u * u * 0.3f); stroke.Add(new Vector3(q.x, w.Terrain.SurfaceAt(q.x, q.y), q.y)); }
+                    var c = Stopwatch.StartNew();
+                    var plan = w.BuildTrack(stroke);
+                    double ms = c.Elapsed.TotalMilliseconds;
+                    if (!plan.Ok) continue;
+                    built++;
+                    Report.AppendLine($"  branch built in {ms:0} ms");
+                    var mid = plan.Path[plan.Path.Count / 2];
+                    c.Restart();
+                    bool removed = w.RemovePieceAt(new Vector3(mid.x, 0f, mid.y));
+                    Report.AppendLine($"  piece {(removed ? "removed" : "NOT removed")} in {c.Elapsed.TotalMilliseconds:0} ms");
+                    c.Restart(); w.Undo(); Report.AppendLine($"  undo {c.Elapsed.TotalMilliseconds:0} ms");
+                    c.Restart(); w.Undo(); Report.AppendLine($"  undo {c.Elapsed.TotalMilliseconds:0} ms");
+                    net = w.Track.Network;
+                    break;
+                }
+            }
+            if (built == 0) Report.AppendLine($"  no branch could be built ({tries} tries)");
         }
 
         /// <summary>A line's bends: each stretch where it turns, and by how much (degrees); and its straight stretches' headings.</summary>
