@@ -9,10 +9,10 @@ PASS  Aiming at the floor beyond the shore grows land (2.73 -> 3.00 m2)
 PASS  Clicking the Forest tile selects the forest brush
 PASS  Painting with the trigger grows trees (30)
 PASS  Track tool selected
-PASS  Drawing a loop with the trigger lays a closed railway (2.83 m)
-PASS  Drawing from the track outwards branches off with a switch (1 switch, 2 pieces; "Joined one way: trains can go across but not back yet - draw a second link the other way (follow the arrows) so they can return")
+PASS  Drawing a loop with the trigger lays a closed railway (2.82 m)
+PASS  Drawing from the track outwards branches off with a switch (1 switch, 2 pieces; "New branch with a switch - it runs the way its arrows point; join its end back to the railway so trains can use it")
 PASS  Tapping the switch throws it (and pins it)
-PASS  Grip on the track and drag bends it to where you let go (now 0.2 cm from there; "Track reshaped", while dragging "Move the pointer and let go of grip - the track bends like a rope (red: it can't go there)")
+PASS  Grip on the track and drag bends it to where you let go (now 2.1 cm from there, on the grid; "Track reshaped", while dragging "Move the pointer and let go of grip - the track bends like a rope (red: it can't go there)")
 PASS  Trigger on the railway puts a running train on it
 PASS  Train moves (0.27 m)
 PASS  Point at a train, then + / - Carriage couple and uncouple a carriage (2 -> 3 -> 2)
@@ -38,7 +38,7 @@ PASS  The Life tool's clock chips speed the days up and stop time
 PASS  ...and let the days pass again
 PASS  The Life tool's Fête chip calls the village to the fountain, and calls it off
 PASS  The Life tool's Clouds chip hides and shows the clouds
-PASS  The stick turns and tilts the selected camera (yaw -36° -> 34°, tilt 5° -> 25°)
+PASS  The stick turns and tilts the selected camera (yaw -41° -> 29°, tilt 0° -> 20°)
 PASS  Select: trigger on a camera - its card and its live picture over the palette, with buttons round it that turn it; the trigger on the land points it there [first hidden True, selected True, buttons True, turned True, aimed True]
 PASS  Close puts the picture away
 PASS  Grip on the track bends it in any tool (label: "<b><color=#FFE3A8>Railway · trains run the way the arrows point</color></b> / <color=#FFD27A><b>Trigger</b></color>  its card / <color=#FFD27A><b>Grip</b></color>  bend it") - Track reshaped

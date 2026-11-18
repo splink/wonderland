@@ -29,8 +29,11 @@ namespace Wonderland.Editor
         public static void Run()
         {
             Report.Clear(); failures = 0;
+            bool gridWas = BuildGrid.Snap;
+            BuildGrid.Snap = true;   // (the default: roads and railway on the grid)
             try { Journey(); }
             catch (Exception e) { Check(false, "Exception: " + e); }
+            finally { BuildGrid.Snap = gridWas; }
             Report.AppendLine(failures == 0 ? "RESULT: PASS" : $"RESULT: FAIL ({failures})");
             File.WriteAllText("docs/interaction-test-results.txt", Report.ToString());
             Debug.Log("Wonderland interaction test\n" + Report);
@@ -163,7 +166,8 @@ namespace Wonderland.Editor
                 string dragSaid = tools.LastMessage;
                 Frame(hand, W(to), false);
                 float near = world.Track.Network.DistanceTo(to);
-                Check(near < 0.015f, $"Grip on the track and drag bends it to where you let go (now {near * 100f:0.0} cm from there; \"{tools.LastMessage}\", while dragging \"{dragSaid}\")");
+                float within = BuildGrid.Snap ? BuildGrid.Size * 0.5f + 0.005f : 0.015f;   // (on the grid: to the nearest grid line)
+                Check(near < within, $"Grip on the track and drag bends it to where you let go (now {near * 100f:0.0} cm from there{(BuildGrid.Snap ? ", on the grid" : "")}; \"{tools.LastMessage}\", while dragging \"{dragSaid}\")");
             }
             // Trains: click the tile, trigger on the track places a running train; Stop all / Start all.
             ClickButton(hand, "Train");
@@ -329,7 +333,11 @@ namespace Wonderland.Editor
                 if (buttons) { ClickButton(hand, ">"); ClickButton(hand, ">"); }
                 turned = Mathf.Abs(Mathf.DeltaAngle(world.Cctv.AimOf(0).yaw, yaw0)) > 25f;
                 float yaw1 = world.Cctv.AimOf(0).yaw;
-                var aimAt = world.transform.TransformPoint(new Vector3(-0.3f, world.Terrain.SurfaceAt(-0.3f, 0.3f), 0.3f));
+                // A spot of open land to point it at (not the railway, which the trigger would select instead).
+                var aimSpot = new Vector2(-0.3f, 0.3f);
+                foreach (var c in new[] { new Vector2(-0.3f, 0.3f), new Vector2(-0.25f, 0.15f), new Vector2(0.3f, 0.1f), new Vector2(-0.35f, -0.2f), new Vector2(0.1f, 0.15f) })
+                    if (world.Track.DistanceTo(new Vector3(c.x, 0f, c.y)) > 0.1f && world.Buildings.Nearest(c, 0.08f) < 0) { aimSpot = c; break; }
+                var aimAt = world.transform.TransformPoint(new Vector3(aimSpot.x, world.Terrain.SurfaceAt(aimSpot.x, aimSpot.y), aimSpot.y));
                 Frame(hand, aimAt, true); Frame(hand, aimAt, false);
                 aimed = Mathf.Abs(Mathf.DeltaAngle(world.Cctv.AimOf(0).yaw, yaw1)) > 5f;
                 // The stick turns and tilts it too.

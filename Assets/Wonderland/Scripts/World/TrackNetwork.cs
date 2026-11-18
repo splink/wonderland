@@ -565,6 +565,25 @@ namespace Wonderland
             return (new EdgeEnd(edge, 1), new EdgeEnd(b, 0));
         }
 
+        /// <summary>
+        /// The index of a point exactly at arc length <paramref name="s"/> along a piece: an existing point within a
+        /// millimetre, or one put in there (so a new switch lands exactly where it was planned).
+        /// </summary>
+        public int PointAt(int edge, float s)
+        {
+            var e = Edges[edge];
+            var l = e.Layout;
+            int index = TrackPlanner.IndexAt(l, s);
+            if (Mathf.Abs(l.Cum[index] - s) < 0.001f) return index;
+            int before = l.Cum[index] <= s ? index : index - 1;
+            if (before < 0 || !l.Closed && before >= l.Points.Count - 1) return index;
+            var pts = new List<Vector3>(l.Points);
+            pts.Insert(before + 1, l.Evaluate(s, out _));
+            e.Layout = new TrackLayout(pts, l.Closed);
+            e.Tunnel = null;
+            return before + 1;
+        }
+
         /// <summary>Makes a joint from track ends at one point; its trunk is the end pointing away from the others.</summary>
         public int Join(Vector3 position, params EdgeEnd[] ends)
         {

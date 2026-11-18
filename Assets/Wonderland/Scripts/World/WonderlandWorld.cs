@@ -931,9 +931,8 @@ namespace Wonderland
             {
                 net.Reindex();
                 if (!net.Nearest(p, out int edge, out float s, out _, 0.02f)) return null;
-                var l = net.Edges[edge].Layout;
-                int index = TrackPlanner.IndexAt(l, s);
-                at = l.Points[index];
+                int index = net.PointAt(edge, s);
+                at = net.Edges[edge].Layout.Points[index];
                 var (arriving, leaving) = net.Split(edge, index);
                 net.Reindex();
                 return new List<EdgeEnd> { arriving, leaving };

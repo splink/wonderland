@@ -122,7 +122,7 @@ namespace Wonderland.Editor
                 var first = w.BuildTrack(Line(t, new Vector2(-0.7f, -0.3f), new Vector2(0f, -0.3f), new Vector2(0.55f, -0.3f)));
                 var n = w.Track.Network;
                 // Back onto itself facing the wrong way: trains would have to reverse - refused, saying so.
-                var wrongWay = w.BuildTrack(Line(t, new Vector2(0.55f, -0.3f), new Vector2(0.7f, 0f), new Vector2(0.45f, 0.3f), new Vector2(0.05f, 0.25f), new Vector2(-0.15f, -0.05f), new Vector2(-0.2f, -0.3f)));
+                var wrongWay = w.BuildTrack(Line(t, new Vector2(0.55f, -0.3f), new Vector2(0.7f, 0f), new Vector2(0.45f, 0.3f), new Vector2(0.05f, 0.25f), new Vector2(-0.12f, -0.14f), new Vector2(-0.3f, -0.3f)));
                 Check(!wrongWay.Ok && wrongWay.Error == TrackNetwork.TurnBack, $"A hook joining its own line the wrong way is refused: \"{wrongWay.Error ?? "built"}\"");
                 var hook = w.BuildTrack(Line(t, new Vector2(0.55f, -0.3f), new Vector2(0.75f, -0.1f), new Vector2(0.6f, 0.25f), new Vector2(0.1f, 0.3f), new Vector2(-0.4f, 0.2f), new Vector2(-0.5f, -0.05f), new Vector2(-0.35f, -0.25f), new Vector2(-0.2f, -0.3f)));
                 Check(first.Ok && hook.Ok, $"A line, then a hook from its end back onto itself the way it runs ({hook.Start.Kind} -> {hook.Finish.Kind})" + (hook.Ok ? "" : $" (\"{hook.Error}\")"));
@@ -286,11 +286,31 @@ namespace Wonderland.Editor
         public static void TestRail()
         {
             Report.Clear(); failures = 0;
-            try { RailJourney(); }
+            bool gridWas = BuildGrid.Snap;
+            try
+            {
+                // Every railway scenario twice: drawn freely, then on the grid; then what only the grid does.
+                if (Environment.GetEnvironmentVariable("WL_GRID_ONLY") != "1") { BuildGrid.Snap = false; RailJourney(); }
+                BuildGrid.Snap = true; mode = "[grid] "; RailJourney(); mode = "";
+                GridRailJourney();
+            }
             catch (Exception e) { Fail("Exception: " + e); }
+            finally { BuildGrid.Snap = gridWas; mode = ""; }
             Report.AppendLine(failures == 0 ? "RESULT: PASS" : $"RESULT: FAIL ({failures})");
             System.IO.File.WriteAllText("Logs/rail-results.txt", Report.ToString());
             Debug.Log("Wonderland rail test\n" + Report);
+            if (Application.isBatchMode) EditorApplication.Exit(failures == 0 ? 0 : 1);
+        }
+
+        /// <summary>Just the railway on the grid: Logs/gridrail-results.txt.</summary>
+        public static void TestGridRail()
+        {
+            Report.Clear(); failures = 0;
+            try { GridRailJourney(); }
+            catch (Exception e) { Fail("Exception: " + e); }
+            Report.AppendLine(failures == 0 ? "RESULT: PASS" : $"RESULT: FAIL ({failures})");
+            System.IO.File.WriteAllText("Logs/gridrail-results.txt", Report.ToString());
+            Debug.Log("Wonderland grid rail test\n" + Report);
             if (Application.isBatchMode) EditorApplication.Exit(failures == 0 ? 0 : 1);
         }
 
@@ -364,7 +384,10 @@ namespace Wonderland.Editor
                 for (int k = 0; k < stroke.Count; k++) stroke[k] += new Vector3(rng.Range(-0.004f, 0.004f), 0f, rng.Range(-0.004f, 0.004f));
                 tried++;
                 var preview = w.PreviewTrack(stroke, out _, out _);
+                if (BuildGrid.Snap) TrackPlanner.GridLog = new StringBuilder();
                 var plan = w.BuildTrack(stroke);
+                if (!plan.Ok && TrackPlanner.GridLog != null) Debug.Log($"JOIN PROBE {trial} refused \"{plan.Error}\" ({plan.Start.Kind} -> {plan.Finish.Kind}) p1 {p1} p2 {p2}:\n{TrackPlanner.GridLog}");
+                TrackPlanner.GridLog = null;
                 if (preview.Ok != plan.Ok) { surprises++; Debug.Log($"PREVIEW MISMATCH: preview {preview.Error ?? "ok"} vs built {plan.Error ?? "ok"}"); }
                 if (plan.Ok) ok++;
                 else { reasons.TryGetValue(plan.Error, out int n); reasons[plan.Error] = n + 1; }

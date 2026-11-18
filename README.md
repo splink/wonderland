@@ -18,6 +18,7 @@ Meta XR SDK 207 / OpenXR / URP / MRUK (resolved from `Packages/manifest.json`). 
 scripts/unity.sh configure   # regenerate Assets/Scenes/Wonderland.unity + Quest settings + manifest (idempotent)
 scripts/unity.sh build       # configure + ARM64 IL2CPP APK -> Builds/Android/Wonderland.apk  (WONDERLAND_DEVELOPMENT=1 for a dev build)
 scripts/unity.sh test        # scripted five-minute journey against the world API -> docs/test-results.txt
+scripts/unity.sh rail        # every railway scenario drawn freely and on the grid, plus the grid checks -> Logs/rail-results.txt
 scripts/unity.sh interaction # synthetic-controller test of palette + tools -> docs/interaction-test-results.txt
 scripts/unity.sh gallery     # editor renders of the generated assets -> docs/renders/editor-*.png (needs a GPU, no -nographics)
 scripts/unity.sh renders     # editor renders of an assembled world built by the scripted journey
@@ -58,8 +59,25 @@ head start. **Trim** takes land away (never under the railway or houses).
 - a free stroke that comes back to its start becomes a **loop**, even if you overshoot or stop a little short; drawn
   over bare floor, land grows under it
 
-The planner bends new track so it leaves and meets the old one smoothly, like a real switch, and rounds tight curves.
-Adding never replaces anything. **Grip** a piece of track to bend it like a rope (its switches stay put), the
+**Track on the grid** (on by default, like roads; the Track tool's **Grid** chip or Settings turns it off). You still
+just draw, and the stroke becomes standard model-railway track, shown in the live preview before you let go:
+- **Straights** run along the 5 cm grid, across it or at 45 degrees, through its points. A line drawn a few degrees off
+  comes out dead straight, and free ends land on grid points, so the next stroke meets them exactly.
+- **Curves** have a standard radius, 20 cm to 1 m in 10 cm steps, chosen to follow what you drew: a round loop comes out
+  round, a square one gets tight corners.
+- **Parallel tracks:** a line drawn about 10 cm beside a straight runs exactly 10 cm from it (about 20 cm: exactly 20 cm,
+  room for a platform), and its curves go round the other track's concentrically, the same distance all the way round.
+- **Switches** are standard too. A branch leaves a straight track tangentially, its switch sliding along the track to
+  where the branch's curve starts. A short sideways step between parallel tracks (a crossover, or a passing loop)
+  becomes a gentle reverse curve.
+- Of a few readings of each stroke, the simplest that stays close to what you drew wins. A reading that would stray
+  much further is not built instead: the track goes where it was drawn, or the banner says why not.
+- Gripping a piece bends it on the grid too: it is redrawn as standard track between its switches, which stay put.
+- Track drawn before the grid (or with it off) keeps its shape; new grid track joins it, branches off it and crosses it
+  like any other.
+
+Off the grid, the planner bends new track so it leaves and meets the old one smoothly, like a real switch, and rounds
+tight curves. Either way, adding never replaces anything. **Grip** a piece of track to bend it like a rope (its switches stay put), the
 **eraser** removes one piece (from switch to switch), and **Signal** mode puts up stop signals. The track follows the
 land when you sculpt under it (up to a 9 % grade), rises onto stone bridges over water, and runs in tunnels under hills
 taller than the train.
@@ -103,8 +121,8 @@ stroke:
   wherever it is pointed and roams the town. It keeps to its lane (buses and lorries take a highway's slow lane), keeps
   its distance and stops at red lights. Vehicles are saved with the world; the Eraser takes one away.
 - **The grid** (on by default; the **Grid** chip turns it off): road corners land on a 5 cm grid, so near-straight
-  strokes come out exactly straight and streets line up. It shows faintly around the pointer while you place roads or
-  buildings.
+  strokes come out exactly straight and streets line up. It shows faintly around the pointer while you place roads,
+  railway or buildings. The railway uses the same grid (see Track on the grid above).
 - Lanes, paths and trails keep the free-hand look.
 - Start or end a stroke on another line and they join.
 - Roads and lanes smooth the ground across their width.

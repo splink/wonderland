@@ -78,9 +78,11 @@ namespace Wonderland.Editor
             if (Application.isBatchMode) EditorApplication.Exit(failures == 0 ? 0 : 1);
         }
 
+        private static string mode = "";   // (a prefix for checks run a second time, e.g. on the grid)
+
         private static void Check(bool ok, string what)
         {
-            Report.AppendLine((ok ? "PASS  " : "FAIL  ") + what);
+            Report.AppendLine((ok ? "PASS  " : "FAIL  ") + mode + what);
             if (!ok) failures++;
         }
 
@@ -195,6 +197,7 @@ namespace Wonderland.Editor
             DayJourney();
             TownJourney();
             RailJourney();
+            GridRailJourney();
             WeatherJourney();
             {
                 // Tunnel: a big hill across the line keeps its top; portals at both mouths; no steam underground.

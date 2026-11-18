@@ -48,7 +48,7 @@ namespace Wonderland
             o.Add(new PaletteUI.Option("Grid: " + OnOff(BuildGrid.Snap), BuildGrid.Snap, () =>
             {
                 BuildGrid.Snap = !BuildGrid.Snap;
-                Say(BuildGrid.Snap ? "Grid on: roads come out straight and square, buildings line up along the roads" : "Grid off: draw and place freely");
+                Say(BuildGrid.Snap ? GridOnSaid : "Grid off: draw and place freely");
                 RefreshOptions(); ShowSettings();
             }));
             o.Add(new PaletteUI.Option("World stats", false, () => { infoMode = 1; ShowStats(); }));

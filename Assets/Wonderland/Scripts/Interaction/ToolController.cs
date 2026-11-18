@@ -279,6 +279,7 @@ namespace Wonderland
                 case Tool.Track:
                     o.Add(new PaletteUI.Option("Draw", !SignalMode, () => { SignalMode = false; RefreshOptions(); }));
                     o.Add(new PaletteUI.Option("Signal", SignalMode, () => { SignalMode = true; RefreshOptions(); }));
+                    o.Add(GridChip());
                     o.Add(new PaletteUI.Option("Remove all", false, () => { if (World.Track.HasTrack) { World.RemoveTrack(); Say("Railway removed"); RefreshOptions(); } }, World.Track.HasTrack));
                     break;
                 case Tool.Train:
@@ -580,7 +581,7 @@ namespace Wonderland
                 case Tool.Eraser: EraserTool(input, hit, local, localOrigin, localDir, dt, ref colour); break;
             }
             if (active != Tool.Houses) ghost.gameObject.SetActive(false);
-            BuildGrid.Show(active == Tool.Houses || Tool == Tool.Paths && PlacingVehicle == null && PathSystem.IsRoad((int)PathKind));
+            BuildGrid.Show(active == Tool.Houses || Tool == Tool.Paths && PlacingVehicle == null && PathSystem.IsRoad((int)PathKind) || Tool == Tool.Track && !SignalMode);
             if (facing != null && (active != Tool.Houses || !ghost.gameObject.activeSelf)) facing.enabled = false;
             if (Tool != Tool.Track || drawn.Count == 0) HideEntryArrows();
             if (Tool != Tool.Train) { hoveredTrain = null; if (World.Trains.Highlighted != null) World.Trains.Highlighted = null; }
@@ -758,11 +759,13 @@ namespace Wonderland
         }
 
         /// <summary>Draws roads, lanes, paths, trails, fences, hedges and walls - the same gesture as the railway and streams.</summary>
-        /// <summary>The Grid chip (Roads and Build tools): snapping to the building grid on or off.</summary>
+        /// <summary>The Grid chip (Roads, Track and Build tools): snapping to the building grid on or off.</summary>
+        private const string GridOnSaid = "Grid on: roads and railway come out straight and square, curves are standard, buildings line up along the roads";
+
         private PaletteUI.Option GridChip() => new(BuildGrid.Snap ? "Grid" : "No grid", BuildGrid.Snap, () =>
         {
             BuildGrid.Snap = !BuildGrid.Snap;
-            Say(BuildGrid.Snap ? "Grid on: roads come out straight and square, buildings line up along the roads" : "Grid off: draw and place freely");
+            Say(BuildGrid.Snap ? GridOnSaid : "Grid off: draw and place freely");
             RefreshOptions();
         });
 

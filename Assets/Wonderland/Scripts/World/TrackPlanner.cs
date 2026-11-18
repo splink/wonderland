@@ -87,7 +87,7 @@ namespace Wonderland
     /// free stroke that comes back to its start becomes a loop. The stroke is smoothed until every curve is at least
     /// <see cref="MinRadius"/>; the network then gives every piece a smooth height profile limited to <see cref="MaxGrade"/>.
     /// </summary>
-    public static class TrackPlanner
+    public static partial class TrackPlanner
     {
         public const float MinRadius = 0.18f;
         public const float MaxGrade = 0.09f;   // steep for real railways, fine for a storybook train; lets track follow the land
@@ -152,8 +152,21 @@ namespace Wonderland
                 }
             }
             if (deadEnd.Edge >= 0) return EndAttach(network, deadEnd, start);
-            if (!network.Nearest(p, out int edge, out float s, out _, SnapMid)) return none;
+            if (!network.Nearest(p, out int edge, out float s, out float off, SnapMid)) return none;
             var layout = network.Edges[edge].Layout;
+            // On the grid, a stroke ending beside a track and running along it (over its last 12 cm) is a track
+            // alongside, not a join.
+            if (BuildGrid.Snap && off > 0.035f)
+            {
+                var run = Vector2.zero;
+                for (int i = 1; i < drawn.Count; i++)
+                {
+                    var q = Flat(drawn[start ? i : drawn.Count - 1 - i]);
+                    if ((q - p2).magnitude > 0.12f || i == drawn.Count - 1) { run = q - p2; break; }
+                }
+                layout.Evaluate(s, out var along);
+                if (run.sqrMagnitude > 1e-6f && Mathf.Abs(Vector2.Dot(run.normalized, Flat(along).normalized)) > Mathf.Cos(15f * Mathf.Deg2Rad)) return none;
+            }
             // Close to a dead end along the piece: extend it instead.
             if (!layout.Closed)
                 for (int k = 0; k < 2; k++)
@@ -236,6 +249,24 @@ namespace Wonderland
             List<Vector2> path;
             if (closed) path = raw.GetRange(from, to - from + 1);
             else path = raw;
+            TrackPlan Built(List<Vector2> line)
+            {
+                bool offLand = false;
+                foreach (var p in line) if (terrain.EdgeAt(p.x, p.y) < 0.4f) { offLand = true; break; }
+                if (offLand && ensureLand != null) ensureLand(line);
+                if (!landWillGrow)
+                    foreach (var p in line)
+                        if (terrain.EdgeAt(p.x, p.y) < 0.4f) { plan.Error = "Part of the railway is too far out to build"; return plan; }
+                plan.Path = line;
+                plan.Closed = closed;
+                return plan;
+            }
+            // On the grid: standard straights and curves (see TrackPlanner.Grid).
+            if (BuildGrid.Snap)
+            {
+                var grid = GridPlan(plan, path, closed, terrain, network);
+                return grid == null ? plan : Built(grid);
+            }
             // The hand's wobble out first: the fewest points within 1.5 cm of the stroke, re-filled every 1 cm - so the
             // track is shaped from the line meant, not the jitter (no little S-bends where it leaves or meets a track).
             if (!OldShaping) path = Steady(path, closed);
@@ -306,16 +337,7 @@ namespace Wonderland
             }
             string error = CheckCrossings(dense, closed, network, plan) ?? CheckClearance(dense, closed, network, plan);
             if (error != null) { plan.Error = error; return plan; }
-
-            bool offLand = false;
-            foreach (var p in dense) if (terrain.EdgeAt(p.x, p.y) < 0.4f) { offLand = true; break; }
-            if (offLand && ensureLand != null) ensureLand(dense);
-            if (!landWillGrow)
-                foreach (var p in dense)
-                    if (terrain.EdgeAt(p.x, p.y) < 0.4f) { plan.Error = "Part of the railway is too far out to build"; return plan; }
-            plan.Path = dense;
-            plan.Closed = closed;
-            return plan;
+            return Built(dense);
         }
 
         /// <summary>
@@ -588,6 +610,8 @@ namespace Wonderland
                 if (pin1) w *= Mathf.SmoothStep(0f, 1f, (l.Length - l.Cum[i] - 0.06f) / 0.16f);
                 pts.Add(Flat(l.Points[i]) + move * w);
             }
+            // On the grid: the bent line drawn again as standard track, its ends staying where (and as) they meet switches.
+            if (BuildGrid.Snap) return GridReshape(network, edge, pts, out dense, out preview, terrain);
             // Coarse line, ends pinned where they meet switches, rounded until the train can take it.
             var coarse = Resample(pts, Coarse, l.Closed);
             int keep = 3;
@@ -679,9 +703,18 @@ namespace Wonderland
         private static string CheckClearance(List<Vector2> dense, bool closed, TrackNetwork network, TrackPlan plan)
         {
             if (network == null || network.Empty) return null;
+            // Where it leaves (or meets) a track it draws steadily away from it: a gentle curve may take longer than 30 cm
+            // (but no longer than the 60 cm within which trains are kept apart at a switch, see TrackNetwork.FoulOf).
+            int leaving = 0, meeting = dense.Count, reach = Mathf.RoundToInt(0.6f / Spacing);
+            float Gap(int i) { network.Nearest(new Vector3(dense[i].x, 0f, dense[i].y), out _, out _, out float g, TrackSpacing); return g; }
+            if (plan.Start.Kind != AttachKind.None && !closed)
+                for (float last = 0f; leaving < Mathf.Min(dense.Count, reach); leaving++) { float g = Gap(leaving); if (g >= TrackSpacing || g < last - 0.001f) break; last = g; }
+            if (plan.Finish.Kind != AttachKind.None && !closed)
+                for (float last = 0f; meeting > Mathf.Max(leaving, dense.Count - reach); meeting--) { float g = Gap(meeting - 1); if (g >= TrackSpacing || g < last - 0.001f) break; last = g; }
             for (int i = 0; i < dense.Count; i++)
             {
                 var p = dense[i];
+                if (i < leaving || i >= meeting) continue;
                 if (plan.Start.Kind != AttachKind.None && (p - plan.Start.Point).magnitude < 0.3f) continue;
                 if (plan.Finish.Kind != AttachKind.None && (p - plan.Finish.Point).magnitude < 0.3f) continue;
                 var q = new Vector3(p.x, 0f, p.y);

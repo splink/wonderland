@@ -5,6 +5,7 @@
 #   scripts/unity.sh test        scripted end-to-end journey + assertions (Logs/test.log)
 #   scripts/unity.sh village     just the village life and work journeys (Logs/village-results.txt)
 #   scripts/unity.sh questworld  benchmark on a player's saved world, Tests/Saves/quest-world.json (Logs/questworld-results.txt)
+#   scripts/unity.sh rail        the railway scenarios drawn freely and on the grid (Logs/rail-results.txt; gridrail: grid only)
 #   scripts/unity.sh town        just the livelier town: traffic, emergencies, pets, CCTV, sound (Logs/town-results.txt)
 #   scripts/unity.sh renders     editor renders of assets and an assembled world (docs/renders/, needs graphics)
 set -euo pipefail
@@ -21,12 +22,14 @@ case "$task" in
   village) method=Wonderland.Editor.WonderlandJourney.TestVillage ;;
   town) method=Wonderland.Editor.WonderlandJourney.TestTown ;;
   rail) method=Wonderland.Editor.WonderlandJourney.TestRail ;;
+  gridrail) method=Wonderland.Editor.WonderlandJourney.TestGridRail ;;
   roads) method=Wonderland.Editor.WonderlandJourney.TestRoads ;;
   questworld) method=Wonderland.Editor.WonderlandJourney.QuestWorld ;;
   interaction) method=Wonderland.Editor.WonderlandInteractionTest.Run ;;
   cards) method=Wonderland.Editor.WonderlandInteractionTest.CardRenders; graphics=() ;;
   pond) method=Wonderland.Editor.WonderlandJourney.PondRenders; graphics=() ;;
   railrender) method=Wonderland.Editor.WonderlandJourney.RailRenders; graphics=() ;;
+  gridrender) method=Wonderland.Editor.WonderlandJourney.GridRailRenders; graphics=() ;;
   roadrender) method=Wonderland.Editor.WonderlandJourney.RoadRenders; graphics=() ;;
   terrainrender) method=Wonderland.Editor.WonderlandJourney.TerrainModeRenders; graphics=() ;;
   simprofile) method=Wonderland.Editor.WonderlandJourney.SimProfile ;;
@@ -44,7 +47,7 @@ case "$task" in
   gallery) method=Wonderland.Editor.WonderlandRenders.Gallery; graphics=() ;;
   renders) method=Wonderland.Editor.WonderlandJourney.Renders; graphics=() ;;
   compile) method="" ;;
-  *) echo "Usage: $0 [configure|build|test|village|town|rail|roads|questworld|interaction|cards|pond|railrender|roadrender|terrainrender|simprofile|followrender|walkprobe|trainflow|trackshape|trackshaperender|shops|trackprobe|budget|gallery|renders|compile]" >&2; exit 2 ;;
+  *) echo "Usage: $0 [configure|build|test|village|town|rail|gridrail|roads|questworld|interaction|cards|pond|railrender|gridrender|roadrender|terrainrender|simprofile|followrender|walkprobe|trainflow|trackshape|trackshaperender|shops|trackprobe|budget|gallery|renders|compile]" >&2; exit 2 ;;
 esac
 mkdir -p "$project_dir/Logs"
 log="$project_dir/Logs/$task.log"
