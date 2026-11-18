@@ -92,8 +92,8 @@ PASS  The deer bolts when a villager comes close
 PASS  A lane across the railway gets a level crossing (1)
 PASS  Villagers may cross the rails at the level crossing
 PASS  ...but not across the open line
-PASS  The Peaks brush raises a mountain (26 cm high)
-PASS  ...with craggy, uneven slopes (roughness 442)
+PASS  The Peaks brush raises a mountain (27 cm high)
+PASS  ...with craggy, uneven slopes (roughness 580)
 PASS  Undo takes the hedge away again
 PASS  Save/load keeps roads, paths and the pasture fence (5)
 PASS  Save/load keeps the ducks and the fair
@@ -140,8 +140,8 @@ PASS  ...get off at the far station and walk on to where they were going
 PASS  A lane with a level crossing joins the two sides (1 regions)
 PASS  ...and people from inside the loop walk over it to the village
 PASS  Save/load keeps the time (10:00), the clock speed, needs and homes (8/8)
-PASS  40 villagers: 0.29 ms per frame on average, worst 9.4 ms, 1.4 decisions/s, slowest decision 8.7 ms, places directory 0.5 ms (editor timing)
-PASS  After an edit the walk grid rebuilds over 31 frames (59 ms of work, worst frame 3.1 ms)
+PASS  40 villagers: 0.29 ms per frame on average, worst 5.8 ms, 1.4 decisions/s, slowest decision 2.2 ms, places directory 0.7 ms (editor timing)
+PASS  After an edit the walk grid rebuilds over 32 frames (60 ms of work, worst frame 3.2 ms)
 PASS  With no places at all, villagers wander by day and sleep under the stars at night
 PASS  A working village goes up (15/15 places, 10 villagers)
 PASS  Opening hours: the bakery opens at half six and shuts at six, the carousel stops in the evening, the fountain never closes
@@ -277,9 +277,9 @@ PASS  With the grid off the stroke keeps its angle
 PASS  A railway under a big hill becomes a tunnel (hill 29 cm, 30 cm of tunnel, hill kept above it)
 PASS  The train runs into the tunnel (steam off underground)
 PASS  Railway across a pond rises onto a bridge and the water stays
-PASS  Raising the ground under the railway lifts the track (7.9 -> 10.4 cm)
-PASS  The bed is regraded under the lifted track (tunnel 34 cm)
-PASS  Lifted track keeps its grade limit (max 9.1 %)
+PASS  Raising the ground over the railway leaves the track where it is, on top (7.9 -> 7.9 cm; the land beside it 13.1 cm)
+PASS  The bed is regraded under the lifted track (tunnel 0 cm)
+PASS  Lifted track keeps its grade limit (max 8.7 %)
 PASS  Place Cottage
 PASS  Place Townhouse
 PASS  Place Thatched
@@ -291,7 +291,7 @@ PASS  Pointer ray picks the house below it
 PASS  House repositioned and rotated
 PASS  Train placed on the railway
 PASS  Train runs continuously (1.44 m in 12 s)
-PASS  Locomotive stays on the rails (worst offset 3.6 mm)
+PASS  Locomotive stays on the rails (worst offset 3.7 mm)
 PASS  Locomotive follows the curves (worst alignment 1.000)
 PASS  Train stops smoothly
 PASS  Station snaps to the railway
@@ -305,7 +305,7 @@ PASS  Animals wander and graze (up to 21 cm from home in a minute)
 PASS  Animals stay on free grass near home
 PASS  Eraser removes an animal ("Sheep removed")
 PASS  Stream drawn
-PASS  Stream level only falls downstream (4.8 -> 1.4 cm)
+PASS  Stream level only falls downstream (3.3 -> 1.4 cm)
 PASS  Stream carves a channel below its water
 PASS  No trees standing in the stream
 PASS  The railway bridges the stream (clearance 32 mm)
@@ -343,5 +343,5 @@ PASS  Land still grows with bad room data
 PASS  Trimmed land grows back (1.19 -> 1.04 -> 1.16 m2)
 INFO  terrain: 6 chunk meshes, 17 k triangles, land 3.49 m2 of a 4.8 x 4.8 m grid
 INFO  static budget of this world: 346 mesh renderers (~draw calls per eye pass before batching, excl. shadows/UI), 1166 k triangles, ground cover 5538 tufts
-INFO  trees 131, forest chunks 30, houses 3, track 3.43 m, undo depth 9, journey simulated in 75.4 s wall time
+INFO  trees 131, forest chunks 30, houses 3, track 3.43 m, undo depth 9, journey simulated in 75.8 s wall time
 RESULT: PASS

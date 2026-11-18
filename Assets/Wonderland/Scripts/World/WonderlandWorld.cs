@@ -82,6 +82,28 @@ namespace Wonderland
             Buildings = Child<BuildingSystem>("Buildings");
             Buildings.Init(Terrain, materials.Lit);
             Terrain.Protect = (x, z) => Buildings.Contains(new Vector2(x, z), 0.03f);
+            // What lies flat on the ground stays on top: brushes leave the ground under roads, paths and the railway alone.
+            Terrain.KeepKey = () =>
+            {
+                int k = Track?.Network?.Version ?? 0;
+                if (Paths != null) foreach (var l in Paths.Lines) k = k * 31 + l.points.Count * 7 + l.kind;
+                return k;
+            };
+            Terrain.KeepFill = keep =>
+            {
+                if (Paths != null)
+                    foreach (var l in Paths.Lines)
+                    {
+                        float r = PathSystem.HalfWidth(l.kind) + 0.035f;   // (out to where the road grades its banks: the surface is smoothed over a few cells)
+                        for (int i = 0; i < l.points.Count; i += 2) Terrain.MarkKeep(keep, l.points[i], r);
+                    }
+                if (Track?.Network != null)
+                    foreach (var e in Track.Network.Edges)
+                    {
+                        var pts = e.Layout.Points;
+                        for (int i = 0; i < pts.Count; i += 2) Terrain.MarkKeep(keep, new Vector2(pts[i].x, pts[i].z), TrackSystem.BedHalfWidth + 0.035f);
+                    }
+            };
             Trains = Child<TrainSystem>("Trains");
             Trains.Init(Track, materials.Lit, materials.Smoke, materials.UI);
             Cover = Child<GroundCover>("Ground cover");

@@ -54,6 +54,42 @@ namespace Wonderland
         /// <summary>Cells the Trim brush must not remove (e.g. under houses). Set by the world.</summary>
         public Func<float, float, bool> Protect;
 
+        /// <summary>
+        /// Ground the brushes leave alone (1) because something lies flat on it - a road, a path, the railway - so it can
+        /// never be pushed up through them. Filled by the world (<see cref="KeepFill"/>) whenever <see cref="KeepKey"/>
+        /// says the roads or track changed.
+        /// </summary>
+        public float[] Keep;
+        public Func<int> KeepKey;
+        public Action<float[]> KeepFill;
+        private int keepKey = int.MinValue;
+
+        private float KeepAt(int i)
+        {
+            if (KeepFill == null) return 0f;
+            int key = (KeepKey?.Invoke() ?? 0) * 31 + Height.Length;
+            if (Keep == null || Keep.Length != Height.Length || key != keepKey)
+            {
+                Keep = new float[Height.Length];
+                KeepFill(Keep);
+                keepKey = key;
+            }
+            return Keep[i];
+        }
+
+        /// <summary>Marks ground as kept (see <see cref="Keep"/>) within <paramref name="radius"/> of a local point.</summary>
+        public void MarkKeep(float[] keep, Vector2 p, float radius)
+        {
+            var r = RegionAround(p, radius);
+            float r2 = radius * radius;
+            for (int z = r.yMin; z < r.yMax; z++)
+            for (int x = r.xMin; x < r.xMax; x++)
+            {
+                float dx = LocalX(x) - p.x, dz = LocalZ(z) - p.y;
+                if (dx * dx + dz * dz <= r2) keep[z * Nx + x] = 1f;
+            }
+        }
+
         public TerrainField(float patchSize, int seed, bool hills = true, RectInt? cells = null)
         {
             Seed = seed;
@@ -332,7 +368,7 @@ namespace Wonderland
                 int i = z * Nx + x;
                 float dx = LocalX(x) - centre.x, dz = LocalZ(z) - centre.y;
                 float d2 = (dx * dx + dz * dz) / r2 * (1f + rimNoise[i] * 2.5f);
-                if (d2 >= 1f || Lock[i] > 0.05f || Pad[i] > 0.05f || Land[i] < 0.5f || rim[i] < 0.15f) continue;
+                if (d2 >= 1f || Lock[i] > 0.05f || Pad[i] > 0.05f || Land[i] < 0.5f || rim[i] < 0.15f || KeepAt(i) > 0.5f) continue;
                 float inner = 1f - d2;
                 if (drain)
                 {
@@ -453,7 +489,7 @@ namespace Wonderland
                 int i = z * Nx + x;
                 // Fade towards the shore (where the landscape tapers to the floor) so hills never pile up into a cliff there.
                 // The railway is not protected: the track re-profiles to sculpted ground. House pads are.
-                float w = (1f - d2) * (1f - d2) * (1f - Pad[i]) * Mathf.Sqrt(rim[i]);
+                float w = (1f - d2) * (1f - d2) * (1f - Pad[i]) * Mathf.Sqrt(rim[i]) * (1f - KeepAt(i));   // (never under a road or the railway)
                 if (w <= 0f) continue;
                 float h = Height[i];
                 float relax = Average(scratch, x, z) - h;
@@ -558,13 +594,13 @@ namespace Wonderland
                 for (int x = Mathf.Max(1, r.xMin); x < Mathf.Min(Nx - 1, r.xMax); x++)
                 {
                     int i = z * Nx + x;
-                    if (Pad[i] > 0.5f) continue;
+                    if (Pad[i] > 0.5f || KeepAt(i) > 0.5f) continue;
                     float si = Math.Max(rim[i], 0.15f), h = scratch[i] * rim[i];
                     for (int k = 0; k < 4; k++)
                     {
                         int j = k == 0 ? i - 1 : k == 1 ? i + 1 : k == 2 ? i - Nx : i + Nx;
                         float excess = h - scratch[j] * rim[j] - talus;
-                        if (excess <= 0f || Pad[j] > 0.5f) continue;
+                        if (excess <= 0f || Pad[j] > 0.5f || KeepAt(j) > 0.5f) continue;   // (nothing slides onto a road or the railway)
                         float move = excess * 0.2f / si;
                         Height[i] -= move; Height[j] += move * 0.6f;
                     }

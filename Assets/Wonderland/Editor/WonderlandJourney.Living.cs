@@ -37,6 +37,8 @@ namespace Wonderland.Editor
             catch (Exception e) { Fail("Exception: " + e); }
             try { Waterways(); }
             catch (Exception e) { Fail("Exception: " + e); }
+            try { FlatOnTop(); }
+            catch (Exception e) { Fail("Exception: " + e); }
             try { Soak(); }
             catch (Exception e) { Fail("Exception: " + e); }
             BuildGrid.Snap = true;
@@ -601,6 +603,30 @@ namespace Wonderland.Editor
             Check(longest < 240f, $"No delivery, fare or post round lasts for ever (longest {longest:0} s: {longestWhat})");
             Check(w.Traffic.Delivered >= 1 && w.Traffic.Rounds >= 1 && hailing == 0,
                 $"Deliveries and post rounds happened and ended, and nobody is left waiting for a taxi ({w.Traffic.Delivered} deliveries, {w.Traffic.Rounds} rounds, {w.Traffic.FaresDone} fares; {hailing} still waiting or riding at the end)");
+            UnityEngine.Object.DestroyImmediate(w.gameObject);
+        }
+
+        /// <summary>
+        /// What lies flat stays on top: raising a hill right over a road and the railway, or digging a pond across them,
+        /// leaves the ground under them as it was - nothing pushes up through them.
+        /// </summary>
+        private static void FlatOnTop()
+        {
+            var w = Scratch("Flat on top", 520f);
+            var t = w.Terrain;
+            w.BuildPath(Line(t, new Vector2(-0.6f, 0f), new Vector2(0.6f, 0f)), PathKind.Road);
+            w.BuildTrack(Line(t, new Vector2(-0.6f, 0.3f), new Vector2(0.6f, 0.3f)));
+            float road0 = t.SurfaceAt(0f, 0f), roadEdge0 = t.SurfaceAt(0f, 0.025f), rail0 = t.SurfaceAt(0f, 0.3f);
+            Hold(() => w.TerrainStroke(TerrainBrush.Raise, new Vector3(0f, 0f, 0.05f), 0.2f, 1f, Dt, 0f), 3f);
+            Hold(() => w.TerrainStroke(TerrainBrush.Raise, new Vector3(0f, 0f, 0.3f), 0.15f, 1f, Dt, 0f), 3f);
+            float beside = t.SurfaceAt(0f, 0.12f);
+            float road1 = t.SurfaceAt(0f, 0f), roadEdge1 = t.SurfaceAt(0f, 0.025f), rail1 = t.SurfaceAt(0f, 0.3f);
+            Check(beside > road0 + 0.01f && Mathf.Abs(road1 - road0) < 0.001f && Mathf.Abs(roadEdge1 - roadEdge0) < 0.001f && Mathf.Abs(rail1 - rail0) < 0.001f,
+                $"Raising a hill over a road and the railway leaves the ground under them alone (beside the road +{(beside - road0) * 100f:0.0} cm; under the road {(road1 - road0) * 1000f:0.0} mm, its edge {(roadEdge1 - roadEdge0) * 1000f:0.0} mm, the track {(rail1 - rail0) * 1000f:0.0} mm)");
+            var pond = new Vector3(-0.3f, 0f, 0f);
+            float level = w.WaterLevelForStroke(pond);
+            Hold(() => w.WaterStroke(pond, 0.12f, 0.9f, Dt, level, false), 2f);
+            Check(t.WaterAt(-0.3f, 0f) < 0.3f && t.WaterAt(-0.3f, 0.08f) > 0.5f, $"A pond dug across a road stops at it ({t.WaterAt(-0.3f, 0f):0.00} water on the road, {t.WaterAt(-0.3f, 0.08f):0.00} beside it)");
             UnityEngine.Object.DestroyImmediate(w.gameObject);
         }
 

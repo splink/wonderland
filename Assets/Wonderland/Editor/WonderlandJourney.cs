@@ -244,14 +244,16 @@ namespace Wonderland.Editor
                 UnityEngine.Object.DestroyImmediate(w.gameObject);
             }
 
-            // 4. Sculpting under the railway lifts the track with the land (within its grade limit), and the bed stays graded.
+            // 4. Sculpting over the railway leaves the track (and the ground under it) where it is: what lies flat on the
+            //    ground stays on top. The land beside it rises into a cutting.
             int probeIndex = layout.Points.Count / 3;
             var probe = layout.Points[probeIndex];
             float trackBefore = probe.y;
             Hold(() => world.TerrainStroke(TerrainBrush.Raise, probe, 0.35f, 1f, Dt, 0f), 2f);
             world.UpdateTrackFromTerrain();
             float trackAfter = Main(world).Points[probeIndex].y;
-            Check(trackAfter > trackBefore + 0.01f, $"Raising the ground under the railway lifts the track ({trackBefore * 100f:0.0} -> {trackAfter * 100f:0.0} cm)");
+            float besideTrack = world.Terrain.SurfaceAt(probe.x + 0.1f, probe.z + 0.1f);
+            Check(Mathf.Abs(trackAfter - trackBefore) < 0.002f, $"Raising the ground over the railway leaves the track where it is, on top ({trackBefore * 100f:0.0} -> {trackAfter * 100f:0.0} cm; the land beside it {besideTrack * 100f:0.0} cm)");
             bool bedFollows = true; int tunnelled = 0;
             for (int i = 0; i < Main(world).Points.Count; i++)
             {
