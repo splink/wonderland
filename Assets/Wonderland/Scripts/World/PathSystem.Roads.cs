@@ -57,9 +57,129 @@ namespace Wonderland
 
         // ------------------------------------------------------------------ planning
 
+        /// <summary>The standard curves of a road on the grid: its own corner, and gentler ones in multiples of it.</summary>
+        private static readonly float[] StreetRadii = { 0.05f, 0.1f, 0.15f, 0.2f, 0.3f, 0.4f }, HighwayRadii = { 0.18f, 0.27f, 0.36f, 0.45f, 0.6f };
+
+        /// <summary>
+        /// A road on the grid, read the way grid track is (<see cref="TrackPlanner.GridShapes"/>): straight lines fitted to
+        /// whole stretches of the stroke and put on the grid - along it, across it or at 45 degrees - so a stroke that wobbles
+        /// or drifts a little comes out dead straight, and corners only where the stroke really turns, rounded with a
+        /// standard curve. Drawn on from a free end of a road of the same kind, it carries on along that road's line and
+        /// becomes part of it (<see cref="Join"/>); an end on another road's side lands exactly on it (a junction).
+        /// </summary>
+        private PathLine PlanGridRoad(List<Vector2> raw, int kind, bool closed, out string error)
+        {
+            error = null;
+            var line = new PathLine { kind = kind, closed = closed };
+            TrackAttach start = default, finish = default;
+            if (!closed && FreeEndNear(raw[0], Heading(raw, true), kind, -1, false, out line.extendsStart, out line.startAtItsStart, out var a, out var outA))
+            {
+                start = new TrackAttach { Kind = AttachKind.End, Point = a, Dir = outA };
+                // (what was drawn over the old road, before reaching its end, is not new road)
+                int cut = 0;
+                while (cut < raw.Count - 2 && Vector2.Dot(raw[cut] - a, outA) < 0.005f) cut++;
+                if (cut > 0) { raw.RemoveRange(0, cut); raw.Insert(0, a); }
+            }
+            if (!closed && FreeEndNear(raw[^1], -Heading(raw, false), kind, line.extendsStart, line.startAtItsStart, out line.extendsEnd, out line.endAtItsStart, out var b, out var outB))
+            {
+                finish = new TrackAttach { Kind = AttachKind.End, Point = b, Dir = -outB };
+                int cut = 0;
+                while (cut < raw.Count - 2 && Vector2.Dot(raw[raw.Count - 1 - cut] - b, outB) < 0.005f) cut++;
+                if (cut > 0) { raw.RemoveRange(raw.Count - cut, cut); raw.Add(b); }
+            }
+            var shapes = TrackPlanner.GridShapes(raw, closed, null, start, finish, kind == (int)PathKind.Highway ? HighwayRadii : StreetRadii);
+            if (shapes.Count == 0 || shapes[0].Error != null)
+            {
+                error = shapes.Count == 0 || shapes[0].Error == "Draw a longer track" ? "Draw a little longer" : shapes[0].Error.Replace("for the train", "for the road");
+                return null;
+            }
+            var pts = shapes[0].Path;
+            // An end on the side of another road (a T or a corner) lands exactly on it.
+            if (!closed && start.Kind == AttachKind.None && SnapRoad(raw[0], out _)) OntoRoad(pts, true);
+            if (!closed && finish.Kind == AttachKind.None && SnapRoad(raw[^1], out _)) OntoRoad(pts, false);
+            foreach (var p in pts)
+                if (terrain.EdgeAt(p.x, p.y) < 0.35f) { error = "Keep the road on the land"; return null; }
+            line.points = pts;
+            return line;
+        }
+
+        /// <summary>
+        /// A free end of a road of this kind near <paramref name="p"/> (not where it meets another road; not
+        /// <paramref name="notLine"/>'s end <paramref name="notStart"/>): which line, which end, where, and the way out of it.
+        /// </summary>
+        /// <summary>The way a stroke heads over its first (or towards its last) 8 cm.</summary>
+        private static Vector2 Heading(List<Vector2> raw, bool start)
+        {
+            var from = start ? raw[0] : raw[^1];
+            for (int k = 1; k < raw.Count; k++)
+            {
+                var q = start ? raw[k] : raw[raw.Count - 1 - k];
+                if ((q - from).magnitude > 0.08f || k == raw.Count - 1) return start ? (q - from).normalized : (from - q).normalized;
+            }
+            return Vector2.zero;
+        }
+
+        /// <summary>
+        /// A free end of a road of this kind that a stroke end at <paramref name="p"/> carries on from: close to it, or a
+        /// little way back along the road with the stroke heading out towards it (<paramref name="heading"/>: the way the
+        /// stroke runs from <paramref name="p"/>, away from the rest of it... or for the stroke's last point, back along it).
+        /// </summary>
+        private bool FreeEndNear(Vector2 p, Vector2 heading, int kind, int notLine, bool notStart, out int line, out bool atStart, out Vector2 at, out Vector2 outward)
+        {
+            line = -1; atStart = false; at = default; outward = default;
+            float best = Snap * 1.4f;
+            for (int li = 0; li < Lines.Count; li++)
+            {
+                var l = Lines[li];
+                if (l.kind != kind || l.closed || l.points.Count < 8) continue;
+                for (int k = 0; k < 2; k++)
+                {
+                    if (li == notLine && (k == 0) == notStart) continue;
+                    var e = k == 0 ? l.points[0] : l.points[^1];
+                    var o = (e - (k == 0 ? l.points[5] : l.points[^6])).normalized;
+                    float d = (e - p).magnitude;
+                    // Or on the road a little way back from its end, the stroke heading out over it towards the end.
+                    float back = Vector2.Dot(e - p, o);
+                    bool behind = back > 0f && back < 0.35f && Distance(l, p) < HalfWidth(kind) + 0.01f && Vector2.Dot(heading, o) > 0.8f;
+                    if (behind) d = Mathf.Min(d, Snap);
+                    if (d >= best) continue;
+                    int me = li;
+                    if (Query(e, 0.02f, m => m != me && IsCarWay(Lines[m].kind), out _) < 0.012f) continue;   // (a junction, not a free end)
+                    best = d; line = li; atStart = k == 0; at = e; outward = o;
+                }
+            }
+            return line >= 0;
+        }
+
+        /// <summary>Moves a road's end along its own line until it lies exactly on the road it meets (within 8 cm).</summary>
+        private void OntoRoad(List<Vector2> pts, bool atStart)
+        {
+            if (pts.Count < 6) return;
+            if (!atStart) pts.Reverse();
+            var end = pts[0];
+            var inward = (pts[4] - pts[0]).normalized;
+            float bestT = 0f, bestD = float.MaxValue;
+            for (float t = -0.08f; t <= 0.08f; t += 0.002f)
+            {
+                float d = Query(end - inward * t, 0.1f, m => IsCarWay(Lines[m].kind), out _);
+                if (d < bestD) { bestD = d; bestT = t; }
+            }
+            if (bestD < 0.004f)
+            {
+                var to = end - inward * bestT;
+                while (pts.Count > 2 && Vector2.Dot(pts[0] - to, inward) < Spacing * 0.5f) pts.RemoveAt(0);   // (cut back to it...)
+                var from = pts[0];
+                int steps = Mathf.CeilToInt((from - to).magnitude / Spacing);
+                for (int k = 1; k < steps; k++) pts.Insert(0, Vector2.Lerp(from, to, k / (float)steps));   // (...or carried on to it)
+                pts.Insert(0, to);
+            }
+            if (!atStart) pts.Reverse();
+        }
+
         /// <summary>A road from a stroke: ends snapped, straight stretches with rounded corners, every 1 cm.</summary>
         private PathLine PlanRoad(List<Vector2> raw, int kind, bool closed, out string error)
         {
+            if (BuildGrid.Snap) return PlanGridRoad(raw, kind, closed, out error);
             error = null;
             bool joinA = false, joinB = false;
             if (!closed)
@@ -85,6 +205,10 @@ namespace Wonderland
                 corners = Octilinear(corners, closed, raw);
                 if (!closed) { raw[0] = corners[0]; raw[^1] = corners[^1]; }
             }
+            // A road never turns straight back on itself (an end snapped onto a road behind the last corner, or the hand
+            // doubling back): such a corner goes.
+            for (int i = corners.Count - 2; i >= 1 && corners.Count > (closed ? 3 : 2); i--)
+                if (Vector2.Angle(corners[i] - corners[i - 1], corners[i + 1] - corners[i]) > 150f) corners.RemoveAt(i);
             if (closed && corners.Count < 3) { error = "Draw a bigger ring road"; return null; }
             var pts = Fillet(corners, closed, kind == (int)PathKind.Highway ? HighwayRadius : StreetRadius);
             pts = TrackPlanner.Resample(pts, Spacing, closed);
@@ -240,6 +364,7 @@ namespace Wonderland
                 var d1 = (at - prev).normalized; var d2 = (next - at).normalized;
                 float turn = Mathf.Acos(Mathf.Clamp(Vector2.Dot(d1, d2), -1f, 1f));
                 if (turn < 2f * Mathf.Deg2Rad) { r.Add(at); continue; }
+                if (turn > 170f * Mathf.Deg2Rad) continue;   // (turning straight back: no corner to round - tan(90 deg) would fling it away)
                 float t = radius * Mathf.Tan(turn / 2f);
                 t = Mathf.Min(t, 0.45f * Mathf.Min((at - prev).magnitude, (next - at).magnitude));
                 float rad = t / Mathf.Tan(turn / 2f);

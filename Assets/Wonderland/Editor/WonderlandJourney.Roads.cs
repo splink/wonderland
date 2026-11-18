@@ -110,6 +110,104 @@ namespace Wonderland.Editor
             Check(e7 == null && Mathf.Abs(free.points[^1].y - free.points[0].y) > 0.015f, "With the grid off the stroke keeps its angle");
             BuildGrid.Snap = gridWas;
             Object.DestroyImmediate(w.gameObject);
+            GridRoadJourney();
+        }
+
+        /// <summary>
+        /// Streets on the grid, drawn the way a hand does (a slow wobble, a little drift): each comes out dead straight with
+        /// no bends at all; drawn on from its end - or from a little way back along it - it carries on as one street with
+        /// no kink; a street ending on another's side meets it exactly (a T-junction); and a stroke ending back on a
+        /// street behind its last corner (which once planned a road 2000 km long and ran the headset out of memory) plans
+        /// in a moment.
+        /// </summary>
+        private static void GridRoadJourney()
+        {
+            bool gridWas = BuildGrid.Snap;
+            BuildGrid.Snap = true;
+            var w = Scratch("Grid roads", 540f);
+            var t = w.Terrain;
+            for (float x = -1f; x <= 1f; x += 0.2f)   // (land to build on)
+            for (float z = -0.9f; z <= 0.9f; z += 0.2f)
+                for (int k = 0; k < 20; k++) w.TerrainStroke(TerrainBrush.Grow, new Vector3(x, 0f, z), 0.3f, 1f, 0.1f, 0f);
+            var rng = new Rng(11);
+            List<Vector3> Hand(Vector2 a, Vector2 b)
+            {
+                var r = new List<Vector3>();
+                int n = Mathf.CeilToInt((b - a).magnitude / 0.012f);
+                var side = new Vector2(-(b - a).y, (b - a).x).normalized;
+                float phase = rng.Range(0f, 6f);
+                for (int i = 0; i <= n; i++)
+                {
+                    float f = i / (float)n;
+                    var q = Vector2.Lerp(a, b, f) + side * (0.008f * Mathf.Sin(f * 9f + phase)) + rng.InsideUnitCircle() * 0.002f;
+                    r.Add(t.PointAt(q.x, q.y));
+                }
+                return r;
+            }
+            int Bends(PathLine l)
+            {
+                int bends = 0; bool inBend = false;
+                for (int i = 1; i + 1 < l.points.Count; i++)
+                {
+                    var a = l.points[i] - l.points[i - 1]; var b = l.points[i + 1] - l.points[i];
+                    if (a.sqrMagnitude < 1e-8f || b.sqrMagnitude < 1e-8f) continue;
+                    bool turning = Mathf.Abs(Vector2.SignedAngle(a, b)) > 0.3f;
+                    if (turning && !inBend) bends++;
+                    inBend = turning;
+                }
+                return bends;
+            }
+            // Streets drawn by hand, each drifting 2-3 cm over its length: no bends.
+            int straight = 0, drawn = 0;
+            foreach (float z in new[] { -0.6f, -0.2f, 0.2f })
+            {
+                drawn++;
+                string e = w.BuildPath(Hand(new Vector2(-0.8f, z), new Vector2(0.1f, z + 0.025f)), PathKind.Road);
+                if (e == null && Bends(w.Paths.Lines[^1]) == 0) straight++;
+            }
+            Check(straight == drawn, $"Streets drawn by hand, wobbling and drifting a little, come out dead straight - not a single bend ({straight}/{drawn})");
+            // Drawn on from the ends: one street each, still without a bend.
+            int lines = w.Paths.Lines.Count;
+            string e1 = w.BuildPath(Hand(new Vector2(0.1f, -0.6f), new Vector2(0.8f, -0.585f)), PathKind.Road);
+            string e2 = w.BuildPath(Hand(new Vector2(-0.05f, -0.2f), new Vector2(0.8f, -0.19f)), PathKind.Road);   // (starting 15 cm back along it)
+            int bends = 0; foreach (var l in w.Paths.Lines) bends += Bends(l);
+            Check(e1 == null && e2 == null && w.Paths.Lines.Count == lines && bends == 0,
+                $"Drawn on from a street's end (or from a little way back along it) it carries on as one street, still straight ({lines} -> {w.Paths.Lines.Count} streets, {bends} bends{e1}{e2})");
+            // Turning a corner from an end: one street, the curve standard and the join without a kink.
+            string e3 = w.BuildPath(Hand(new Vector2(0.1f, 0.225f), new Vector2(0.45f, 0.24f)), PathKind.Road);
+            var turned = w.Paths.Lines.Count;
+            string e4 = w.BuildPath(Line(t, new Vector2(0.45f, 0.24f), new Vector2(0.6f, 0.24f), new Vector2(0.65f, 0.35f), new Vector2(0.65f, 0.7f)), PathKind.Road);
+            float kink = 0f;
+            foreach (var l in w.Paths.Lines)
+                for (int i = 1; i + 1 < l.points.Count; i++)
+                {
+                    var a = l.points[i] - l.points[i - 1]; var b = l.points[i + 1] - l.points[i];
+                    if (a.magnitude > 0.004f && b.magnitude > 0.004f) kink = Mathf.Max(kink, Vector2.Angle(a, b));
+                }
+            Check(e3 == null && e4 == null && w.Paths.Lines.Count == turned && kink < 12f,
+                $"A street carried on round a corner from its end is one street with a smooth curve, no kink at the join (sharpest {kink:0.0} deg per cm{e3}{e4})");
+            // A side street ending on a street: exactly on it, a T-junction.
+            string e5 = w.BuildPath(Hand(new Vector2(-0.4f, 0.75f), new Vector2(-0.41f, 0.2f)), PathKind.Road);
+            var side = w.Paths.Lines[^1];
+            float gap = Mathf.Min(PathSystem.Distance(w.Paths.Lines[2], side.points[0]), PathSystem.Distance(w.Paths.Lines[2], side.points[^1]));
+            Check(e5 == null && gap < 0.003f && Bends(side) == 0, $"A side street drawn up to a street ends exactly on it, straight ({gap * 1000f:0.0} mm{e5})");
+            // The stroke that once planned a road thousands of kilometres long: an end snapped back onto a street end
+            // behind the stroke's last corner.
+            var top = side.points[0].y > side.points[^1].y ? side.points[0] : side.points[^1];
+            var doubling = Line(t, new Vector2(-0.9f, top.y), new Vector2(top.x + 0.02f, top.y), new Vector2(top.x - 0.01f, top.y));
+            string timings = ""; bool quick = true;
+            foreach (bool grid in new[] { true, false })
+            {
+                BuildGrid.Snap = grid;
+                var clock = System.Diagnostics.Stopwatch.StartNew();
+                var plan = w.Paths.Plan(doubling, (int)PathKind.Road, out _);
+                float length = 0f; if (plan != null) for (int i = 1; i < plan.points.Count; i++) length += (plan.points[i] - plan.points[i - 1]).magnitude;
+                quick &= clock.ElapsedMilliseconds < 200 && length < 3f;
+                timings += $"{(grid ? "grid" : "free")}: {clock.ElapsedMilliseconds} ms, {length:0.00} m; ";
+            }
+            Check(quick, $"A stroke that doubles back onto a street's end plans in a moment, a sensible road or none ({timings})");
+            BuildGrid.Snap = gridWas;
+            Object.DestroyImmediate(w.gameObject);
         }
 
         /// <summary>Where the villagers' and animals' time goes on a saved world (Logs/simprofile-results.txt).</summary>

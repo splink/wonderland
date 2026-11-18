@@ -18,6 +18,8 @@ namespace Wonderland
     {
         /// <summary>The standard curve radii on the grid: ten centimetres apart, the distance between parallel tracks.</summary>
         public static readonly float[] GridRadii = { 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f, 1f };
+        /// <summary>The radii the reading in progress uses: the railway's, or a road's (see <see cref="GridShapes"/>).</summary>
+        private static float[] Radii = GridRadii;
         /// <summary>Parallel tracks on the grid: two grid squares apart (three diagonal grid lines on a diagonal), or twice that.</summary>
         public const float ParallelSpacing = 0.1f;
 
@@ -97,8 +99,17 @@ namespace Wonderland
         /// Every reading of a stroke as standard track, best first (those that can't be built at all last, with why).
         /// <paramref name="stroke"/> is the drawn line (a loop's closed part when <paramref name="closed"/>); the
         /// attachments say where it meets the railway. A switch in the middle of a straight track slides along it.
+        /// <paramref name="radii"/>: the standard curves (smallest first), the railway's by default; roads use their own,
+        /// with no network and their joins as fixed ends.
         /// </summary>
-        public static List<GridShape> GridShapes(List<Vector2> stroke, bool closed, TrackNetwork network, TrackAttach start, TrackAttach finish)
+        public static List<GridShape> GridShapes(List<Vector2> stroke, bool closed, TrackNetwork network, TrackAttach start, TrackAttach finish, float[] radii = null)
+        {
+            Radii = radii ?? GridRadii;
+            try { return Shapes(stroke, closed, network, start, finish); }
+            finally { Radii = GridRadii; }
+        }
+
+        private static List<GridShape> Shapes(List<Vector2> stroke, bool closed, TrackNetwork network, TrackAttach start, TrackAttach finish)
         {
             var results = Readings(stroke, closed, network, start, finish);
             if (results.Count > 0 && results[0].Error == null) return results;
@@ -585,6 +596,8 @@ namespace Wonderland
                     tan[c] = rad[c] * Mathf.Tan(Mathf.Abs(phi[c]) * 0.5f);
                 }
                 if (parallelPair) { Untangle(lines, closed); if (lines.Count == count) return Failed(shape, "Draw a longer track", "parallel lines left"); continue; }
+                // Lines almost parallel meet far away: never a reading of a stroke on the floor (and never traced point by point).
+                foreach (var c in v) if (!((c - stroke[0]).sqrMagnitude < 25f)) return Failed(shape, "A curve is too tight for the train - draw it a little wider", "a corner far away");
                 if (!closed)
                 {
                     var l0 = lines[0]; var ln = lines[^1];
@@ -679,9 +692,9 @@ namespace Wonderland
             if (a.Beside && b.Beside && network != null)
             {
                 // Concentric with the track alongside: the radius whose curve stays the standard distance from it.
-                pref = GridRadii[0]; float bestDev = float.MaxValue;
+                pref = Radii[0]; float bestDev = float.MaxValue;
                 float want = (a.BesideOffset + b.BesideOffset) * 0.5f;
-                foreach (float r in GridRadii)
+                foreach (float r in Radii)
                 {
                     if (r > cap + 1e-4f) break;
                     float t = r * Mathf.Tan(turn * 0.5f);
@@ -699,13 +712,13 @@ namespace Wonderland
             }
             else pref = FromStroke();
             // The largest standard radius no bigger than the preferred one and the cap.
-            float chosen = GridRadii[0];
-            foreach (float r in GridRadii) if (r <= Mathf.Min(pref, cap) + 1e-4f) chosen = r;
+            float chosen = Radii[0];
+            foreach (float r in Radii) if (r <= Mathf.Min(pref, cap) + 1e-4f) chosen = r;
             return chosen;
 
             float FromStroke()
             {
-                if (bulge < 1e-4f) return GridRadii[^1];
+                if (bulge < 1e-4f) return Radii[^1];
                 if (a.NearAt != v)
                 {
                     float near = float.MaxValue;
@@ -714,8 +727,8 @@ namespace Wonderland
                 }
                 float r = a.Near / bulge;
                 // Nearest standard radius.
-                float best = GridRadii[0];
-                foreach (float g in GridRadii) if (Mathf.Abs(g - r) < Mathf.Abs(best - r)) best = g;
+                float best = Radii[0];
+                foreach (float g in Radii) if (Mathf.Abs(g - r) < Mathf.Abs(best - r)) best = g;
                 return best;
             }
         }
@@ -735,15 +748,15 @@ namespace Wonderland
             int shrink = -1;
             foreach (int c in new[] { cin, cout })
             {
-                if (c < 0 || rad[c] <= GridRadii[0] + 1e-4f) continue;
+                if (c < 0 || rad[c] <= Radii[0] + 1e-4f) continue;
                 var s = lines[c].SRadius > 0f ? lines[c] : lines[(c + 1) % count].SRadius > 0f ? lines[(c + 1) % count] : null;
                 if (s != null && rad[c] <= ReverseLeast(s.SOffset) + 1e-4f) continue;
                 if (shrink < 0 || rad[c] > rad[shrink]) shrink = c;
             }
             if (shrink >= 0)
             {
-                float smaller = GridRadii[0];
-                foreach (float r in GridRadii) if (r < rad[shrink] - 1e-4f) smaller = r;
+                float smaller = Radii[0];
+                foreach (float r in Radii) if (r < rad[shrink] - 1e-4f) smaller = r;
                 var s = lines[shrink].SRadius > 0f ? lines[shrink] : lines[(shrink + 1) % count].SRadius > 0f ? lines[(shrink + 1) % count] : null;
                 if (s != null) SetReverse(s, smaller);
                 else lines[shrink].Cap = smaller;
@@ -804,12 +817,12 @@ namespace Wonderland
                 // A sideways step between parallel lines (a crossover): a reverse curve, as gentle as there is room for
                 // (it starts gentle and gets steeper while its neighbours need the room).
                 float d = Mathf.Abs(Vector2.Dot(after.P - before.P, Left(before.H)));
-                if (d < 1e-3f || ReverseLeast(d) > GridRadii[^1]) { why = "That step sideways is too sharp - draw it a little longer"; return false; }
+                if (d < 1e-3f || ReverseLeast(d) > Radii[^1]) { why = "That step sideways is too sharp - draw it a little longer"; return false; }
                 mid.SOffset = d; mid.SBase = before.H;
                 mid.SSide = Mathf.Sign(Vector2.Dot(after.P - before.P, Left(before.H)));
                 mid.P = (v[cin] + v[cout]) * 0.5f;
-                float r = GridRadii[^1];
-                foreach (float g in GridRadii) if (g >= ReverseLeast(d) - 1e-4f && g <= 0.5f + 1e-4f) { r = g; }
+                float r = Radii[^1];
+                foreach (float g in Radii) if (g >= ReverseLeast(d) - 1e-4f && g <= 0.5f + 1e-4f) { r = g; }
                 SetReverse(mid, Mathf.Max(r, ReverseLeast(d)));
                 return true;
             }
@@ -825,7 +838,7 @@ namespace Wonderland
         {
             var a = lines[0]; var m = lines[1]; var b = lines[2];
             m.Reseated = true;
-            float r = GridRadii[0];
+            float r = Radii[0];
             GridLine best = null; float bestScore = float.MaxValue;
             // The grid directions first; then any angle (in 5 degree steps) off the first end's direction - a crossover
             // between tracks 10 cm apart wants a shallower diagonal than 45 degrees.
@@ -893,7 +906,7 @@ namespace Wonderland
         private static float ReverseLeast(float d)
         {
             float least = d / (2f * (1f - Half));
-            foreach (float g in GridRadii) if (g >= least - 1e-4f) return g;
+            foreach (float g in Radii) if (g >= least - 1e-4f) return g;
             return float.MaxValue;
         }
 

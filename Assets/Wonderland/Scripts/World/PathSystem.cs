@@ -13,6 +13,9 @@ namespace Wonderland
         public int kind;
         public List<Vector2> points = new();   // 1 cm apart
         public bool closed;
+        // A new road drawn on from free ends of roads (not saved): the lines it carries on, and whether from their starts.
+        [NonSerialized] public int extendsStart = -1, extendsEnd = -1;
+        [NonSerialized] public bool startAtItsStart, endAtItsStart;
     }
 
     /// <summary>
@@ -140,7 +143,45 @@ namespace Wonderland
             return found;
         }
 
-        public void Add(PathLine line) { Lines.Add(line); Rebuild(); }
+        public void Add(PathLine line)
+        {
+            if (line.extendsStart >= 0 || line.extendsEnd >= 0) Join(line); else Lines.Add(line);
+            Rebuild();
+        }
+
+        /// <summary>
+        /// A road drawn on from free ends of roads becomes one road with them: the old road's points, then the new ones,
+        /// then (joined at its far end) the other road's. The new road already leaves each end along the old road's line,
+        /// so there is no seam; both ends of one road make it a ring.
+        /// </summary>
+        private void Join(PathLine line)
+        {
+            var pts = new List<Vector2>(line.points);
+            if (line.extendsStart >= 0)
+            {
+                var head = new List<Vector2>(Lines[line.extendsStart].points);
+                if (line.startAtItsStart) head.Reverse();   // (now it ends where the new road starts)
+                while (head.Count > 0 && (head[^1] - pts[0]).magnitude < Spacing * 0.5f) head.RemoveAt(head.Count - 1);
+                head.AddRange(pts);
+                pts = head;
+            }
+            bool ring = line.extendsEnd >= 0 && line.extendsEnd == line.extendsStart;
+            if (line.extendsEnd >= 0 && !ring)
+            {
+                var tail = new List<Vector2>(Lines[line.extendsEnd].points);
+                if (!line.endAtItsStart) tail.Reverse();     // (now it starts where the new road ends)
+                while (tail.Count > 0 && (tail[0] - pts[^1]).magnitude < Spacing * 0.5f) tail.RemoveAt(0);
+                pts.AddRange(tail);
+            }
+            if (ring) while (pts.Count > 3 && (pts[^1] - pts[0]).magnitude < Spacing * 0.5f) pts.RemoveAt(pts.Count - 1);
+            var joined = new PathLine { kind = line.kind, points = pts, closed = ring };
+            if (line.extendsStart >= 0)
+            {
+                Lines[line.extendsStart] = joined;
+                if (line.extendsEnd >= 0 && !ring) Lines.RemoveAt(line.extendsEnd);
+            }
+            else Lines[line.extendsEnd] = joined;
+        }
 
         /// <summary>Re-indexes after lines were changed directly (removed) without a full rebuild.</summary>
         public void Reindex() => Index();

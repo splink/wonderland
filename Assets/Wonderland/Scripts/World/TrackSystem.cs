@@ -648,10 +648,12 @@ namespace Wonderland
             // Append the arrows to the ribbon mesh.
             var ribbon = new MeshBuilder();
             ribbon.AddMesh(previewMesh, Matrix4x4.identity);
-            ribbon.AddMesh(b.ToMesh("Arrows"), Matrix4x4.identity);
+            ribbon.AddMesh(b.ToMesh("Arrows", arrowsMesh ??= new Mesh { name = "Arrows" }), Matrix4x4.identity);   // (one mesh, reused every frame)
             ribbon.ToMesh("Track preview", previewMesh);
             previewMesh.RecalculateBounds();
         }
+
+        private Mesh arrowsMesh;
 
         public void HidePreview() => previewMesh.Clear();
     }

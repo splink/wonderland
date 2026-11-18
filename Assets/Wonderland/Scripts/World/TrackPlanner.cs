@@ -153,6 +153,17 @@ namespace Wonderland
             }
             if (deadEnd.Edge >= 0) return EndAttach(network, deadEnd, start);
             if (!network.Nearest(p, out int edge, out float s, out float off, SnapMid)) return none;
+            // Drawn on from a little way back along a line, heading for its dead end (the hand starting on the track):
+            // carry the line on from the end, not a switch with a stub beyond it.
+            if (off < 0.03f && !network.Edges[edge].Closed)
+                for (int k = 0; k < 2; k++)
+                {
+                    if (network.Edges[edge].Joint[k] >= 0) continue;
+                    var end = new EdgeEnd(edge, k);
+                    var outward = -Flat(network.IntoEdge(end)).normalized;
+                    float back = k == 0 ? s : network.Edges[edge].Layout.Length - s;
+                    if (back < 0.35f && Vector2.Dot(start ? dir : -dir, outward) > 0.8f) return EndAttach(network, end, start);
+                }
             var layout = network.Edges[edge].Layout;
             // On the grid, a stroke ending beside a track and running along it (over its last 12 cm) is a track
             // alongside, not a join.
@@ -237,6 +248,19 @@ namespace Wonderland
             plan.Start = Attach(network, drawn, true, out string startError);
             plan.Finish = Attach(network, drawn, false, out string finishError);
             if (plan.Start.Kind == AttachKind.End && plan.Finish.Kind == AttachKind.End && plan.Start.End == plan.Finish.End) plan.Finish.Kind = AttachKind.None;
+            // Carrying a line on from its end: what was drawn over the old track (before reaching its end) is not new track.
+            if (plan.Start.Kind == AttachKind.End)
+            {
+                int cut = 0;
+                while (cut < raw.Count - 2 && Vector2.Dot(raw[cut] - plan.Start.Point, plan.Start.Dir) < 0.005f) cut++;
+                if (cut > 0) { raw.RemoveRange(0, cut); raw.Insert(0, plan.Start.Point); }
+            }
+            if (plan.Finish.Kind == AttachKind.End)
+            {
+                int cut = 0;
+                while (cut < raw.Count - 2 && Vector2.Dot(raw[raw.Count - 1 - cut] - plan.Finish.Point, plan.Finish.Dir) > -0.005f) cut++;
+                if (cut > 0) { raw.RemoveRange(raw.Count - cut, cut); raw.Add(plan.Finish.Point); }
+            }
             if (plan.Start.Kind == AttachKind.Mid && plan.Finish.Kind == AttachKind.Mid && plan.Start.Edge == plan.Finish.Edge
                 && TrackNetwork.ArcGap(network.Edges[plan.Start.Edge].Layout, plan.Start.S, plan.Finish.S) < MinJointGap) plan.Finish.Kind = AttachKind.None;
             bool attached = plan.Start.Kind != AttachKind.None || plan.Finish.Kind != AttachKind.None;
@@ -886,11 +910,17 @@ namespace Wonderland
 
         private static float Perimeter(List<Vector2> p, bool closed) => Length(p) + (closed ? (p[^1] - p[0]).magnitude : 0f);
 
+        /// <summary>Longer than any track or road in a room-sized world: a line this long is a geometry bug.</summary>
+        public const float MaxLine = 200f;
+
         public static List<Vector2> Resample(List<Vector2> p, float spacing, bool closed)
         {
             var src = new List<Vector2>(p);
             if (closed) src.Add(p[0]);
             float total = Length(src);
+            // A line kilometres long (or not a number) is a geometry bug, never something drawn on a living-room floor:
+            // hand it back as it is rather than fill the headset's memory with points (the caller refuses it).
+            if (!(total < MaxLine)) { UnityEngine.Debug.LogWarning($"Resample: refusing a line {total} m long"); return src; }
             int count = Mathf.Max(closed ? 4 : 2, Mathf.RoundToInt(total / spacing));
             float step = total / count;
             var result = new List<Vector2>(count + 1) { src[0] };

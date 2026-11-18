@@ -811,27 +811,43 @@ namespace Wonderland
         /// </summary>
         public TrackPlan BuildTrack(IReadOnlyList<Vector3> drawn)
         {
+            // Planned first, changing nothing: a stroke that can't be built costs no undo step (and no restoring the world).
+            var net = Track.Network;
+            var plan = TrackPlanner.Plan(drawn, Terrain, net, null, landWillGrow: true);
+            if (!plan.Ok) return plan;
+            var before = net.Clone();
+            if (!plan.Closed && !net.Empty)
+            {
+                // One way: would trains have to turn round? Tried on a copy.
+                var copy = net.Clone();
+                Attach(copy, plan);
+                copy.Orient(e => copy.Agreement(e, before), out _);
+                if (copy.NewTurnBack(before)) { plan.Error = TrackNetwork.TurnBack; return plan; }
+            }
             // Railway drawn over bare floor grows its own land: checkpoint first so undo also takes the new land back.
             Checkpoint();
-            var plan = TrackPlanner.Plan(drawn, Terrain, Track.Network, ensureLand: path =>
-            {
-                float minX = float.MaxValue, minZ = float.MaxValue, maxX = float.MinValue, maxZ = float.MinValue;
-                foreach (var p in path) { minX = Mathf.Min(minX, p.x); maxX = Mathf.Max(maxX, p.x); minZ = Mathf.Min(minZ, p.y); maxZ = Mathf.Max(maxZ, p.y); }
-                EnsureGridCovers(Rect.MinMaxRect(minX - 0.25f, minZ - 0.25f, maxX + 0.25f, maxZ + 0.25f));
-                var region = Terrain.GrowLandAlong(path, 0.22f);
-                TerrainView.Rebuild(region);
-                Cover.MarkAllDirty();
-                return true;
-            });
-            if (!plan.Ok) { Undo(false); return plan; }
-            var net = Track.Network;
-            var before = net.Clone();
+            if (!GrowLandUnder(plan.Path)) { Undo(false); plan.Error = "Part of the railway is too far out to build"; return plan; }
             Attach(net, plan);
             // One way: the new piece runs the way the track it joins runs (a loop being joined turns to match).
             net.Orient(e => net.Agreement(e, before), out _);
-            if (net.NewTurnBack(before)) { Undo(false); plan.Error = TrackNetwork.TurnBack; return plan; }
             AfterNetworkChanged();
             return plan;
+        }
+
+        /// <summary>Grows land under any part of a new railway drawn over bare floor; false if some of it is too far out.</summary>
+        private bool GrowLandUnder(List<Vector2> path)
+        {
+            bool off = false;
+            foreach (var p in path) if (Terrain.EdgeAt(p.x, p.y) < 0.4f) { off = true; break; }
+            if (!off) return true;
+            float minX = float.MaxValue, minZ = float.MaxValue, maxX = float.MinValue, maxZ = float.MinValue;
+            foreach (var p in path) { minX = Mathf.Min(minX, p.x); maxX = Mathf.Max(maxX, p.x); minZ = Mathf.Min(minZ, p.y); maxZ = Mathf.Max(maxZ, p.y); }
+            EnsureGridCovers(Rect.MinMaxRect(minX - 0.25f, minZ - 0.25f, maxX + 0.25f, maxZ + 0.25f));
+            var region = Terrain.GrowLandAlong(path, 0.22f);
+            TerrainView.Rebuild(region);
+            Cover.MarkAllDirty();
+            foreach (var p in path) if (Terrain.EdgeAt(p.x, p.y) < 0.4f) return false;
+            return true;
         }
 
         /// <summary>
@@ -951,9 +967,12 @@ namespace Wonderland
             Reprofile(net, true);
             TrackSystem.UnlockTerrain(Terrain);
             Track.SetNetwork(net, WaterLevelFor, Terrain);
-            foreach (var e in net.Edges) TrackSystem.GradeTerrain(Terrain, e.Layout, WaterLevelFor, e.Tunnel);
+            // Only the ground the railway lies on (now or before) changes: rebuild just that part of the land.
+            var graded = railArea;
+            foreach (var e in net.Edges) graded = Span(graded, AreaOf(TrackSystem.GradeTerrain(Terrain, e.Layout, WaterLevelFor, e.Tunnel)));
             Terrain.UpdateSurface(Terrain.All);
-            TerrainView.RebuildAll();
+            if (graded.width > 0f) TerrainView.Rebuild(Terrain.RegionAround(graded.center, Mathf.Max(graded.width, graded.height) * 0.5f + 0.02f));
+            railArea = graded;
             Forest.RemoveWhere(t => net.DistanceTo(new Vector3(t.x, 0f, t.z)) < TrackSystem.BedHalfWidth + TreeFactory.Radius((TreeKind)t.kind) * t.scale * 0.5f + 0.006f);
             Forest.MarkAllDirty();
             for (int i = Buildings.Houses.Count - 1; i >= 0; i--)
@@ -975,6 +994,19 @@ namespace Wonderland
             if (placeTrains != null) placeTrains(); else Trains.Relocate();
             RebuildStations();
             RefreshBridges();
+        }
+
+        private Rect railArea;   // the land (metres) the railway has been graded into: rebuilt when the railway changes
+
+        private Rect AreaOf(RectInt r) => r.width <= 0 || r.height <= 0 ? default
+            : Rect.MinMaxRect(Terrain.LocalX(r.xMin), Terrain.LocalZ(r.yMin), Terrain.LocalX(r.xMax), Terrain.LocalZ(r.yMax));
+
+        /// <summary>Both areas (either may be empty).</summary>
+        private static Rect Span(Rect a, Rect b)
+        {
+            if (a.width <= 0f || a.height <= 0f) return b;
+            if (b.width <= 0f || b.height <= 0f) return a;
+            return Rect.MinMaxRect(Mathf.Min(a.xMin, b.xMin), Mathf.Min(a.yMin, b.yMin), Mathf.Max(a.xMax, b.xMax), Mathf.Max(a.yMax, b.yMax));
         }
 
         /// <summary>Re-derives every bridge (from the railway, the ways and the water) and lays the ways onto their decks.</summary>

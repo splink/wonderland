@@ -120,9 +120,14 @@ stroke:
 - **Cars and lorries:** pick Car, Taxi, Van, Bus, Lorry or Tanker and pull the trigger on a road. It drives off
   wherever it is pointed and roams the town. It keeps to its lane (buses and lorries take a highway's slow lane), keeps
   its distance and stops at red lights. Vehicles are saved with the world; the Eraser takes one away.
-- **The grid** (on by default; the **Grid** chip turns it off): road corners land on a 5 cm grid, so near-straight
-  strokes come out exactly straight and streets line up. It shows faintly around the pointer while you place roads,
-  railway or buildings. The railway uses the same grid (see Track on the grid above).
+- **The grid** (on by default; the **Grid** chip turns it off): streets are read like grid track. Straight lines are
+  fitted to whole stretches of the stroke and laid on the 5 cm grid (along it, across it or at 45 degrees), so a stroke
+  that wobbles or drifts a little comes out dead straight, with no little bends; corners appear only where the stroke
+  really turns, rounded with a standard curve. It shows faintly around the pointer while you place roads, railway or
+  buildings. The railway uses the same grid (see Track on the grid above).
+- **Carrying a street on:** draw on from a street's free end (or from a little way back along it) and the new part
+  becomes part of that street - it leaves the end along the street's line, so there is no seam or kink. Track drawn on
+  from a dead end works the same way.
 - Lanes, paths and trails keep the free-hand look.
 - Start or end a stroke on another line and they join.
 - Roads and lanes smooth the ground across their width.

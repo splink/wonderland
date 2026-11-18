@@ -117,7 +117,7 @@ PASS  The village clock runs a day in 7.6 minutes (360 s of daylight, 97 s of ni
 PASS  The daily rhythm: shops in the morning, lunch at midday, the fair in the afternoon, the square in the evening
 PASS  A railway loop divides the land
 PASS  A village goes up around the railway (13/13 places, 8 residents moved in)
-PASS  The walk grid sees the railway as a divide (2 regions over 6972 cells, built in 27 ms)
+PASS  The walk grid sees the railway as a divide (2 regions over 6972 cells, built in 22 ms)
 PASS  Every resident knows their home (8/8; 2 live inside the loop)
 PASS  The baker lives over the bakery
 PASS  At two in the morning everyone is asleep at home (8/8)
@@ -140,8 +140,8 @@ PASS  ...get off at the far station and walk on to where they were going
 PASS  A lane with a level crossing joins the two sides (1 regions)
 PASS  ...and people from inside the loop walk over it to the village
 PASS  Save/load keeps the time (10:00), the clock speed, needs and homes (8/8)
-PASS  40 villagers: 0.29 ms per frame on average, worst 2.5 ms, 1.4 decisions/s, slowest decision 2.3 ms, places directory 0.6 ms (editor timing)
-PASS  After an edit the walk grid rebuilds over 33 frames (62 ms of work, worst frame 3.6 ms)
+PASS  40 villagers: 0.30 ms per frame on average, worst 7.7 ms, 1.4 decisions/s, slowest decision 7.3 ms, places directory 0.5 ms (editor timing)
+PASS  After an edit the walk grid rebuilds over 32 frames (60 ms of work, worst frame 3.2 ms)
 PASS  With no places at all, villagers wander by day and sleep under the stars at night
 PASS  A working village goes up (15/15 places, 10 villagers)
 PASS  Opening hours: the bakery opens at half six and shuts at six, the carousel stops in the evening, the fountain never closes
@@ -229,14 +229,33 @@ PASS  Two trains share the network without touching (closest 6.8 cm), and keep o
 PASS  Pointing at a train says what it is doing ("Steam train, 4 carriages - at Hazelbank station")
 PASS  Held at red, the signal stops a train, and the train says so ("Goods train, 1 wagon - waiting at a red signal (tap it for automatic)")
 PASS  Save and load keep the network (2 pieces, 1 switch), the held signal, the station (Hazelbank) and each train's carriages
-INFO  Joining two loops: 54/60 built; 4x "Tracks must cross at a wider angle"; 2x "Too close to the other track - leave a little gap"
+INFO  Joining two loops: 55/60 built; 4x "Tracks must cross at a wider angle"; 1x "Too close to the other track - leave a little gap"
 PASS  What the drawing shows while the trigger is held is what letting go builds (60/60 agree)
-PASS  Most hand-drawn links between two loops can be built (54/60)
+PASS  Most hand-drawn links between two loops can be built (55/60)
 PASS  A station and a country halt beside the line (2 stops)
 PASS  An express (faster) and a tank engine (slower) join the steam train (Express, 4 carriages - running at 130 %, next stop Willowmere; Tank engine, 2 carriages - running at 80 %, next stop Orchard End)
 PASS  Every train runs one way round the network, never backing up or meeting another (closest 6.3 cm, 0 reversals)
 PASS  Trains share both loops rather than piling into one (49% of train-time in the quieter loop)
 PASS  Trains call at the country halt (121 calls)
+PASS  A hand-drawn round loop comes out as standard track: closed, straights on the grid and curves of 20 cm, 30 cm, 40 cm ()
+PASS  ...and stays close to what was drawn (on average 1.7 cm off, at most 4.6 cm; planned in 5.1 ms, 2.8 ms drawn freely)
+PASS  A train runs round it on the rails (worst 0.0 mm off, 3.8 m)
+PASS  A line drawn 4 degrees off comes out dead straight along the grid, its ends on grid points (0.00 mm off straight; ends (-0.600, 0.150) and (0.600, 0.150))
+PASS  An L drawn with a rounded corner: two straights and one standard curve of 30 cm ()
+PASS  Branches drawn off a straight at 25 to 135 degrees get a switch exactly on the line, the branch leaving it tangentially on a standard curve (7/7)
+PASS  A line drawn about 8 cm beside a straight runs exactly 10 cm from it (0.0 mm off)
+PASS  A loop drawn round a loop keeps 10 cm from it all the way round, on concentric curves (10.0 to 10.0 cm; curves 20 cm, 30 cm, 40 cm)
+PASS  Crossovers drawn from one loop to the other, one each way, each get a switch at both ends (4 switches, 0 one-way traps)
+PASS  Two loops linked both ways on the grid: 4 switches, no dead ends, no one-way traps, all standard track (4 switches, 0 dead ends, 0 traps; ; a link planned in 4.0 ms, 3.3 ms drawn freely)
+PASS  A line carried on from its dead end continues it smoothly, as one piece (8 pieces, sharpest bend 2.9 deg per cm; )
+PASS  Drawn on from 15 cm back along the line, it still carries the line on from its end - one piece, no new switch (5 -> 5 switches)
+PASS  Two separate railways joined by a line from one to the other become one (2 -> 1; )
+PASS  Removing a link takes its two switches with it, the rest stays sound; undo puts it back (7 -> 5 -> 7 switches)
+PASS  Gripping a loop and pulling it out bends it on the grid: standard track, its switches where they were (0.0 cm from the pull)
+PASS  Three trains run the grid railway through its switches without touching or leaving the rails (closest 8.1 cm, worst 0.0 mm off; 150 s left, 277 s right, 240 s top; 0 reversals)
+PASS  Save and load keep every piece, point and switch of the grid railway (11 pieces, 7 switches, 0.000 mm drift)
+PASS  A railway drawn freely before the grid takes a grid branch (a switch on its curve) and a grid line across it (1 switch, 2 crossings)
+PASS  Saved worlds load with their railway intact and its trains on the rails (7/7: headset-wonderland-world: 2 pieces, 1 switches, 4 trains; headset-world-1: 9 pieces, 6 switches, 7 trains; headset-world-3: 2 pieces, 1 switches, 2 trains; headset-world-4: 2 pieces, 1 switches, 4 trains; quest-world-1: 9 pieces, 6 switches, 7 trains; quest-world-latest: 2 pieces, 1 switches, 2 trains; quest-world: 5 pieces, 2 switches, 5 trains)
 PASS  A shower: rain falls from the clouds over the land (369 drops)
 PASS  Villagers know it is raining: the park is out, the museum is in
 PASS  14 clouds drift on the wind
@@ -267,13 +286,18 @@ PASS  A highway can be drawn
 PASS  Cars, a taxi, a van, a bus, a lorry and a tanker go on the roads (7)
 PASS  Every one of them drives about the town (the least went 762 cm in 3 minutes)
 PASS  They stop at red lights and never cross on red (186 stops at lights, 0 red crossings)
-PASS  They keep to the roads (at most 1.7 cm from a road's centre line)
+PASS  They keep to the roads (at most 1.9 cm from a road's centre line)
 PASS  They keep their distance (closest 2.3 cm between two)
 PASS  The vehicles are saved with the world (7)
 PASS  The eraser takes a vehicle away ("Car removed") and Undo brings it back
 PASS  On the grid an askew stroke comes out straight, on a grid line (0.0 mm off straight)
 PASS  A building beside it faces the road from just behind the kerb (facing 0°, at 44.5 cm)
 PASS  With the grid off the stroke keeps its angle
+PASS  Streets drawn by hand, wobbling and drifting a little, come out dead straight - not a single bend (3/3)
+PASS  Drawn on from a street's end (or from a little way back along it) it carries on as one street, still straight (3 -> 3 streets, 0 bends)
+PASS  A street carried on round a corner from its end is one street with a smooth curve, no kink at the join (sharpest 11.3 deg per cm)
+PASS  A side street drawn up to a street ends exactly on it, straight (0.0 mm)
+PASS  A stroke that doubles back onto a street's end plans in a moment, a sensible road or none (grid: 0 ms, 0.53 m; free: 0 ms, 0.50 m; )
 PASS  A railway under a big hill becomes a tunnel (hill 29 cm, 30 cm of tunnel, hill kept above it)
 PASS  The train runs into the tunnel (steam off underground)
 PASS  Railway across a pond rises onto a bridge and the water stays
@@ -343,5 +367,5 @@ PASS  Land still grows with bad room data
 PASS  Trimmed land grows back (1.19 -> 1.04 -> 1.16 m2)
 INFO  terrain: 6 chunk meshes, 17 k triangles, land 3.49 m2 of a 4.8 x 4.8 m grid
 INFO  static budget of this world: 346 mesh renderers (~draw calls per eye pass before batching, excl. shadows/UI), 1166 k triangles, ground cover 5538 tufts
-INFO  trees 131, forest chunks 30, houses 3, track 3.43 m, undo depth 9, journey simulated in 81.0 s wall time
+INFO  trees 131, forest chunks 30, houses 3, track 3.43 m, undo depth 9, journey simulated in 100.2 s wall time
 RESULT: PASS

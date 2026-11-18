@@ -194,6 +194,14 @@ namespace Wonderland.Editor
             bool extStd = GridConforms(n, out string whyExt, out _);
             Check(spur.Ok && carry.Ok && carry.Start.Kind == AttachKind.End && n.Edges.Count == pieces && DeadEnds(n) == 1 && extStd && kink < 3.5f,
                 $"A line carried on from its dead end continues it smoothly, as one piece ({n.Edges.Count} pieces, sharpest bend {kink:0.0} deg per cm; {whyExt}{spur.Error}{carry.Error})");
+            // Drawn on from a little way back along the line (the hand starting on the track): still carried on from the end.
+            pieces = n.Edges.Count; int joints0 = n.Joints.Count;
+            end = FreeEnd(n);
+            var outward = new Vector2(-1f, 0f);
+            var back = GridBuild(w, Line(t, end - outward * 0.15f, end + outward * 0.3f));
+            n = w.Track.Network;
+            Check(back.Ok && back.Start.Kind == AttachKind.End && n.Edges.Count == pieces && n.Joints.Count == joints0 && DeadEnds(n) == 1,
+                $"Drawn on from 15 cm back along the line, it still carries the line on from its end - one piece, no new switch ({joints0} -> {n.Joints.Count} switches{back.Error})");
             // A railway of its own, then linked to this one.
             var third = GridBuild(w, RoundedRect(t, new Vector2(0f, 1.3f), new Vector2(0.5f, 0.3f), 0.15f, 0.005f, 23));
             int before = Components(w.Track.Network);
