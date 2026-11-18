@@ -39,6 +39,8 @@ namespace Wonderland.Editor
             catch (Exception e) { Fail("Exception: " + e); }
             try { FlatOnTop(); }
             catch (Exception e) { Fail("Exception: " + e); }
+            try { StrictGrid(); }
+            catch (Exception e) { Fail("Exception: " + e); }
             try { Soak(); }
             catch (Exception e) { Fail("Exception: " + e); }
             BuildGrid.Snap = true;
@@ -627,6 +629,32 @@ namespace Wonderland.Editor
             float level = w.WaterLevelForStroke(pond);
             Hold(() => w.WaterStroke(pond, 0.12f, 0.9f, Dt, level, false), 2f);
             Check(t.WaterAt(-0.3f, 0f) < 0.3f && t.WaterAt(-0.3f, 0.08f) > 0.5f, $"A pond dug across a road stops at it ({t.WaterAt(-0.3f, 0f):0.00} water on the road, {t.WaterAt(-0.3f, 0.08f):0.00} beside it)");
+            UnityEngine.Object.DestroyImmediate(w.gameObject);
+        }
+
+        /// <summary>On the grid, roads run only straight along it, straight across it or at 45 degrees, however slanted the stroke.</summary>
+        private static void StrictGrid()
+        {
+            var w = Scratch("Strict grid", 560f);
+            var t = w.Terrain;
+            BuildGrid.Snap = true;
+            try
+            {
+                string e1 = w.BuildPath(Line(t, new Vector2(-0.6f, -0.5f), new Vector2(0.35f, -0.18f)), PathKind.Road);
+                string e2 = w.BuildPath(Line(t, new Vector2(-0.5f, 0.1f), new Vector2(-0.1f, 0.25f), new Vector2(0.4f, 0.55f)), PathKind.Highway);
+                int on = 0, all = 0; float worst = 0f;
+                foreach (var l in w.Paths.Lines)
+                    for (int i = 3; i + 3 < l.points.Count; i += 3)
+                    {
+                        var d = l.points[i + 3] - l.points[i];
+                        float a = Mathf.Repeat(Mathf.Atan2(d.y, d.x) * Mathf.Rad2Deg, 45f);
+                        float off = Mathf.Min(a, 45f - a);
+                        all++; if (off < 2f) on++; else worst = Mathf.Max(worst, off);
+                    }
+                Check(e1 == null && e2 == null && on >= all * 0.8f,
+                    $"Slanted strokes come out as straight, square and 45-degree stretches ({on} of {all} stretches on the grid's angles; the rest are rounded corners){e1 ?? ""}{e2 ?? ""}");
+            }
+            finally { BuildGrid.Snap = false; }
             UnityEngine.Object.DestroyImmediate(w.gameObject);
         }
 
