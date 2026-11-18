@@ -368,6 +368,7 @@ namespace Wonderland
         {
             var p = PlaceAt(house);
             if (p == null || p.Bp.Takes == Cargo.None) return 0;
+            if (p.Bp.Id == Catalog.Harbour) return p.Stock.Waiting < 6f ? 3 : 0;   // for the next ship
             if (p.Bp.Goods == Goods.Ships) return p.Stock.Waiting < TrainHolds && ExportWanted(p.WorkRegion) ? 3 : 0;   // for the goods train
             return Mathf.FloorToInt(StockCap - p.Stock.Have);
         }

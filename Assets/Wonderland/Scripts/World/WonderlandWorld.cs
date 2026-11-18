@@ -38,6 +38,7 @@ namespace Wonderland
         public SoundSystem Sounds { get; private set; }
         public CctvSystem Cctv { get; private set; }
         public FreightSystem Freight { get; private set; }
+        public HarbourSystem Harbours { get; private set; }
         public BoatSystem Boats { get; private set; }
         public SkySystem Sky { get; private set; }
         /// <summary>The village's time of day (villagers' routines, the rides, the light).</summary>
@@ -119,6 +120,8 @@ namespace Wonderland
             Boats.Init(this, materials.Lit);
             Freight = Child<FreightSystem>("Freight");
             Freight.Init(this, materials.Lit);
+            Harbours = Child<HarbourSystem>("Harbours");
+            Harbours.Init(this, materials.Lit);
             Boats.Waiting = People.WaitingForBoat;
             Boats.Landed = People.EndBoatTrip;
             People.BoatSeat = Boats.SeatOf;
@@ -1109,6 +1112,7 @@ namespace Wonderland
             int boat = Catalog.BoatOf(h.variant);
             if (boat >= 0) return Boats.Validate(new Vector2(h.x, h.z), h.rotation + 180f, boat);
             if (h.variant == Catalog.Jetty && ValidateJetty(h) is { } jetty) return jetty;
+            if (h.variant == Catalog.Harbour && ValidateHarbour(h) is { } harbour) return harbour;
             string error = (Catalog.IsStation(h.variant) ? ValidateStation(h) : null) ?? Buildings.Validate(h, ignore, p => Track.DistanceTo(new Vector3(p.x, 0f, p.y)));
             if (error == null)
                 foreach (var p in BuildingSystem.FootprintSamples(h))
@@ -1131,6 +1135,18 @@ namespace Wonderland
             if (Terrain.WaterAt(tip.x, tip.z) < 0.5f) return "Its end must reach out over a pond";
             var dock = BoatSystem.DockOf(h);
             if (Terrain.WaterAt(dock.x, dock.y) < 0.6f) return "Boats couldn't come alongside - reach further out";
+            return null;
+        }
+
+        /// <summary>A harbour stands on the shore, its front to open water deep and wide enough for a ship to moor.</summary>
+        private string ValidateHarbour(HouseInstance h)
+        {
+            var rot = Quaternion.Euler(0f, h.rotation, 0f);
+            foreach (float x in new[] { -0.07f, 0f, 0.07f })
+            {
+                var p = new Vector3(h.x, 0f, h.z) + rot * new Vector3(x, 0f, HarbourSystem.MooringZ);
+                if (Terrain.WaterAt(p.x, p.z) < 0.6f) return "Its front must face open water - a ship moors alongside it";
+            }
             return null;
         }
 

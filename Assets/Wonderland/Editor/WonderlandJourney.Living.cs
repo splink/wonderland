@@ -29,6 +29,8 @@ namespace Wonderland.Editor
             catch (Exception e) { Fail("Exception: " + e); }
             try { FreightByRail(); }
             catch (Exception e) { Fail("Exception: " + e); }
+            try { Shipping(); }
+            catch (Exception e) { Fail("Exception: " + e); }
             BuildGrid.Snap = true;
             Report.AppendLine(failures == 0 ? "RESULT: PASS" : $"RESULT: FAIL ({failures})");
             File.WriteAllText("Logs/living-results.txt", Report.ToString());
@@ -329,6 +331,71 @@ namespace Wonderland.Editor
             UnityEngine.Object.DestroyImmediate(w.gameObject);
         }
 
+        /// <summary>Digs a long lake along z = 0 from x0 to x1 (radius r).</summary>
+        private static void Lake(WonderlandWorld w, float x0, float x1, float r)
+        {
+            var mid = w.Terrain.PointAt((x0 + x1) / 2f, 0f);
+            float level = w.WaterLevelForStroke(mid);
+            for (float x = x0; x <= x1; x += 0.06f) { var at = w.Terrain.PointAt(x, 0f); Hold(() => w.WaterStroke(at, r, 0.9f, Dt, level, false), 0.6f); }
+        }
+
+        /// <summary>The first place a harbour can stand between (x0, z0) and (x1, z1), facing -Z, or null.</summary>
+        private static HouseInstance? HarbourSpot(WonderlandWorld w, float x0, float x1, float z0, float z1)
+        {
+            for (float z = z0; z <= z1; z += 0.01f)
+            for (float x = x0; x <= x1; x += 0.02f)
+            {
+                var h = new HouseInstance { x = x, z = z, rotation = 0f, variant = Catalog.Harbour };
+                if (w.ValidateHouse(h) == null) return h;
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Shipping: two harbours on the shore of one long lake get a container ship that sails between them over the
+        /// water; at each, the quay crane unloads its containers onto the quay and loads what waits for shipping. A third
+        /// harbour on a pond of its own stays quiet. Taking a harbour away sends its ship away.
+        /// </summary>
+        private static void Shipping()
+        {
+            var w = Scratch("Shipping", 240f);
+            Lake(w, -0.55f, 0.55f, 0.22f);
+            var a = HarbourSpot(w, -0.5f, -0.25f, 0.18f, 0.45f);
+            var b = HarbourSpot(w, 0.25f, 0.5f, 0.18f, 0.45f);
+            string ea = a.HasValue ? w.PlaceHouse(a.Value) : "no spot", eb = b.HasValue ? w.PlaceHouse(b.Value) : "no spot";
+            w.People.Grid.Complete(); w.Clock.Hour = 9f; w.People.Step(Dt); w.Harbours.Step(Dt); w.Harbours.Step(2.1f);
+            Check(ea == null && eb == null && w.Harbours.ShipCount == 1, $"Two harbours on one lake get a container ship ({w.Harbours.ShipCount} ships{(ea != null ? ", A: " + ea : "")}{(eb != null ? ", B: " + eb : "")})");
+            if (w.Harbours.ShipCount == 0) return;
+            int ia = w.Buildings.Houses.FindIndex(h => h.variant == Catalog.Harbour), ib = w.Buildings.Houses.FindLastIndex(h => h.variant == Catalog.Harbour);
+            var said = new List<string>();
+            bool overLand = false;
+            var ship = w.Harbours.transform.Find("Container ship");
+            Live(w, 300f, s =>
+            {
+                w.Harbours.Step(Dt);
+                string l = w.Harbours.HarbourFor(ib);
+                if (said.Count == 0 || said[^1] != l) said.Add(l);
+                if (ship != null && w.Terrain.WaterAt(ship.localPosition.x, ship.localPosition.z) < 0.3f) overLand = true;
+            });
+            Check(w.Harbours.Voyages >= 1 && w.Harbours.Lifted >= 4 && !overLand && said.Exists(x => x.Contains("unloading")),
+                $"The ship is unloaded by the crane, sails over the water to the other harbour and is unloaded there ({w.Harbours.Voyages} voyages, {w.Harbours.Lifted} containers lifted): {string.Join(" / ", said)}");
+            Check(w.People.StockAt(ib) >= 1f || w.People.StockAt(ia) >= 1f, $"...the containers wait on the quay for the harbour's lorry ({w.People.StockAt(ia):0} and {w.People.StockAt(ib):0})");
+            // A harbour on a pond of its own: no ship, and its card says why.
+            var w2 = Scratch("Pond harbour", 280f);
+            Lake(w2, -0.1f, 0.1f, 0.2f);
+            var c = HarbourSpot(w2, -0.2f, 0.2f, 0.15f, 0.45f);
+            if (c.HasValue) w2.PlaceHouse(c.Value);
+            w2.People.Grid.Complete(); w2.Harbours.Step(2.1f);
+            int ic = w2.Buildings.Houses.FindIndex(h => h.variant == Catalog.Harbour);
+            Check(ic >= 0 && w2.Harbours.ShipCount == 0 && w2.Harbours.HarbourFor(ic).Contains("no other harbour"), $"A lone harbour stays quiet ({(ic >= 0 ? w2.Harbours.HarbourFor(ic) : "couldn't place one")})");
+            // Taking a harbour away: the ship goes.
+            w.RemoveHouse(ia);
+            w.Harbours.Step(2.1f);
+            Check(w.Harbours.ShipCount == 0, $"Taking a harbour away sends its ship away ({w.Harbours.ShipCount} ships left)");
+            UnityEngine.Object.DestroyImmediate(w2.gameObject);
+            UnityEngine.Object.DestroyImmediate(w.gameObject);
+        }
+
         /// <summary>The living world's buildings in a row, fronts to the camera (docs/renders/living-buildings*.png).</summary>
         public static void LivingGallery()
         {
@@ -435,6 +502,37 @@ namespace Wonderland.Editor
                 }
             }
             Debug.Log($"Living renders: crane {shot}");
+            // A container ship alongside a harbour, the quay crane at work.
+            var hw = Scratch("Harbour render", 120f);
+            hw.Sky.Shown = false;
+            Lake(hw, -0.55f, 0.55f, 0.22f);
+            var ha = HarbourSpot(hw, -0.5f, -0.25f, 0.18f, 0.45f); var hb = HarbourSpot(hw, 0.25f, 0.5f, 0.18f, 0.45f);
+            if (ha.HasValue) hw.PlaceHouse(ha.Value); if (hb.HasValue) hw.PlaceHouse(hb.Value);
+            hw.People.Grid.Complete(); hw.People.Step(Dt); hw.Harbours.Step(2.1f);
+            bool harbourShot = false, sailShot = false;
+            for (float s = 0f; s < 200f && !(harbourShot && sailShot) && ha.HasValue; s += Dt)
+            {
+                hw.Clock.Tick(Dt); hw.Harbours.Step(Dt);
+                var box = hw.Harbours.transform.Find("Harbour crane/Container");
+                var shipT = hw.Harbours.transform.Find("Container ship");
+                if (!harbourShot && box != null && box.gameObject.activeSelf)
+                {
+                    var p = hw.transform.TransformPoint(new Vector3(ha.Value.x, hw.Terrain.SurfaceAt(ha.Value.x, ha.Value.z) + 0.02f, ha.Value.z - 0.05f));
+                    cam.transform.position = p + new Vector3(0.2f, 0.16f, -0.18f);
+                    cam.transform.rotation = Quaternion.LookRotation(p - cam.transform.position);
+                    WonderlandRenders.Capture(cam, "living-harbour.png", 1400, 900);
+                    harbourShot = true;
+                }
+                if (harbourShot && !sailShot && shipT != null && Mathf.Abs(shipT.localPosition.x) < 0.1f)
+                {
+                    var p = hw.transform.TransformPoint(shipT.localPosition);
+                    cam.transform.position = p + new Vector3(-0.15f, 0.12f, -0.2f);
+                    cam.transform.rotation = Quaternion.LookRotation(p - cam.transform.position);
+                    WonderlandRenders.Capture(cam, "living-ship-sailing.png", 1400, 900);
+                    sailShot = true;
+                }
+            }
+            Debug.Log($"Living renders: harbour {harbourShot}, sailing {sailShot}");
             if (Application.isBatchMode) EditorApplication.Exit(0);
         }
     }

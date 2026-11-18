@@ -104,7 +104,7 @@ namespace Wonderland
             LogPile = 32, Lamp = 33, Bench = 34, FlowerBed = 35, Well = 36, Statue = 37, Signpost = 38, Picnic = 39, HayBales = 40,
             Park = 41, Museum = 42, Restaurant = 43, Disco = 44, Hospital = 45, Police = 46, Factory = 47, Football = 48, Studio = 49,
             Camera = 50, Balloon = 51, Jetty = 52, RowingBoat = 53, SailingBoat = 54, Steamer = 55, Halt = 56, TaxiRank = 57,
-            Sawmill = 58, FurnitureShop = 59, IceCream = 60, Pub = 61, Hotel = 62, PostOffice = 63, Letterbox = 64, CarPark = 65, FreightYard = 66;
+            Sawmill = 58, FurnitureShop = 59, IceCream = 60, Pub = 61, Hotel = 62, PostOffice = 63, Letterbox = 64, CarPark = 65, FreightYard = 66, Harbour = 67;
 
         /// <summary>A station of any size (the big one, or a country halt): trains stop beside it.</summary>
         public static bool IsStation(int variant) => variant == Station || variant == Halt || variant == FreightYard;
@@ -231,6 +231,9 @@ namespace Wonderland
                 new() { Name = "Car park", Short = "Parking", Category = PlaceCategory.Travel, Half = new Vector2(0.082f, 0.052f), Height = 0.01f, Walkable = true, Styles = 1, Hint = "visitors' cars park here - put it by a road near the shops" },
                 new() { Name = "Freight yard", Short = "Freight", Category = PlaceCategory.Travel, Half = new Vector2(0.075f, 0.04f), Height = 0.1f, Styles = 1,
                     Hint = "beside the railway: its crane loads goods trains, and its lorry takes what arrives on" },
+                new() { Name = "Harbour", Short = "Harbour", Category = PlaceCategory.Travel, Half = new Vector2(0.075f, 0.05f), Height = 0.1f, Styles = 1,
+                    Hint = "on the shore of a big lake, front to the water: container ships sail to any other harbour the water reaches",
+                    Spots = new[] { new ActivitySpot(0.05f, -0.035f, SpotKind.Watch, 0f) } },
             };
             for (int i = 0; i < list.Count; i++) list[i].Id = i;
             // What each place is for: the needs it satisfies decide who comes and when (see Needs).
@@ -298,6 +301,8 @@ namespace Wonderland
             Work(FreightYard, "crane driver", 6.5f, 19.5f, false, Goods.Ships);
             list[FreightYard].Takes = list[FreightYard].Makes = Cargo.Produce | Cargo.Goods | Cargo.Timber;
             list[FreightYard].Lorries = 1;
+            Work(Harbour, "dock worker", 6f, 20f, false, Goods.Ships);
+            list[Harbour].Takes = Cargo.Produce | Cargo.Goods | Cargo.Timber; list[Harbour].Makes = Cargo.Goods; list[Harbour].Lorries = 1;
             list[Grocer].Takes = Cargo.Produce | Cargo.Goods;
             list[Station].Takes = Cargo.Produce | Cargo.Goods;
             list[Barn].Lorries = 1; list[Factory].Lorries = 1;
