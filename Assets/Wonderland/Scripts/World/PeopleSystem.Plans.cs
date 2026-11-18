@@ -22,7 +22,7 @@ namespace Wonderland
         public bool IsFree(int villager)
         {
             var a = agents[villager];
-            return !Bedtime(a, Clock.Hour) && a.State != Activity.Sleeping && a.State != Activity.Riding && a.State != Activity.OnRide && a.State != Activity.Waiting;
+            return !Bedtime(a, Clock.Hour) && a.State != Activity.Sleeping && a.State != Activity.Riding && a.State != Activity.OnRide && a.State != Activity.Waiting && a.State != Activity.Hailing && a.State != Activity.InTaxi;
         }
 
         private bool AskDeciders(Agent a, out Intent plan)
@@ -65,7 +65,7 @@ namespace Wonderland
         public bool Direct(int villager, Intent plan)
         {
             var a = agents[villager];
-            if (a.State == Activity.Sleeping || a.State == Activity.Riding || a.State == Activity.OnRide) return false;
+            if (a.State == Activity.Sleeping || a.State == Activity.Riding || a.State == Activity.OnRide || a.State == Activity.InTaxi || a.State == Activity.Hailing) return false;
             if (!Check(a, ref plan)) return false;
             if (a.Hidden) { Hide(a, false); a.Position = a.Approach; a.Height = GroundAt(a.Position); }
             else if (a.State == Activity.Sitting || a.State == Activity.Playing || a.SpotLift > 0f) a.Position = a.Approach;

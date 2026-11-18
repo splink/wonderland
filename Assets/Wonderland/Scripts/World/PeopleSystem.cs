@@ -45,10 +45,10 @@ namespace Wonderland
         private readonly System.Diagnostics.Stopwatch decideWatch = new();
         private double decideTotal;
 
-        public enum Activity { Idle, Walking, Chatting, Waiting, Riding, Waving, Sitting, Gathering, Playing, Watching, Browsing, OnRide, Sleeping, Inside, Working, Unwell }
+        public enum Activity { Idle, Walking, Chatting, Waiting, Riding, Waving, Sitting, Gathering, Playing, Watching, Browsing, OnRide, Sleeping, Inside, Working, Unwell, Hailing, InTaxi }
         private readonly HashSet<long> claimed = new();
 
-        private enum Leg { Direct, ToPlatform, Final, Pickup }
+        private enum Leg { Direct, ToPlatform, Final, Pickup, ToTaxi }
 
         private sealed class Agent
         {
@@ -570,6 +570,7 @@ namespace Wonderland
                     continue;
                 }
                 if (a.State == Activity.Riding) { StepRiding(a, dtA); continue; }
+                if (a.State == Activity.InTaxi) { StepInTaxi(a); continue; }
                 if (a.State == Activity.OnRide) { StepRide(a); continue; }
                 int beat = tick + a.Index;   // (Smart: the occasional checks spread over the frames)
                 if ((!smart || (beat & 7) == 0) && !Walkable(a.Position) && a.State != Activity.Sitting && a.State != Activity.Unwell)   // the world changed under them
@@ -606,6 +607,9 @@ namespace Wonderland
                         if (here != null && here.Dwell > 0f && here.Kind != TrainKind.Goods && Bound(a, here))
                         { a.State = Activity.Riding; a.Riding = here; a.Ride = 0f; a.Changing = false; a.LastCall = here.AtStation; Hide(a, true); }
                         else if (a.Timer <= 0f || !TrainRunning || Bedtime(a, Clock.Hour) && a.Plan.What is not (Intent.Kind.Sleep or Intent.Kind.Home)) { a.ToStation = false; Decide(a); }
+                        break;
+                    case Activity.Hailing:
+                        StepHailing(a, dtA);
                         break;
                     case Activity.Waving:
                         a.Heading = Mathf.MoveTowardsAngle(a.Heading, a.WaveHeading, 240f * dtA);
@@ -660,6 +664,7 @@ namespace Wonderland
         /// <summary>Stops whatever they were doing and stands about for a moment before choosing again.</summary>
         private void Stop(Agent a, float wait = 1f)
         {
+            if (a.Leg == Leg.ToTaxi || a.State == Activity.Hailing) { world.Traffic?.CancelFare(a.Seed); a.Leg = Leg.Direct; }
             Unclaim(a);
             if (a.Hidden) Hide(a, false);
             a.Riding = null; a.ToStation = false; a.Hiking = false; a.Waypoints.Clear(); a.Changing = false;
@@ -748,6 +753,7 @@ namespace Wonderland
         /// <summary>Sets off to do what an intent says.</summary>
         private void Carry(Agent a, Intent plan)
         {
+            if (a.Leg == Leg.ToTaxi || a.State == Activity.Hailing) world.Traffic?.CancelFare(a.Seed);   // (a taxi was coming: not needed now)
             a.Plan = plan;
             a.Leg = Leg.Direct;
             if (plan.What == Intent.Kind.Sleep && plan.House < 0) { SettleOutdoors(a); return; }
@@ -789,6 +795,7 @@ namespace Wonderland
                 GoTo(a, PlatformFor(plan.FromStation, a), true);
                 return;
             }
+            if (TryTaxi(a, plan)) return;
             GoTo(a, plan.Target, false);
         }
 
@@ -1166,6 +1173,7 @@ namespace Wonderland
                 a.Waypoints.Clear();
                 if (!there) { a.Hiking = false; if (PlaceAt(a.SpotHouse) is { } missed) Avoid(a, missed.Key, 3f); Stop(a); return; }   // couldn't get there: not again for a while
                 if (a.ToStation) { a.ToStation = false; a.State = Activity.Waiting; a.Timer = a.Rng.Range(35f, 55f); return; }
+                if (a.Leg == Leg.ToTaxi) { a.Leg = Leg.Direct; a.State = Activity.Hailing; a.Timer = TrafficSystem.TaxiWait + 15f; return; }   // at the kerb: wait for the taxi
                 if (a.Hiking) { a.Hiking = false; Satisfy(a, 0.2f); }
                 switch (a.Plan.What)
                 {

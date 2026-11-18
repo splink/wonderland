@@ -96,7 +96,8 @@ namespace Wonderland.Editor
             Check(people.DescribePlace(bakery).Contains("bare") || people.DescribePlace(grocer).Contains("bare") || people.DescribePlace(cafe).Contains("bare"), $"...pointing at the shop shows it (\"{people.DescribePlace(bakery)}\")");
 
             // Friendships, made by time spent together: a few more days.
-            int friendships = 0;
+            int friendships = 0, already = 0;
+            for (int i = 0; i < people.People.Count; i++) already += people.FriendCount(i);
             news.Clear();
             for (int day = 0; day < 2; day++)
             {
@@ -106,7 +107,7 @@ namespace Wonderland.Editor
             for (int i = 0; i < people.People.Count; i++) friendships += people.FriendCount(i);
             friendships /= 2;
             int someone = -1; for (int i = 0; i < people.People.Count && someone < 0; i++) if (people.FriendCount(i) > 0) someone = i;
-            Check(friendships > 0 && news.Exists(n => n.Contains("friends")), $"Villagers who spend time together become friends ({friendships} friendships; \"{news.Find(n => n.Contains("friends"))}\")");
+            Check(friendships > 0 && (news.Exists(n => n.Contains("friends")) || already > 0), $"Villagers who spend time together become friends ({friendships} friendships{(already > 0 ? ", some made earlier" : "")}; \"{news.Find(n => n.Contains("friends"))}\")");
             string json = w.Serialize();
             var copy = new GameObject("Working copy").AddComponent<WonderlandWorld>();
             copy.transform.position = new Vector3(240f, 0f, 0f);

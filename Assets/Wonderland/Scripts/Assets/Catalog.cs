@@ -102,7 +102,7 @@ namespace Wonderland
             CastleRuin = 24, Lookout = 25, Campsite = 26, WaterTower = 27, SignalBox = 28, Fuel = 29, Boulders = 30, Crag = 31,
             LogPile = 32, Lamp = 33, Bench = 34, FlowerBed = 35, Well = 36, Statue = 37, Signpost = 38, Picnic = 39, HayBales = 40,
             Park = 41, Museum = 42, Restaurant = 43, Disco = 44, Hospital = 45, Police = 46, Factory = 47, Football = 48, Studio = 49,
-            Camera = 50, Balloon = 51, Jetty = 52, RowingBoat = 53, SailingBoat = 54, Steamer = 55, Halt = 56;
+            Camera = 50, Balloon = 51, Jetty = 52, RowingBoat = 53, SailingBoat = 54, Steamer = 55, Halt = 56, TaxiRank = 57;
 
         /// <summary>A station of any size (the big one, or a country halt): trains stop beside it.</summary>
         public static bool IsStation(int variant) => variant == Station || variant == Halt;
@@ -209,6 +209,9 @@ namespace Wonderland
                 new() { Name = "Sailing boat", Short = "Sailing", Category = PlaceCategory.Travel, Half = new Vector2(0.01f, 0.035f), Height = 0.08f, Pad = false, Boat = true, Hint = "sails with the wind - put it on the water" },
                 new() { Name = "Paddle steamer", Short = "Steamer", Category = PlaceCategory.Travel, Half = new Vector2(0.02f, 0.06f), Height = 0.045f, Pad = false, Boat = true, Hint = "takes six on a trip round the lake - put it on the water" },
                 new() { Name = "Country halt", Short = "Halt", Category = PlaceCategory.Travel, Half = new Vector2(0.042f, 0.03f), Height = 0.07f, Styles = 1, Hint = "a little stop beside the line - trains call here too" },
+                // The working world (see HouseFactory.Living.cs).
+                new() { Name = "Taxi rank", Short = "Taxis", Category = PlaceCategory.Travel, Half = new Vector2(0.03f, 0.022f), Height = 0.045f, Pad = false, Small = true, Styles = 1,
+                    Hint = "two taxis wait here - put it by a road; villagers going far hail them" },
             };
             for (int i = 0; i < list.Count; i++) list[i].Id = i;
             // What each place is for: the needs it satisfies decide who comes and when (see Needs).
@@ -264,6 +267,7 @@ namespace Wonderland
             list[Grocer].Takes = Cargo.Produce | Cargo.Goods;
             list[Station].Takes = Cargo.Produce | Cargo.Goods;
             list[Barn].Lorries = 1; list[Factory].Lorries = 1;
+            list[Station].Taxis = 1; list[TaxiRank].Taxis = 2;
             return list.ToArray();
         }
 

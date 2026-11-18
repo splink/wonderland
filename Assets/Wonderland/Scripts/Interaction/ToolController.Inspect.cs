@@ -231,7 +231,7 @@ namespace Wonderland
                 {
                     var c = people.CardOf(i);
                     // Out in the household's car: driving somewhere, or parked up at a place they went to.
-                    if (people.IsHidden(i) && World.Traffic.DrivenBy(followSeed) is { } car)
+                    if (people.IsHidden(i) && World.Traffic.DrivenBy(followSeed) is { Rank: < 0 } car)
                     {
                         int at = World.Buildings.Nearest(car.Path.Count > 0 ? car.Path[^1] : car.Position, 0.15f);
                         string place = at >= 0 ? "the " + Catalog.Get(World.Buildings.Houses[at].variant).Name.ToLower() : "town";

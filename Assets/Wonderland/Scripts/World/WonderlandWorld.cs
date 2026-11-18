@@ -101,6 +101,7 @@ namespace Wonderland
             Paths.Bridges = Bridges;
             Traffic = Child<TrafficSystem>("Traffic");
             Traffic.Init(this, materials.Lit);
+            Traffic.FareAlive = seed => People.IndexOfSeed(seed) >= 0;
             Traffic.TakeDriver = (home, seconds) => People.TakeDriver(home, seconds);
             Traffic.StillIn = seed => People.Indoors(seed);
             Sounds = Child<SoundSystem>("Sound");

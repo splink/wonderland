@@ -21,6 +21,8 @@ namespace Wonderland.Editor
             WonderlandLighting.CreateKeyLight();
             try { Deliveries(); }
             catch (Exception e) { Fail("Exception: " + e); }
+            try { Taxis(); }
+            catch (Exception e) { Fail("Exception: " + e); }
             BuildGrid.Snap = true;
             Report.AppendLine(failures == 0 ? "RESULT: PASS" : $"RESULT: FAIL ({failures})");
             File.WriteAllText("Logs/living-results.txt", Report.ToString());
@@ -115,6 +117,74 @@ namespace Wonderland.Editor
             Check(removed && redirected != null && redirected.Contains("grocer") && w.Traffic.Delivered > before && lorry.Job == null,
                 $"Taking the bakery down while the lorry is on its way: it takes the crates to the grocer instead, and finishes ({redirected}; grocer {w.People.StockAt(gi):0.0} crates)");
             UnityEngine.Object.DestroyImmediate(w2.gameObject);
+            UnityEngine.Object.DestroyImmediate(w.gameObject);
+        }
+
+        /// <summary>Sends one villager (by seed) to a place, once.</summary>
+        private sealed class SendOnce : IVillageDecider
+        {
+            public int Seed, House; public bool Sent;
+            public bool Active => !Sent;
+            public bool Decide(PeopleSystem people, int villager, out Intent plan)
+            {
+                plan = Intent.Nothing;
+                if (Sent || people.People[villager].seed != Seed) return false;
+                Sent = people.PlanVisit(villager, House, Need.Food, out plan);
+                return Sent;
+            }
+        }
+
+        /// <summary>
+        /// Taxis: a villager going to the café at the far end of the road walks to the kerb, waits, gets into the taxi
+        /// from the rank, rides in the back (where the taxi is, visibly sitting there) and gets out at the far kerb, walks
+        /// to the café and sits down; the taxi goes back to its rank. Without a road at the far end nobody hails one.
+        /// </summary>
+        private static void Taxis()
+        {
+            var w = Scratch("Taxis", 80f);
+            var t = w.Terrain;
+            string road = w.BuildPath(Line(t, new Vector2(-0.7f, 0f), new Vector2(0.7f, 0f)), PathKind.Road);
+            string rank = w.PlaceHouse(new HouseInstance { x = -0.4f, z = 0.06f, variant = Catalog.TaxiRank });
+            string cafe = w.PlaceHouse(new HouseInstance { x = 0.55f, z = 0.11f, variant = Catalog.Cafe });
+            int ci = w.Buildings.Houses.FindIndex(h => h.variant == Catalog.Cafe);
+            w.PlacePerson(new Vector3(-0.6f, 0f, 0.07f), 2, 777);
+            w.People.Grid.Complete(); w.People.Step(Dt); w.Traffic.Refresh(true);
+            w.Clock.Hour = 10f;
+            int taxis = w.Traffic.Count(VehicleKind.Taxi);
+            Check(road == null && rank == null && cafe == null && taxis == 2, $"A taxi rank by the road keeps two taxis ({taxis}{road ?? ""}{rank ?? ""}{cafe ?? ""})");
+            w.People.PreferTaxi = true;
+            w.People.Deciders.Add(new SendOnce { Seed = 777, House = ci });
+            int who() => w.People.IndexOfSeed(777);
+            var said = new List<string>();
+            float together = 0f, apart = 0f; bool figure = false, hidden = true;
+            Live(w, 240f, s =>
+            {
+                int i = who();
+                if (i < 0) return;
+                string now = w.People.CardOf(i).Now.ToLowerInvariant();
+                if (said.Count == 0 || said[^1] != now) said.Add(now);
+                if (w.People.InTaxi(i))
+                {
+                    var taxi = w.Traffic.TaxiOf(777);
+                    if (taxi != null)
+                    {
+                        float d = (taxi.Position - w.People.PositionOf(i)).magnitude;
+                        if (d < 0.005f) together += Dt; else apart += Dt;
+                        figure |= taxi.Passenger != null && taxi.Passenger.gameObject.activeSelf;
+                    }
+                    hidden &= w.People.IsHidden(i);
+                }
+            });
+            string story = string.Join(" / ", said);
+            Check(said.Exists(x => x.Contains("kerb for a taxi")) && said.Exists(x => x.Contains("waiting at the kerb")) && said.Exists(x => x.Contains("in a taxi")),
+                $"Going to the café at the far end, they walk to the kerb, wait, and get into a taxi: {story}");
+            Check(together > 3f && apart == 0f && figure && hidden, $"...ride in it - where the taxi is, all the way ({together:0.0} s), sitting in the back");
+            int rode = said.FindIndex(x => x.Contains("in a taxi")), sat = rode >= 0 ? said.FindIndex(rode, x => x.Contains("sitting at the café")) : -1;
+            Check(w.People.TaxiRides >= 1 && w.Traffic.FaresDone >= 1 && sat > rode && rode >= 0,
+                $"...get out at the far kerb, walk to the café and sit down ({w.People.TaxiRides} rides; after the taxi: {(sat >= 0 ? said[sat] : "never sat")})");
+            var back = w.Traffic.Vehicles.FindAll(v => v.Kind == VehicleKind.Taxi);
+            Live(w, 60f);
+            Check(back.TrueForAll(v => v.Fare == null), $"The taxi is free again afterwards ({string.Join(", ", back.ConvertAll(v => w.Traffic.Describe(v)))})");
             UnityEngine.Object.DestroyImmediate(w.gameObject);
         }
     }

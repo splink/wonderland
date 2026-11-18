@@ -47,6 +47,8 @@ namespace Wonderland
         /// <summary>Builds catalog object <paramref name="id"/>; <paramref name="warp"/>: give it the hand-made lean.</summary>
         private static float Place(MeshBuilder b, ref Rng rng, Style s, int id, int style, out bool warp)
         {
+            float living = Living(b, ref rng, s, id, style, out warp);
+            if (living >= 0f) return living;
             float town = Town(b, ref rng, s, id, style, out warp);
             if (town >= 0f) return town;
             warp = true;

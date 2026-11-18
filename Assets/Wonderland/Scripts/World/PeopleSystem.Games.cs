@@ -144,7 +144,7 @@ namespace Wonderland
             for (int k = 0; k < agents.Count; k++)
             {
                 var a = agents[(start + k) % agents.Count];
-                if (a.Hidden || a.Child || a.State is Activity.Riding or Activity.OnRide or Activity.Sleeping or Activity.Waiting or Activity.Unwell or Activity.Working) continue;
+                if (a.Hidden || a.Child || a.State is Activity.Riding or Activity.OnRide or Activity.Sleeping or Activity.Waiting or Activity.Unwell or Activity.Working or Activity.Hailing) continue;
                 if (!Walkable(a.Position) && a.State != Activity.Sitting) continue;
                 if (reachable != null && !reachable(a.Position)) continue;
                 return a.Index;

@@ -48,6 +48,9 @@ namespace Wonderland
             public Cargo Cargo;                // ...and what they carry
             public Delivery Job;               // the delivery under way, or null
             public MeshFilter Load;            // what shows on the bed
+            public int Rank = -1;              // taxis: the place they wait at (building index)
+            public Fare Fare;                  // ...and the fare they are on, or null
+            public Transform Passenger;        // who sits in the back
         }
 
         [System.Serializable]
@@ -81,7 +84,7 @@ namespace Wonderland
             checkTimer -= dt;
             if (checkTimer <= 0f)
             {
-                checkTimer = 1f; Refresh(); CheckDeliveries();
+                checkTimer = 1f; Refresh(); CheckDeliveries(); CheckFares();
                 foreach (var v in Vehicles) if (v.Driver != 0 && (StillIn == null || !StillIn(v.Driver))) v.Driver = 0;   // (they came out: not in the car)
             }
             blink += dt; freightClock += dt;
@@ -221,7 +224,7 @@ namespace Wonderland
         /// <summary>Homes near a road get a vehicle (half a car, the rest a bicycle or a motorbike, by where the house stands); stations their own.</summary>
         private void Populate()
         {
-            var wanted = new List<(VehicleKind kind, Vector2 home, int colour, int station, string owner, int depot)>();
+            var wanted = new List<(VehicleKind kind, Vector2 home, int colour, int station, string owner, int depot, int rank)>();
             var houses = world.Buildings.Houses;
             int privateCount = 0;
             for (int i = 0; i < houses.Count; i++)
@@ -232,13 +235,16 @@ namespace Wonderland
                 if (bp.Base)
                 {
                     var kind = bp.Id == Catalog.Hospital ? VehicleKind.Ambulance : VehicleKind.Police;
-                    if (NearestNode(door, 0.16f, true) >= 0) wanted.Add((kind, door, 0, i, bp.Name, -1));
+                    if (NearestNode(door, 0.16f, true) >= 0) wanted.Add((kind, door, 0, i, bp.Name, -1, -1));
                     continue;
                 }
-                if (bp.Id == Catalog.FireStation) { if (NearestNode(door, 0.16f, true) >= 0) wanted.Add((VehicleKind.FireEngine, door, 0, i, bp.Name, -1)); continue; }
+                if (bp.Id == Catalog.FireStation) { if (NearestNode(door, 0.16f, true) >= 0) wanted.Add((VehicleKind.FireEngine, door, 0, i, bp.Name, -1, -1)); continue; }
+                // Taxis wait at a rank (by a road) for fares.
+                if (bp.Taxis > 0 && NearestNode(door, 0.16f, true) >= 0)
+                    for (int n = 0; n < bp.Taxis; n++) wanted.Add((VehicleKind.Taxi, door + new Vector2(n * 0.03f, 0f), 0, -1, bp.Name, -1, i));
                 // Lorries live where something is made (by a road): they carry it to where it is wanted.
                 if (bp.Lorries > 0 && NearestNode(door, 0.16f, true) >= 0)
-                    for (int n = 0; n < bp.Lorries; n++) wanted.Add((VehicleKind.Flatbed, door + new Vector2(n * 0.03f, 0f), (i + n) % 4, -1, bp.Name, i));
+                    for (int n = 0; n < bp.Lorries; n++) wanted.Add((VehicleKind.Flatbed, door + new Vector2(n * 0.03f, 0f), (i + n) % 4, -1, bp.Name, i, -1));
                 if (!bp.Dwelling || privateCount >= MaxPrivate) continue;
                 uint hash = (uint)Mathf.RoundToInt(h.x * 7919f) * 2654435761u ^ (uint)Mathf.RoundToInt(h.z * 6271f) * 40503u;
                 hash ^= hash >> 13;
@@ -246,7 +252,7 @@ namespace Wonderland
                 var k = roll < 5 ? VehicleKind.Car : roll < 6 ? VehicleKind.Motorbike : roll < 8 ? VehicleKind.Bicycle : (VehicleKind)(-1);
                 if ((int)k < 0) continue;
                 if (NearestNode(door, Reach, k != VehicleKind.Bicycle) < 0) continue;
-                wanted.Add((k, door, (int)(hash >> 8) % 4, -1, bp.Name, -1));
+                wanted.Add((k, door, (int)(hash >> 8) % 4, -1, bp.Name, -1, -1));
                 privateCount++;
             }
             // Keep the vehicles that are still wanted (they go home); add the new ones; take away the rest.
@@ -256,6 +262,7 @@ namespace Wonderland
                 var v = Vehicles.Find(x => x.Kind == w.kind && (x.Home - w.home).sqrMagnitude < 1e-6f && !keep.Contains(x));
                 if (v == null) v = Spawn(w.kind, w.home, w.colour);
                 v.Base = w.station; v.Owner = w.owner;
+                v.Rank = w.rank;
                 v.Depot = w.depot; v.Cargo = w.depot >= 0 ? Catalog.Get(houses[w.depot].variant).Makes : Cargo.None;
                 if (w.station >= 0) v.BasePos = new Vector2(houses[w.station].x, houses[w.station].z);
                 keep.Add(v);
@@ -322,6 +329,12 @@ namespace Wonderland
             if (Vector2.Dot(v.Home - p, side) < 0f) side = -side;   // the kerb on the home's side
             v.State = Mode.Parked; v.Path.Clear(); v.Siren = false; v.Speed = 0f; v.ToHome = false; v.Driver = 0;   // (home: the driver goes in)
             if (v.Job != null) { v.Job = null; ShowLoad(v); ShowHop(v, Vector2.zero, -1f); }   // (a delivery called off: home empty)
+            if (v.Fare != null)
+            {
+                // Hopelessly stuck with a fare: they get out where it got to (the taxi is free once they have).
+                if (v.Fare.Stage >= 2) { v.Fare.Drop = v.Position; v.Fare.Stage = 3; v.Fare.Timer = 10f; }
+                else { v.Fare = null; ShowPassenger(v, false); }
+            }
             Place(v, p + side * 0.022f, Mathf.Atan2(dir.x, dir.y) * Mathf.Rad2Deg);
         }
 
@@ -413,6 +426,7 @@ namespace Wonderland
                 case Mode.Parked:
                     if (v.Roams) { v.Timer -= dt; if (v.Timer <= 0f) Roam(v); return; }
                     if (v.Depot >= 0) { Freight(v, dt); return; }
+                    if (v.Rank >= 0) { StepTaxi(v, dt); return; }
                     if (v.Base < 0 && !visiting.Contains(v)) ConsiderTrip(v, dt);
                     return;
                 case Mode.AtScene:
@@ -514,6 +528,7 @@ namespace Wonderland
         {
             v.Speed = 0f;
             if (v.Job != null) { JobArrived(v); return; }
+            if (v.Fare != null) { TaxiArrived(v); return; }
             if (v.Roams) { Trips++; Roam(v); return; }
             if (v.Base >= 0 && Responding(v)) { OnScene(v); return; }
             if (v.ToHome) { Trips++; GoHome(v, true); v.Timer = v.Rng.Range(20f, 60f); return; }
@@ -583,6 +598,7 @@ namespace Wonderland
         public string Describe(Vehicle v)
         {
             if (v.Depot >= 0) return LorryLine(v);
+            if (v.Rank >= 0) return TaxiLine(v);
             string what = v.Kind switch
             {
                 VehicleKind.Car => "A car", VehicleKind.Motorbike => "A motorbike", VehicleKind.Bicycle => "A bicycle",
@@ -717,7 +733,7 @@ namespace Wonderland
         {
             if (seed == 0) return null;
             foreach (var v in Vehicles) if (v.Driver == seed) return v;
-            return null;
+            return TaxiOf(seed);   // (or riding in the back of a taxi)
         }
 
         /// <summary>The vehicle the pointer ray is on (local space, unit direction), nearer than <paramref name="maxT"/>; null if none.</summary>
