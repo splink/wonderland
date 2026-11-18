@@ -871,6 +871,33 @@ namespace Wonderland
 
         private static float Flat(Vector3 a, Vector3 b) => new Vector2(a.x - b.x, a.z - b.z).magnitude;
 
-        public TrackNetwork Clone() => FromData(ToData());
+        /// <summary>
+        /// A copy to try changes on. The pieces' layouts are shared (a layout is never changed in place: every edit makes
+        /// a new one); joints, tunnels, the lookup grid, the crossings and which way pieces run are copied - so a copy is
+        /// ready to use without re-indexing or re-orienting.
+        /// </summary>
+        public TrackNetwork Clone()
+        {
+            var n = new TrackNetwork();
+            foreach (var e in Edges)
+            {
+                var c = new TrackEdge { Layout = e.Layout, Tunnel = (bool[])e.Tunnel?.Clone() };
+                c.Joint[0] = e.Joint[0]; c.Joint[1] = e.Joint[1];
+                n.Edges.Add(c);
+            }
+            foreach (var j in Joints)
+            {
+                if (j == null) { n.Joints.Add(null); continue; }
+                var c = new TrackJoint { Position = j.Position, Trunk = j.Trunk, Setting = j.Setting, Pinned = j.Pinned, FlipPending = j.FlipPending };
+                c.Ends.AddRange(j.Ends);
+                n.Joints.Add(c);
+            }
+            n.Crossings.AddRange(Crossings);
+            foreach (var kv in grid) n.grid[kv.Key] = kv.Value;   // (Reindex makes new lists, never changes these)
+            n.directed = (bool[])directed?.Clone();
+            n.TwoWayParts = TwoWayParts;
+            n.Version = Version;
+            return n;
+        }
     }
 }

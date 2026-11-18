@@ -862,7 +862,7 @@ namespace Wonderland
             var plan = TrackPlanner.Plan(drawn, Terrain, net, null, landWillGrow: true);
             if (!plan.Ok || plan.Path == null) return plan;
             if (plan.Closed || net.Empty) { direction = 1; return plan; }   // a new loop on its own: it runs the way it was drawn
-            var before = net.Clone();
+            var before = net;   // (left as it is: the piece goes onto the copy)
             var copy = net.Clone();
             Attach(copy, plan);
             copy.Orient(e => copy.Agreement(e, before), out _);
@@ -885,6 +885,7 @@ namespace Wonderland
         {
             var pts = plan.Path.ConvertAll(p => new Vector3(p.x, Terrain.SurfaceAt(p.x, p.y), p.y));
             if (plan.Closed) { net.AddEdge(new TrackLayout(pts, true)); return; }
+            net.Reindex();   // (a middle attachment is found on the pieces as they are; each split re-indexes)
             var startEnds = PrepareAttach(net, plan.Start, out var startAt);
             var finishEnds = PrepareAttach(net, plan.Finish, out var finishAt);
             // Splitting a piece for the finish can move the start's track end onto the new half (a line drawn from a
@@ -945,7 +946,6 @@ namespace Wonderland
             }
             if (a.Kind == AttachKind.Mid)
             {
-                net.Reindex();
                 if (!net.Nearest(p, out int edge, out float s, out _, 0.02f)) return null;
                 int index = net.PointAt(edge, s);
                 at = net.Edges[edge].Layout.Points[index];
