@@ -294,7 +294,7 @@ namespace Wonderland
                 var k = roll < 5 ? VehicleKind.Car : roll < 6 ? VehicleKind.Motorbike : roll < 8 ? VehicleKind.Bicycle : (VehicleKind)(-1);
                 if ((int)k < 0) continue;
                 if (NearestNode(door, Reach, k != VehicleKind.Bicycle) < 0) continue;
-                wanted.Add((k, door, (int)(hash >> 8) % 4, -1, bp.Name, -1, -1, -1));
+                wanted.Add((k, door, (int)((hash >> 8) % (VehicleFactory.CarStyles * VehicleFactory.Paints)), -1, bp.Name, -1, -1, -1));   // (villagers' cars: every style and colour)
                 privateCount++;
             }
             // Keep the vehicles that are still wanted (they go home); add the new ones; take away the rest.

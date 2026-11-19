@@ -114,11 +114,14 @@ namespace Wonderland
                     Way(fences, PathKind.Hedge, "A green hedge");
                     Way(fences, PathKind.Wall, "A dry stone wall");
                     Way(fences, PathKind.SecurityFence, "Chain-link with barbed wire, for a harbour or a yard");
+                    // Every style of car and bus, then the rest.
+                    void Vehicle(VehicleKind k, int style, string name, string about) => vehicles.Rows.Add(Row(Choice(name, PlacingVehicle == k && (vehicleStyle == style || style < 0),
+                        () => { PlacingVehicle = k; vehicleStyle = Mathf.Max(0, style); RefreshOptions(); Say($"Point at a road and pull the trigger: a {name.ToLower()} drives off about the town"); }), about));
                     foreach (var vk in VehicleFactory.Placeable)
                     {
-                        var k = vk;
-                        vehicles.Rows.Add(Row(Choice(VehicleName(k), PlacingVehicle == k, () => { PlacingVehicle = k; RefreshOptions(); Say($"Point at a road and pull the trigger: a {VehicleName(k).ToLower()} drives off about the town"); }),
-                            $"Pull the trigger on a road: a {VehicleName(k).ToLower()} drives off about the town, the way you point"));
+                        if (vk == VehicleKind.Car) for (int s = 0; s < VehicleFactory.CarStyles; s++) Vehicle(vk, s, VehicleFactory.CarStyleNames[s], VehicleFactory.CarStyleAbout[s] + ". Each one a different colour");
+                        else if (vk == VehicleKind.Bus) for (int s = 0; s < VehicleFactory.BusStyles; s++) Vehicle(vk, s, VehicleFactory.BusStyleNames[s], VehicleFactory.BusStyleAbout[s]);
+                        else Vehicle(vk, -1, VehicleName(vk), $"Pull the trigger on a road: a {VehicleName(vk).ToLower()} drives off about the town, the way you point");
                     }
                     groups.Add(streets); groups.Add(paths); groups.Add(fences); groups.Add(vehicles);
                     open = PlacingVehicle != null ? 3 : PathSystem.IsBarrier((int)PathKind) ? 2 : PathKind is PathKind.Footpath or PathKind.Trail ? 1 : 0;
@@ -148,7 +151,7 @@ namespace Wonderland
                     var trains = new Group { Name = "Trains", About = "Pick a train, then pull the trigger on the track" };
                     var running = new Group { Name = "Running", About = "Start and stop the trains, and how they choose at switches" };
                     var cars = new Group { Name = "Carriages", About = "Make the train you last pointed at longer or shorter" };
-                    foreach (var (kind, label, about) in new[] { (TrainKind.Passenger, "Steam", "A steam engine with passenger carriages"), (TrainKind.Express, "Express", "A fast passenger train"), (TrainKind.Tank, "Tank", "A little tank engine, good on branch lines"), (TrainKind.Goods, "Goods", "Wagons that carry freight between stations and yards"), (TrainKind.Railcar, "Railcar", "A single carriage that drives itself") })
+                    foreach (var (kind, label, about) in new[] { (TrainKind.Passenger, "Steam", "A steam engine with passenger carriages"), (TrainKind.Express, "Express", "A fast passenger train"), (TrainKind.Tank, "Tank", "A little tank engine, good on branch lines"), (TrainKind.Goods, "Goods", "Wagons that carry freight between stations and yards"), (TrainKind.Railcar, "Railcar", "A single carriage that drives itself"), (TrainKind.HighSpeed, "High-speed", "A sleek white train with a power car at each end: the fastest"), (TrainKind.Commuter, "Commuter", "An electric unit for the stations round town: doors in the livery, a pantograph on the roof"), (TrainKind.DieselGoods, "Container", "A freight diesel with flat wagons: containers to and from the freight yards") })
                     {
                         var k = kind;
                         trains.Rows.Add(Row(Choice(label, TrainKind == k, () => { TrainKind = k; RefreshOptions(); }), about));

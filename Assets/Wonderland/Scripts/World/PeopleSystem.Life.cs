@@ -206,7 +206,7 @@ namespace Wonderland
 
         private bool PassengerTrains
         {
-            get { foreach (var t in world.Trains.Trains) if (t.Running && t.Kind != TrainKind.Goods) return true; return false; }
+            get { foreach (var t in world.Trains.Trains) if (t.Running && !TrainSystem.Freight(t.Kind)) return true; return false; }
         }
 
         /// <summary>A train journey between two walking regions: the nearest station on each side.</summary>

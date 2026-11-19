@@ -5,7 +5,7 @@ using UnityEngine.Rendering;
 
 namespace Wonderland
 {
-    public enum TrainKind { Passenger = 0, Goods = 1, Railcar = 2, Express = 3, Tank = 4 }
+    public enum TrainKind { Passenger = 0, Goods = 1, Railcar = 2, Express = 3, Tank = 4, HighSpeed = 5, Commuter = 6, DieselGoods = 7 }
 
     /// <summary>How switches behave when trains pass them facing (from the trunk).</summary>
     public enum SwitchMode { Explore = 0, Random = 1, Manual = 2 }
@@ -133,8 +133,19 @@ namespace Wonderland
         /// </summary>
         public static (int min, int usual, int max) CarRange(TrainKind kind) => kind switch
         {
-            TrainKind.Goods => (0, 4, int.MaxValue), TrainKind.Railcar => (1, 1, int.MaxValue), TrainKind.Express => (2, 4, int.MaxValue), TrainKind.Tank => (0, 2, int.MaxValue), _ => (0, 2, int.MaxValue),
+            TrainKind.Goods => (0, 4, int.MaxValue), TrainKind.Railcar => (1, 1, int.MaxValue), TrainKind.Express => (2, 4, int.MaxValue), TrainKind.Tank => (0, 2, int.MaxValue),
+            TrainKind.HighSpeed => (1, 3, int.MaxValue), TrainKind.Commuter => (1, 2, int.MaxValue), TrainKind.DieselGoods => (0, 5, int.MaxValue),
+            _ => (0, 2, int.MaxValue),
         };
+
+        /// <summary>Goods trains (they call at freight yards, carry crates); the rest carry passengers.</summary>
+        public static bool Freight(TrainKind kind) => kind is TrainKind.Goods or TrainKind.DieselGoods;
+
+        /// <summary>Steam trains (smoke, a whistle); the rest are diesel or electric.</summary>
+        public static bool Steam(TrainKind kind) => kind is TrainKind.Passenger or TrainKind.Goods or TrainKind.Tank;
+
+        /// <summary>Trains that are all self-propelled units (no engine to count): railcars and commuter units.</summary>
+        public static bool Units(TrainKind kind) => kind is TrainKind.Railcar or TrainKind.Commuter;
 
         public static int CarsOf(Train t) => t.Carriages >= 0 ? t.Carriages : CarRange(t.Kind).usual;
 
@@ -142,19 +153,30 @@ namespace Wonderland
         {
             var (min, usual, max) = CarRange(kind);
             int n = Mathf.Clamp(cars < 0 ? usual : cars, min, max);
-            if (kind == TrainKind.Railcar) { var r = new CarLayout[n]; for (int i = 0; i < n; i++) r[i] = TrainFactory.Railcar; return r; }
+            if (Units(kind)) { var r = new CarLayout[n]; for (int i = 0; i < n; i++) r[i] = TrainFactory.Railcar; return r; }
+            if (kind == TrainKind.HighSpeed)
+            {
+                // A power car at each end, the coaches between.
+                var h = new CarLayout[n + 2];
+                h[0] = TrainFactory.PowerCar; h[n + 1] = TrainFactory.PowerCarRear;
+                for (int i = 1; i <= n; i++) h[i] = TrainFactory.Coach;
+                return h;
+            }
             var c = new CarLayout[n + 1];
-            c[0] = kind == TrainKind.Express ? TrainFactory.Diesel : kind == TrainKind.Tank ? TrainFactory.Tank : TrainFactory.Loco;
-            for (int i = 1; i <= n; i++) c[i] = kind == TrainKind.Goods ? TrainFactory.Wagon : TrainFactory.Coach;
+            c[0] = kind switch { TrainKind.Express or TrainKind.DieselGoods => TrainFactory.Diesel, TrainKind.Tank => TrainFactory.Tank, _ => TrainFactory.Loco };
+            for (int i = 1; i <= n; i++) c[i] = Freight(kind) ? TrainFactory.Wagon : TrainFactory.Coach;
             return c;
         }
 
-        private static Mesh CarMesh(TrainKind kind, int index, int livery, int detail = 0) => kind switch
+        private static Mesh CarMesh(TrainKind kind, int index, int livery, int detail = 0, int cars = 0) => kind switch
         {
             TrainKind.Goods => index == 0 ? TrainFactory.LocoMesh(livery, detail) : TrainFactory.WagonMesh((index - 1) % TrainFactory.WagonVariants, detail),
             TrainKind.Railcar => TrainFactory.RailcarMesh(livery, detail),
             TrainKind.Express => index == 0 ? TrainFactory.DieselMesh(livery, detail) : TrainFactory.CoachMesh(index - 1, livery, detail),
             TrainKind.Tank => index == 0 ? TrainFactory.TankMesh(livery, detail) : TrainFactory.CoachMesh(index - 1, livery, detail),
+            TrainKind.Commuter => TrainFactory.CommuterMesh(livery, detail),
+            TrainKind.DieselGoods => index == 0 ? TrainFactory.FreightDieselMesh(livery, detail) : TrainFactory.FlatWagonMesh(detail),
+            TrainKind.HighSpeed => index == 0 ? TrainFactory.PowerCarMesh(livery, false, detail) : index == cars + 1 ? TrainFactory.PowerCarMesh(livery, true, detail) : TrainFactory.SleekCoachMesh(livery, detail),
             _ => index == 0 ? TrainFactory.LocoMesh(livery, detail) : TrainFactory.CoachMesh(index - 1, livery, detail),
         };
 
@@ -175,7 +197,7 @@ namespace Wonderland
         public Train Add(TrainKind kind, int livery, int edge, float s, int orientation, out string error)
         {
             error = null;
-            var t = new Train { Kind = kind, Livery = livery, Length = LengthOf(kind), SpeedFactor = kind == TrainKind.Express ? 1.3f : kind == TrainKind.Tank ? 0.8f : 1f };
+            var t = new Train { Kind = kind, Livery = livery, Length = LengthOf(kind), SpeedFactor = kind switch { TrainKind.Express => 1.3f, TrainKind.HighSpeed => 1.6f, TrainKind.Commuter => 1.1f, TrainKind.Tank => 0.8f, _ => 1f } };
             if (Net.Directed(edge)) orientation = 1;   // one way: every train faces the way the railway runs
             if (!Lay(t, edge, s, orientation, t.Length * 0.5f, null)) { error = "Not enough track here for this train"; return null; }
             var mine = Intervals(t.Path);
@@ -208,7 +230,13 @@ namespace Wonderland
         {
             var (min, _, _) = CarRange(t.Kind);
             int now = CarsOf(t);
-            if (cars < min) return t.Kind == TrainKind.Railcar ? "A railcar runs on its own at the least" : "Just the engine now";
+            if (cars < min) return t.Kind switch
+            {
+                TrainKind.Railcar => "A railcar runs on its own at the least",
+                TrainKind.Commuter => "One unit at the least",
+                TrainKind.HighSpeed => "One coach between the power cars at the least",
+                _ => "Just the engine now",
+            };
             if (cars == now) return null;
             var front = PointAt(t.Path, t.Length, out var forward);   // the engine's end (the path runs tail to engine)
             var old = (t.Carriages, t.Length, new List<TrackSpan>(t.Path));
@@ -231,7 +259,7 @@ namespace Wonderland
 
         public static string CarWord(TrainKind kind, int n) => kind switch
         {
-            TrainKind.Goods => n == 1 ? "wagon" : "wagons", TrainKind.Railcar => n == 1 ? "car" : "cars", _ => n == 1 ? "carriage" : "carriages",
+            TrainKind.Goods or TrainKind.DieselGoods => n == 1 ? "wagon" : "wagons", TrainKind.Railcar or TrainKind.Commuter => n == 1 ? "car" : "cars", _ => n == 1 ? "carriage" : "carriages",
         };
 
         public void Remove(Train t)
@@ -267,6 +295,8 @@ namespace Wonderland
         /// <summary>Points along every car's centre line (front, middle, back): for clearance checks.</summary>
         /// <summary>The drawn bodies of a train's cars (tests).</summary>
         public IEnumerable<Transform> CarBodies(Train t) { foreach (var c in t.Cars) yield return c.Body; }
+        /// <summary>A train's cars, engine first (their layouts: locomotive, coach, power car...).</summary>
+        public List<CarLayout> CarLayouts(Train t) { var l = new List<CarLayout>(); foreach (var c in t.Cars) l.Add(c.Layout); return l; }
 
         /// <summary>A train's state in a line (tests and diagnostics).</summary>
         public string Debug(Train t) =>
@@ -1120,7 +1150,7 @@ namespace Wonderland
 
         /// <summary>Whether a train is bound for a station within its next few (up to four) calls.</summary>
         /// <summary>Goods trains call at freight yards only, passenger trains at stations and halts only.</summary>
-        public bool CallsHere(Train t, int station) => station >= 0 && station < Stations.Count && Stations[station].Freight == (t.Kind == TrainKind.Goods);
+        public bool CallsHere(Train t, int station) => station >= 0 && station < Stations.Count && Stations[station].Freight == Freight(t.Kind);
 
         public bool CallsAt(Train t, int station, int within = 3)
         {
@@ -1263,6 +1293,9 @@ namespace Wonderland
                 TrainKind.Railcar => cars == 1 ? "Railcar" : $"Railcar, {cars} cars",
                 TrainKind.Express => $"Express, {cars} {CarWord(t.Kind, cars)}",
                 TrainKind.Tank => cars == 0 ? "Tank engine" : $"Tank engine, {cars} {CarWord(t.Kind, cars)}",
+                TrainKind.HighSpeed => $"High-speed train, {cars} {CarWord(t.Kind, cars)}",
+                TrainKind.Commuter => cars == 1 ? "Commuter train" : $"Commuter train, {cars} cars",
+                TrainKind.DieselGoods => $"Container train, {cars} {CarWord(t.Kind, cars)}" + (t.Cargo > 0 ? $" ({t.Cargo} crates)" : ""),
                 _ => $"Steam train, {cars} {CarWord(t.Kind, cars)}",
             };
             string doing;
@@ -1357,10 +1390,11 @@ namespace Wonderland
                 var layout = consist[i];
                 if (i > 0) fromFront += Gap;
                 fromFront += layout.Front;
-                var body = Part(CarMesh(t.Kind, i, t.Livery), t.Root);
+                int between = consist.Length - 2;   // (a high-speed train's coaches: its last car is the rear power car)
+                var body = Part(CarMesh(t.Kind, i, t.Livery, 0, between), t.Root);
                 // Its five levels of detail, like the buildings: the body is simpler further away, moving or not.
                 int index = i; var kind = t.Kind; int livery = t.Livery;
-                Lod.Attach(body.GetComponent<MeshRenderer>(), d => CarMesh(kind, index, livery, d), layout.Front - layout.Rear);
+                Lod.Attach(body.GetComponent<MeshRenderer>(), d => CarMesh(kind, index, livery, d, between), layout.Front - layout.Rear);
                 var car = new Train.Car { Body = body, Layout = layout, FromFront = fromFront, Axles = new Transform[layout.Axles.Length], Radius = layout.WheelRadius };
                 for (int a = 0; a < layout.Axles.Length; a++)
                 {

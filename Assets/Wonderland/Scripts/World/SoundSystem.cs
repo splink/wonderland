@@ -177,7 +177,7 @@ namespace Wonderland
             {
                 var t = world.Trains.Trains[i];
                 if (t.Speed < 0.02f || world.Trains.InTunnel(t)) continue;
-                Add(t.Kind is TrainKind.Railcar or TrainKind.Express ? SoundLoop.Diesel : SoundLoop.Steam, 4000 + i, world.Trains.LocoPosition(t), 0.4f + t.Speed * 2f);
+                Add(TrainSystem.Steam(t.Kind) ? SoundLoop.Steam : SoundLoop.Diesel, 4000 + i, world.Trains.LocoPosition(t), 0.4f + t.Speed * 2f);
             }
             if (world.Traffic != null)
                 for (int i = 0; i < world.Traffic.Vehicles.Count; i++)
@@ -284,7 +284,7 @@ namespace Wonderland
                 int now = t.AtStation;
                 int before = trainStop.TryGetValue(t, out int b) ? b : -1;
                 if (now >= 0 && before < 0) Cue(SoundCue.Brakes, world.Trains.LocoPosition(t));
-                if (now < 0 && before >= 0 && t.Kind is not (TrainKind.Railcar or TrainKind.Express)) Cue(SoundCue.Whistle, world.Trains.LocoPosition(t));
+                if (now < 0 && before >= 0 && TrainSystem.Steam(t.Kind)) Cue(SoundCue.Whistle, world.Trains.LocoPosition(t));
                 trainStop[t] = now;
             }
         }

@@ -287,11 +287,11 @@ namespace Wonderland.Editor
             var road = world.Paths.Lines[^1];
             Check(world.Paths.Lines.Count == 3 && road.kind == (int)PathKind.Road, $"The Road chip lays a road ({tools.LastMessage})");
             ClickButton(hand, "Vehicles");
-            ClickButton(hand, "Bus");
+            ClickButton(hand, "Double-decker");
             var stop = world.transform.TransformPoint(new Vector3(0f, world.Terrain.SurfaceAt(0f, 0.15f), 0.15f));
             Frame(hand, stop, true); Frame(hand, stop, false);
             var bus = world.Traffic.Vehicles.Find(v => v.Roams);
-            Check(bus != null && bus.Kind == VehicleKind.Bus, $"The Bus chip puts a bus on the road ({tools.LastMessage})");
+            Check(bus != null && bus.Kind == VehicleKind.Bus && bus.Colour == 1, $"The Double-decker in the Vehicles group puts a double-decker bus on the road ({tools.LastMessage})");
             ClickButton(hand, "Streets");
             Check(tools.PlacingVehicle == null, "...and the Streets group goes back to drawing roads");
 

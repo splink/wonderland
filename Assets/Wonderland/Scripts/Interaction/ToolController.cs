@@ -683,6 +683,7 @@ namespace Wonderland
         /// <summary>A vehicle chosen to put on the road (null: drawing roads).</summary>
         public VehicleKind? PlacingVehicle { get; private set; }
         private int vehicleColour;
+        private int vehicleStyle;   // the car (or bus) style the Vehicles group has picked
         private float nextRoadPlan;
         private int roadPlanCount;
 
@@ -699,8 +700,14 @@ namespace Wonderland
                 {
                     var f = input.Ray.direction;
                     float yaw = Mathf.Atan2(f.x, f.z) * Mathf.Rad2Deg - World.transform.eulerAngles.y;
-                    string error = World.PlaceVehicle(local, placing, yaw, vehicleColour++ % 4);
-                    if (error == null) { Say($"{VehicleName(placing)} on the road - off it goes"); Haptic(0.5f, 0.05f); }
+                    int paint = placing switch
+                    {
+                        VehicleKind.Car => vehicleStyle * VehicleFactory.Paints + vehicleColour++ % VehicleFactory.Paints,   // (the style chosen, a new colour each time)
+                        VehicleKind.Bus => vehicleStyle,
+                        _ => vehicleColour++ % VehicleFactory.Paints,
+                    };
+                    string error = World.PlaceVehicle(local, placing, yaw, paint);
+                    if (error == null) { Say($"{VehicleFactory.Name(placing, paint)} on the road - off it goes"); Haptic(0.5f, 0.05f); }
                     else { Say(error); Haptic(0.7f, 0.1f); }
                 }
                 return;
@@ -951,7 +958,7 @@ namespace Wonderland
                     World.Checkpoint();
                     string why = World.Trains.SetCars(hoveredTrain, want);
                     int cars = TrainSystem.CarsOf(hoveredTrain);
-                    Say(why ?? (hoveredTrain.Kind == TrainKind.Railcar ? $"{cars} {TrainSystem.CarWord(hoveredTrain.Kind, cars)} coupled" : $"{cars} {TrainSystem.CarWord(hoveredTrain.Kind, cars)} behind the engine"));
+                    Say(why ?? (TrainSystem.Units(hoveredTrain.Kind) ? $"{cars} {TrainSystem.CarWord(hoveredTrain.Kind, cars)} coupled" : $"{cars} {TrainSystem.CarWord(hoveredTrain.Kind, cars)} behind the engine"));
                     Haptic(why == null ? 0.5f : 0.7f, why == null ? 0.04f : 0.1f);
                 }
                 if (Mathf.Abs(input.LeftStick.x) < 0.3f) carTimer = 0f;

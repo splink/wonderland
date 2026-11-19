@@ -345,6 +345,7 @@ namespace Wonderland.Editor
                 BuildGrid.Snap = true; mode = "[grid] "; RailJourney(); mode = "";
                 GridRailJourney();
                 ManyTrainsJourney();
+                NewTrainsJourney();
             }
             catch (Exception e) { Fail("Exception: " + e); }
             finally { BuildGrid.Snap = gridWas; mode = ""; }
@@ -358,6 +359,41 @@ namespace Wonderland.Editor
         /// No set limits: a dozen trains run on one big loop at once, and a goods train coupled up to twenty wagons runs
         /// round its curves - the only limits are room on the track and the trains already there.
         /// </summary>
+        /// <summary>
+        /// The newer trains on one loop: a high-speed train (a power car at each end - longer, the rear one still at the
+        /// back), a commuter unit and a container train run together, the high-speed one the fastest.
+        /// </summary>
+        private static void NewTrainsJourney()
+        {
+            bool gridWas = BuildGrid.Snap;
+            BuildGrid.Snap = false;
+            var w = Scratch("New trains", 1520f);
+            var t = w.Terrain;
+            w.BuildTrack(Loop(t, 0.85f, 0.75f, 0.97f, false));
+            var kinds = new[] { TrainKind.HighSpeed, TrainKind.Commuter, TrainKind.DieselGoods };
+            var placed = new List<Train>(); string why = null;
+            for (int k = 0; k < kinds.Length; k++)
+            {
+                float a = k / 3f * Mathf.PI * 2f;
+                string e = w.PlaceTrain(t.PointAt(Mathf.Cos(a) * 0.85f, Mathf.Sin(a) * 0.75f), kinds[k], new Vector3(-Mathf.Sin(a), 0f, Mathf.Cos(a)), out var train);
+                if (e == null) placed.Add(train); else why = e;
+            }
+            string grow = placed.Count > 0 ? w.Trains.SetCars(placed[0], 5) : "no train";
+            var cars = placed.Count > 0 ? w.Trains.CarLayouts(placed[0]) : new List<CarLayout>();
+            bool ends = cars.Count == 7 && cars[0] == TrainFactory.PowerCar && cars[^1] == TrainFactory.PowerCarRear;
+            Check(placed.Count == 3 && grow == null && ends, $"A high-speed train, a commuter unit and a container train go on the track; the high-speed one takes five coaches between its power cars ({placed.Count} placed{(why != null ? ", " + why : "")}{(grow != null ? ", " + grow : "")}; ends right: {ends})");
+            if (placed.Count == 3)
+            {
+                var from = placed.ConvertAll(x => x.Odometer);
+                var (gap, off) = RunTrains(w, 40f);
+                var run = new List<float>(); for (int k = 0; k < 3; k++) run.Add(placed[k].Odometer - from[k]);
+                Check(gap > 0.004f && off < 0.004f && run.TrueForAll(d => d > 0.5f) && w.Trains.Describe(placed[2]).StartsWith("Container train"),
+                    $"...and run together, on the rails and apart (closest {gap * 100f:0.0} cm, {off * 1000f:0.0} mm off; run {string.Join(", ", run.ConvertAll(d => $"{d:0.0} m"))})");
+            }
+            UnityEngine.Object.DestroyImmediate(w.gameObject);
+            BuildGrid.Snap = gridWas;
+        }
+
         private static void ManyTrainsJourney()
         {
             bool gridWas = BuildGrid.Snap;

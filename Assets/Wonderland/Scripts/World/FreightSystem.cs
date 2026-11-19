@@ -107,7 +107,7 @@ namespace Wonderland
             c.Stack.localPosition = new Vector3(-0.03f, 0.002f - VehicleFactory.BedTop, 0.012f - VehicleFactory.BedCentre - VehicleFactory.BedLength / 2f + 0.011f);
             int st = world.Trains.Stations.FindIndex(s => s.House == c.House);
             Train train = null;
-            if (st >= 0) foreach (var t in world.Trains.Trains) if (t.Kind == TrainKind.Goods && t.AtStation == st) { train = t; break; }
+            if (st >= 0) foreach (var t in world.Trains.Trains) if (TrainSystem.Freight(t.Kind) && t.AtStation == st) { train = t; break; }
             bool unload = train != null && train.Cargo > 0 && train.LoadedAt != st;   // (what it brought from another yard comes off here; the yard's lorry takes it on)
             bool load = train != null && !unload && waiting >= 1 && train.Cargo < PeopleSystem.TrainHolds;
             if (c.T < 0f)
@@ -188,16 +188,17 @@ namespace Wonderland
         {
             foreach (var t in world.Trains.Trains)
             {
-                if (t.Kind != TrainKind.Goods || t.Cars == null) continue;
+                if (!TrainSystem.Freight(t.Kind) || t.Cars == null) continue;
                 if (wagons.TryGetValue(t, out var w) && w.shown == t.Cargo && w.loads.Length == t.Cars.Length && (w.loads.Length == 0 || w.loads[^1] != null)) continue;
                 var loads = w.loads != null && w.loads.Length == t.Cars.Length ? w.loads : new MeshFilter[t.Cars.Length];
                 int left = t.Cargo;
+                bool flats = t.Kind == TrainKind.DieselGoods;   // (a container train: every wagon a flat, carrying containers)
                 for (int k = 1; k < t.Cars.Length; k++)
                 {
-                    if (!WagonOpen(k) || t.Cars[k].Body == null) continue;
+                    if (!(flats || WagonOpen(k)) || t.Cars[k].Body == null) continue;
                     if (loads[k] == null) loads[k] = Part("Load", t.Cars[k].Body, null).GetComponent<MeshFilter>();
                     int n = Mathf.Min(6, left); left -= n;
-                    loads[k].sharedMesh = n > 0 ? VehicleFactory.WagonLoad(n) : null;
+                    loads[k].sharedMesh = n <= 0 ? null : flats ? TrainFactory.ContainerLoad(n, k) : VehicleFactory.WagonLoad(n);
                 }
                 wagons[t] = (loads, t.Cargo);
             }

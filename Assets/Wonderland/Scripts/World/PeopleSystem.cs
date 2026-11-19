@@ -617,7 +617,7 @@ namespace Wonderland
                     case Activity.Waiting:
                         a.Heading = Mathf.MoveTowardsAngle(a.Heading, FacingTrack(a), 90f * dtA);
                         var here = world.Trains.Near(new Vector3(a.Position.x, 0f, a.Position.y), 0.17f);
-                        if (here != null && here.Dwell > 0f && here.Kind != TrainKind.Goods && Bound(a, here))
+                        if (here != null && here.Dwell > 0f && !TrainSystem.Freight(here.Kind) && Bound(a, here))
                         { a.State = Activity.Riding; a.Riding = here; a.Ride = 0f; a.Changing = false; a.LastCall = here.AtStation; Hide(a, true); }
                         else if (a.Timer <= 0f || !TrainRunning || Bedtime(a, Clock.Hour) && a.Plan.What is not (Intent.Kind.Sleep or Intent.Kind.Home)) { a.ToStation = false; Decide(a); }
                         break;

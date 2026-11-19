@@ -134,6 +134,35 @@ namespace Wonderland.Editor
             Capture(cam, "editor-rolling-stock.png", 1800, 1350);
             Object.DestroyImmediate(root.gameObject);
 
+            // The newer trains: high-speed (power car, coach, rear power car), commuter units, the container train.
+            root = new GameObject("Gallery").transform;
+            Stock(root, TrainFactory.PowerCarMesh(0, false), TrainFactory.PowerCar, lit, new Vector3(-0.21f, 0f, 0.22f), 0);
+            Stock(root, TrainFactory.SleekCoachMesh(0), TrainFactory.Coach, lit, new Vector3(-0.07f, 0f, 0.22f), 0);
+            Stock(root, TrainFactory.PowerCarMesh(1, true), TrainFactory.PowerCarRear, lit, new Vector3(0.07f, 0f, 0.22f), 1);
+            Stock(root, TrainFactory.SleekCoachMesh(3), TrainFactory.Coach, lit, new Vector3(0.21f, 0f, 0.22f), 3);
+            for (int liv = 0; liv < 3; liv++) Stock(root, TrainFactory.CommuterMesh(liv * 2), TrainFactory.Railcar, lit, new Vector3((liv - 1f) * 0.13f, 0f, 0.02f), liv * 2);
+            Stock(root, TrainFactory.FreightDieselMesh(1), TrainFactory.Diesel, lit, new Vector3(-0.2f, 0f, -0.19f), 1);
+            for (int k = 0; k < 3; k++)
+            {
+                var flat = Place(root, TrainFactory.FlatWagonMesh(), lit, new Vector3(-0.07f + k * 0.1f, 0f, -0.19f), Quaternion.Euler(0f, 205f, 0f));
+                var load = TrainFactory.ContainerLoad(k == 0 ? 2 : 5, k + 1);
+                if (load != null) Place(flat, load, lit, Vector3.zero, Quaternion.identity);
+            }
+            cam = CreateCamera(new Vector3(0.0f, 0.5f, -0.72f), new Vector3(0f, 0.02f, 0.01f), 40f);
+            Capture(cam, "editor-rolling-stock-more.png", 1800, 1350);
+            Object.DestroyImmediate(root.gameObject);
+
+            // Road vehicles: every car style (rows) in four of the paints, and the three buses.
+            root = new GameObject("Gallery").transform;
+            for (int st = 0; st < VehicleFactory.CarStyles; st++)
+            for (int p = 0; p < 4; p++)
+                Place(root, VehicleFactory.Get(VehicleKind.Car, st * VehicleFactory.Paints + p * 2 + st % 2), lit, new Vector3((p - 1.5f) * 0.04f - 0.08f, 0f, (st - 3.5f) * 0.032f), Quaternion.Euler(0f, 150f, 0f));
+            for (int bs = 0; bs < VehicleFactory.BusStyles; bs++)
+                Place(root, VehicleFactory.Get(VehicleKind.Bus, bs), lit, new Vector3(0.1f + bs * 0.042f, 0f, 0f), Quaternion.Euler(0f, 160f, 0f));
+            cam = CreateCamera(new Vector3(0.0f, 0.3f, -0.36f), new Vector3(0f, 0.01f, 0.0f), 40f);
+            Capture(cam, "editor-vehicles.png", 1800, 1350);
+            Object.DestroyImmediate(root.gameObject);
+
             // Villagers: the six outfits standing, walking and waving, with a sheep and a cow for scale.
             root = new GameObject("Gallery").transform;
             for (int st = 0; st < PersonFactory.StyleCount; st++)

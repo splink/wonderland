@@ -34,7 +34,7 @@ PASS  The palette's row holds groups (Streets, Paths, Fences, Vehicles); picking
 PASS  Drawing with the Paths tool lays a footpath (1)
 PASS  ...and a fence
 PASS  The Road chip lays a road (Road added)
-PASS  The Bus chip puts a bus on the road (Bus on the road - off it goes)
+PASS  The Double-decker in the Vehicles group puts a double-decker bus on the road (Double-decker on the road - off it goes)
 PASS  ...and the Streets group goes back to drawing roads
 PASS  The Life tool's chips place a hen
 PASS  The Life tool's clock chips speed the days up and stop time

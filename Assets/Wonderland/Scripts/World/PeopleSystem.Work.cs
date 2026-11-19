@@ -206,7 +206,7 @@ namespace Wonderland
         {
             if (!regionYard.Contains(from)) return false;
             bool goods = false;
-            foreach (var t in world.Trains.Trains) goods |= t.Running && t.Kind == TrainKind.Goods;
+            foreach (var t in world.Trains.Trains) goods |= t.Running && TrainSystem.Freight(t.Kind);
             if (!goods) return false;
             foreach (var kv in regionWant) if (kv.Key != from && kv.Value >= 2f && regionYard.Contains(kv.Key)) return true;
             return false;
@@ -295,7 +295,7 @@ namespace Wonderland
             UpdateChimneys();
             foreach (var t in world.Trains.Trains)
             {
-                if (t.Kind != TrainKind.Goods) continue;
+                if (!TrainSystem.Freight(t.Kind)) continue;
                 int st = t.AtStation;
                 if (st < 0) { t.HandledStop = -1; continue; }
                 if (st == t.HandledStop || st >= stationPlace.Count || stationPlace[st] == null) continue;
