@@ -274,10 +274,10 @@ namespace Wonderland
         private static readonly Mesh[] shipLevels = new Mesh[MeshBuilder.Levels], craneLevels = new Mesh[MeshBuilder.Levels];
 
         /// <summary>The container ship at a level of detail.</summary>
-        public static Mesh ShipMesh(int detail) => detail == 0 ? ShipMesh() : shipLevels[detail + 1] ??= MeshBuilder.At(detail, 1f, () => { var was = ship; ship = null; try { return ShipMesh(); } finally { ship = was; } });
+        public static Mesh ShipMesh(int detail) => detail == 0 ? ShipMesh() : shipLevels[detail + 1] ??= MeshBuilder.At(detail, 1f, () => { var was = ship; ship = null; try { var m = ShipMesh(); m.name += " detail " + detail; return m; } finally { ship = was; } });
 
         /// <summary>The crane at a level of detail.</summary>
-        public static Mesh CraneMesh(int detail) => detail == 0 ? CraneMesh() : craneLevels[detail + 1] ??= MeshBuilder.At(detail, 1f, () => { var was = crane; crane = null; try { return CraneMesh(); } finally { crane = was; } });
+        public static Mesh CraneMesh(int detail) => detail == 0 ? CraneMesh() : craneLevels[detail + 1] ??= MeshBuilder.At(detail, 1f, () => { var was = crane; crane = null; try { var m = CraneMesh(); m.name += " detail " + detail; return m; } finally { crane = was; } });
 
         public static Mesh ShipMesh()
         {

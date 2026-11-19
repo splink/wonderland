@@ -55,7 +55,7 @@ namespace Wonderland.Editor
         {
             Report.Clear(); failures = 0; BuildGrid.Snap = false;   // (journeys drawn by hand; the road journey checks the grid)
             PeopleSystem.LegacyParts = int.TryParse(System.Environment.GetEnvironmentVariable("WL_LEGACY"), out int parts) ? parts : 0;   // (compare with the old walking)
-            try { TownJourney(); WeatherJourney(); ZooJourney(); }
+            try { TownJourney(); WeatherJourney(); ZooJourney(); ProportionsJourney(); }
             catch (Exception e) { Fail("Exception: " + e); }
             finally { PeopleSystem.Legacy = false; }
             BuildGrid.Snap = true;

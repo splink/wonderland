@@ -52,7 +52,7 @@ PASS  Save and Load keep several worlds: saved as World 2 and World 3, and World
 PASS  Settings beside the palette: Sound, Tips, Labels, Grid, World stats, Performance, New world - each says its state and a tap changes it
 PASS  Stats opens the performance panel; Grass cycles to Off (no tufts) and Defaults brings them back (5538 tufts)
 PASS  Help and Stats open beside the palette (with the world's own numbers) and close again
-PASS  No blocky stand-ins anywhere: further away the same buildings and trees are drawn with less detail (44 simpler levels)
+PASS  No blocky stand-ins anywhere: further away the same buildings and trees are drawn with less detail (60 simpler levels)
 PASS  Select: the trigger on a villager opens their card (Pia)
 PASS  Selecting a villager turns on their camera: the monitor over the palette shows them over their shoulder (6 pictures)
 PASS  The card's Camera button turns it off (the card stays)

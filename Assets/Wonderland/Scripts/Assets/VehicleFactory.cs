@@ -36,7 +36,7 @@ namespace Wonderland
             int key = (int)k * 4 + (k is VehicleKind.Car or VehicleKind.Van or VehicleKind.Truck or VehicleKind.Flatbed ? colour % 4 : 0);
             if (detail == 0) return meshes[key] ??= Build(k, colour % 4);
             int at = key * 8 + detail + 1;
-            if (!levels.TryGetValue(at, out var mesh)) levels[at] = mesh = MeshBuilder.At(detail, 1f, () => Build(k, colour % 4));
+            if (!levels.TryGetValue(at, out var mesh)) { levels[at] = mesh = MeshBuilder.At(detail, 1f, () => Build(k, colour % 4)); mesh.name += " detail " + detail; }
             return mesh;
         }
 

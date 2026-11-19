@@ -45,7 +45,7 @@ namespace Wonderland
         private static Mesh Cached(int kind, int a, int b, System.Func<Mesh> build, int detail = 0)
         {
             int key = (detail + 1) * 100000000 + kind * 1000000 + a * 1000 + b;
-            if (!Cache.TryGetValue(key, out var mesh)) Cache[key] = mesh = detail == 0 ? build() : MeshBuilder.At(detail, 1f, build);
+            if (!Cache.TryGetValue(key, out var mesh)) { Cache[key] = mesh = detail == 0 ? build() : MeshBuilder.At(detail, 1f, build); if (detail != 0) mesh.name += " detail " + detail; }
             return mesh;
         }
 

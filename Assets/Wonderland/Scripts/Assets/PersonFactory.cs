@@ -3,15 +3,24 @@ using UnityEngine;
 namespace Wonderland
 {
     /// <summary>
-    /// Storybook villagers, about 3 cm tall (the train's scale): chunky little figures with round heads, rosy cheeks and
+    /// Storybook villagers, 2.4 cm tall (the world's scale: see Scale): chunky little figures with round heads, rosy cheeks and
     /// hats (straw hat, flat cap, bonnet), in six outfits. Five parts per figure so they can walk and wave: body (torso,
     /// head, hat), two arms (pivot at the shoulder, hanging down -Y) and two legs (pivot at the hip). Front faces +Z.
     /// </summary>
     public static class PersonFactory
     {
         public const int StyleCount = 6;
-        public static readonly Vector3 Hip = new(0f, 0.0118f, 0f);
-        public const float LegX = 0.0019f, ShoulderX = 0.0048f, ShoulderY = 0.0215f;
+        /// <summary>
+        /// The figures' size against everything else: 2.4 cm, about 1.75 m tall in the world's scale - the doorways,
+        /// benches, cars, buses and trains are made to that (a little chunky, as storybook figures are). They are modelled
+        /// at 3 cm and drawn at this scale.
+        /// </summary>
+        public const float Scale = 0.8f;
+        private const float HipModel = 0.0118f;
+        public static readonly Vector3 Hip = new(0f, HipModel * Scale, 0f);
+        public const float LegX = 0.0019f * Scale, ShoulderX = 0.0048f * Scale, ShoulderY = 0.0215f * Scale;
+        /// <summary>A figure's height (to the top of the head).</summary>
+        public const float Height = 0.03f * Scale;
         private static readonly Mesh[] Bodies = new Mesh[StyleCount * MeshBuilder.Levels], Arms = new Mesh[StyleCount * MeshBuilder.Levels], Legs = new Mesh[StyleCount * MeshBuilder.Levels];
 
         private struct Outfit { public Color Shirt, Pants, Hat, Skin, Hair; public int HatKind; public bool Dress; }
@@ -71,6 +80,7 @@ namespace Wonderland
         private static Mesh BuildBody(Outfit o)
         {
             var b = new MeshBuilder();
+            b.Push(Matrix4x4.Scale(Vector3.one * Scale));
             // Torso: a rounded barrel (a skirt flares out for dresses), with a belt and buttons.
             if (o.Dress)
                 b.AddCylinder(new Vector3(0f, 0.0085f, 0f), 0.0058f, 0.0036f, 0.0128f, 10, Pal.Shade(o.Shirt, 0.85f), o.Shirt, true, true);
@@ -129,6 +139,7 @@ namespace Wonderland
         private static Mesh BuildArm(Outfit o)
         {
             var b = new MeshBuilder();
+            b.Push(Matrix4x4.Scale(Vector3.one * Scale));
             b.AddCylinder(new Vector3(0f, -0.0085f, 0f), 0.0011f, 0.0013f, 0.0085f, 6, o.Shirt, o.Shirt, false);
             b.AddBlob(new Vector3(0f, -0.0092f, 0f), Vector3.one * 0.0012f, 0, 0f, 12, (_, __) => o.Skin);   // hand
             return b.ToMesh("PersonArm");
@@ -137,7 +148,8 @@ namespace Wonderland
         private static Mesh BuildLeg(Outfit o)
         {
             var b = new MeshBuilder();
-            float len = Hip.y - 0.0012f;
+            b.Push(Matrix4x4.Scale(Vector3.one * Scale));
+            float len = HipModel - 0.0012f;
             b.AddCylinder(new Vector3(0f, -len, 0f), 0.0013f, 0.0015f, len, 6, o.Dress ? o.Skin : o.Pants, o.Pants, false);
             b.AddBlob(new Vector3(0f, -len + 0.0005f, 0.0009f), new Vector3(0.0015f, 0.0009f, 0.0024f), 0, 0f, 13, (_, __) => Pal.Hex("#3A2A20"));   // shoe
             return b.ToMesh("PersonLeg");

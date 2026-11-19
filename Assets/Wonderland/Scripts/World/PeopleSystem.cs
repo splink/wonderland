@@ -17,7 +17,7 @@ namespace Wonderland
     }
 
     /// <summary>
-    /// Villagers about 3 cm tall, living a day at a time. Each has a home, a few needs that grow through the day
+    /// Villagers 2.4 cm tall (about 1.75 m in the world's scale), living a day at a time. Each has a home, a few needs that grow through the day
     /// (shopping, food, company, fun, sights, rest, and for shopkeepers work), and the village clock. When one finishes
     /// what they were doing they choose what next (see PeopleSystem.Life.cs: needs x the hour x the places within
     /// reach), walk there along roads and paths - by train when it lies across the line - use one of the place's activity

@@ -70,7 +70,7 @@ namespace Wonderland.Editor
             foreach (var r in w.Attractions.GetComponentsInChildren<MeshRenderer>()) if (r.name == "giraffes") giraffeTop = Mathf.Max(giraffeTop, r.bounds.size.y / w.transform.lossyScale.y);
             var bird = w.Attractions.AnimalPosition(aviary, 0);
             float birdHeight = bird.HasValue ? bird.Value.y - w.Terrain.SurfaceAt(bird.Value.x, bird.Value.z) : 0f;
-            Check(giraffeTop > 0.07f && birdHeight > 0.025f, $"Sized to the villagers: a giraffe stands {giraffeTop * 100f:0.0} cm (a villager 3 cm); parrots fly {birdHeight * 100f:0.0} cm up in the aviary");
+            Check(giraffeTop > PersonFactory.Height * 2.5f && giraffeTop < PersonFactory.Height * 3.5f && birdHeight > 0.025f, $"Sized to the villagers: a giraffe stands {giraffeTop * 100f:0.0} cm, a villager {PersonFactory.Height * 100f:0.0} cm; parrots fly {birdHeight * 100f:0.0} cm up in the aviary");
             // A zoo day: visitors come through the gate, see the animals one after another, and end with a snack.
             var seenAt = new HashSet<int>(); int touring = 0, atGate = 0, snack = 0; float inPens = 0f;
             int kiosk = w.Buildings.Houses.FindIndex(h => h.variant == Catalog.ZooKiosk), cafe = w.Buildings.Houses.FindIndex(h => h.variant == Catalog.SafariCafe);
@@ -107,6 +107,27 @@ namespace Wonderland.Editor
             Check(copy.Attractions.ZooOpen(copyGate), "Saved and loaded, the zoo is still a zoo");
             Object.DestroyImmediate(copy.gameObject);
             Object.DestroyImmediate(w.gameObject);
+        }
+
+        /// <summary>
+        /// One scale for everything, with a villager as the measure: a car is about two villagers long, a bus four, a
+        /// railway coach five; a doorway is taller than a villager; a giraffe nearly three villagers tall.
+        /// </summary>
+        private static void ProportionsJourney()
+        {
+            float h = PersonFactory.Height;
+            float car = VehicleFactory.Length(VehicleKind.Car) / h, bus = VehicleFactory.Length(VehicleKind.Bus) / h, coach = (TrainFactory.Coach.Front - TrainFactory.Coach.Rear) / h;
+            Check(car > 1.8f && car < 3f && bus > 3.5f && bus < 7f && coach > 4f, $"One scale, a villager as the measure ({h * 100f:0.0} cm): a car {car:0.0} villagers long, a bus {bus:0.0}, a coach {coach:0.0}");
+            // Doorways: every building with a front door has one at least a villager's height.
+            int ok = 0, all = 0; string low = "";
+            foreach (var bp in Catalog.All)
+            {
+                float door = HouseFactory.DoorHeightOf(bp.Id);
+                if (door <= 0f) continue;
+                all++;
+                if (door >= h) ok++; else low += $" {bp.Name} {door * 100f:0.0} cm";
+            }
+            Check(all > 10 && ok == all, $"A villager fits through every front door ({ok}/{all} doors at least {h * 100f:0.0} cm high{low})");
         }
 
         /// <summary>Renders of the zoo: the whole of it from above the entrance, the gate, and the enclosures close up.</summary>

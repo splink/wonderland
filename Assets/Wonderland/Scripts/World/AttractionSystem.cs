@@ -6,7 +6,7 @@ namespace Wonderland
 {
     /// <summary>
     /// What makes the attractions worth visiting. In every zoo piece the animals live in their pens (see
-    /// HouseFactory.PensOf), sized to the villagers - a giraffe three times their height, an elephant twice - wandering,
+    /// HouseFactory.PensOf), sized to the villagers - a giraffe nearly three times their height, an elephant nearly twice - wandering,
     /// grazing, looking about; parrots fly under their nets, monkeys climb. A zoo entrance with at least two enclosures
     /// behind it makes a zoo: it opens (word goes round the village) and on its open days visitors come through the
     /// gate, buy their tickets, go round the animals one after another and end with a snack (see <see cref="ZooDay"/>). At the football stadium matches kick off at
@@ -19,8 +19,8 @@ namespace Wonderland
         public static readonly float[] KickOffs = { 15f, 19.5f };
         public const float MatchHours = 1.5f;
         private static readonly string[] Species = { "giraffes", "elephants", "lions", "zebras", "penguins", "monkeys", "flamingos", "goats", "parrots" };
-        /// <summary>Each species' size against the 3 cm villagers (their models are made small; a giraffe stands some 8 cm tall).</summary>
-        private static readonly float[] Size = { 2.6f, 2.5f, 1.9f, 2f, 1.4f, 1f, 1f, 1f, 1f };
+        /// <summary>Each species' size against the 2.4 cm villagers (their models are made small; a giraffe stands some 7 cm tall, about 5 m).</summary>
+        private static readonly float[] Size = { 2.1f, 2f, 1.5f, 1.6f, 1.1f, 0.85f, 0.85f, 0.85f, 0.85f };
         private static readonly float[] Pace = { 0.012f, 0.009f, 0.012f, 0.014f, 0.006f, 0.014f, 0.008f, 0.01f, 0.03f };
         /// <summary>A zoo entrance this close to enclosures makes a zoo with them.</summary>
         public const float ZooReach = 0.8f;

@@ -501,8 +501,20 @@ namespace Wonderland
             }
         }
 
+        private static float doorTop;
+        private static readonly System.Collections.Generic.Dictionary<int, float> doors = new();
+
+        /// <summary>The tallest door a building has (0: none), for checking the villagers fit through.</summary>
+        public static float DoorHeightOf(int variant)
+        {
+            Get(variant, 0, 0);
+            if (!doors.ContainsKey(variant)) { doorTop = 0f; Build(variant, 0); doors[variant] = doorTop; }
+            return doors[variant];
+        }
+
         private static void Door(MeshBuilder b, ref Rng rng, float w, float h, Style s, bool arched, bool canopy)
         {
+            doorTop = Mathf.Max(doorTop, h);
             const float t = 0.0018f;
             var colour = s.Door;
             float rect = arched ? h - w / 2 : h;
