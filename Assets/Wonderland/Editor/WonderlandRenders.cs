@@ -13,7 +13,7 @@ namespace Wonderland.Editor
     /// that stands in for the passthrough living room. Batch: -executeMethod Wonderland.Editor.WonderlandRenders.Gallery
     /// (needs graphics, so no -nographics). Output: docs/renders/.
     /// </summary>
-    public static class WonderlandRenders
+    public static partial class WonderlandRenders
     {
         public const string Output = "docs/renders";
 

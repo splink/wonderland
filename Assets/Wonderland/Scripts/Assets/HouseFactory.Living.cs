@@ -21,7 +21,7 @@ namespace Wonderland
                 case Catalog.FreightYard: return FreightYardPad(b, ref rng);
                 case Catalog.Harbour: return HarbourQuay(b, ref rng);
                 case Catalog.Zoo: return ZooGrounds(b, ref rng);
-                case Catalog.FairyCastle: return FairyCastle(b, ref rng);
+                case Catalog.FairyCastle: return FairyCastleGrand(b, ref rng);
                 case Catalog.Stadium: return StadiumBowl(b);
             }
             warp = true;
@@ -360,79 +360,6 @@ namespace Wonderland
             b.AddBox(new Vector3(0.085f, 0.009f, -0.075f), new Vector3(0.026f, 0.018f, 0.018f), Pal.Hex("#F2E3C2"), Pal.Hex("#FFF2D8"), Pal.Hex("#C8B898"));
             Awning(b, new Vector3(0.085f, 0.017f, -0.084f), 0.026f, 0.008f, Pal.Hex("#3E7A3A"), Pal.Hex("#F7F1E6"));
             return 0.05f;
-        }
-
-        /// <summary>
-        /// A fairy-tale castle: white walls with a gatehouse, slender round towers with tall blue cone roofs and pennants,
-        /// a tall central keep, golden spires, and a drawbridge over a little moat.
-        /// </summary>
-        private static float FairyCastle(MeshBuilder b, ref Rng rng)
-        {
-            var wall = Pal.Hex("#F4EEE2"); var roof = Pal.Hex("#4A6FC8"); var gold = Pal.Brass;
-            const float W = 0.2f, D = 0.15f;
-            b.AddBox(new Vector3(0f, -0.001f, 0f), new Vector3(W + 0.03f, 0.004f, D + 0.03f), Pal.Hex("#5A9AC8"));   // the moat
-            b.AddBox(new Vector3(0f, 0.002f, 0f), new Vector3(W, 0.004f, D), Pal.Hex("#7FB25A"));
-            // Curtain walls with crenellations.
-            void Wall(Vector3 a, Vector3 c)
-            {
-                var mid = (a + c) / 2f; var d = c - a;
-                bool alongX = Mathf.Abs(d.x) > Mathf.Abs(d.z);
-                var size = alongX ? new Vector3(Mathf.Abs(d.x), 0.04f, 0.008f) : new Vector3(0.008f, 0.04f, Mathf.Abs(d.z));
-                b.AddBox(mid + Vector3.up * 0.02f, size, wall, Pal.Shade(wall, 1.05f), Pal.Shade(wall, 0.8f));
-                int n = Mathf.RoundToInt(d.magnitude / 0.008f);
-                for (int k = 0; k < n; k += 2) b.AddBox(Vector3.Lerp(a, c, (k + 0.5f) / n) + Vector3.up * 0.042f, new Vector3(0.004f, 0.004f, 0.004f) + (alongX ? new Vector3(0f, 0f, 0.004f) : new Vector3(0.004f, 0f, 0f)), wall);
-            }
-            float hx = W / 2 - 0.02f, hz = D / 2 - 0.02f;
-            Wall(new Vector3(-hx, 0f, -hz), new Vector3(hx, 0f, -hz)); Wall(new Vector3(-hx, 0f, hz), new Vector3(hx, 0f, hz));
-            Wall(new Vector3(-hx, 0f, -hz), new Vector3(-hx, 0f, hz)); Wall(new Vector3(hx, 0f, -hz), new Vector3(hx, 0f, hz));
-            var stone = Pal.Hex("#D8D0C0"); var glass = Pal.Hex("#3A5A8A");
-            void Tower(Vector3 at, float r, float h, float cone)
-            {
-                b.AddCylinder(at, r, r, h, 28, wall, Pal.Shade(wall, 1.05f), true);
-                b.AddCylinder(at, r * 1.08f, r * 1.04f, 0.004f, 28, stone, stone, true);   // the plinth
-                // Narrow arched windows round the tower, a storey apart, a balcony under the top one.
-                int storeys = Mathf.Max(2, Mathf.RoundToInt(h / 0.02f));
-                for (int k = 0; k < storeys; k++)
-                {
-                    float y = h * (0.25f + 0.6f * k / Mathf.Max(1, storeys - 1));
-                    for (int side = 0; side < 4; side++)
-                    {
-                        var dir = Quaternion.Euler(0f, side * 90f + k * 45f, 0f) * Vector3.back;
-                        var c = at + Vector3.up * y + dir * (r + 0.0003f);
-                        b.AddFace(c, dir, Vector3.up, r * 0.3f, r * 0.6f, glass);
-                    }
-                }
-                b.AddCylinder(at + Vector3.up * (h * 0.82f), r * 1.25f, r * 1.25f, 0.0012f, 28, stone, stone, true, true);   // a balcony
-                b.AddCylinder(at + Vector3.up * (h - 0.003f), r * 1.12f, r * 1.12f, 0.003f, 28, stone, stone, true, true);   // the cornice
-                for (int k = 0; k < 10; k++)
-                {
-                    var d = Quaternion.Euler(0f, k * 36f, 0f) * Vector3.forward * r * 1.08f;
-                    b.AddBox(at + d + Vector3.up * (h + 0.0015f), new Vector3(r * 0.3f, 0.003f, r * 0.3f), wall);   // battlements
-                }
-                b.AddCylinder(at + Vector3.up * (h + 0.0005f), r * 1.15f, 0.0006f, cone, 28, roof, Pal.Shade(roof, 1.25f), true);
-                for (int k = 0; k < 4; k++) b.AddCylinder(at + Vector3.up * (h + cone * (0.25f + k * 0.2f)), r * 1.15f * (1f - (0.25f + k * 0.2f)) + 0.0003f, r * 1.15f * (1f - (0.27f + k * 0.2f)) + 0.0003f, cone * 0.02f, 28, gold, gold, false);   // gold bands
-                b.AddCylinder(at + Vector3.up * (h + cone), 0.0005f, 0.0005f, 0.012f, 6, gold, gold, false);
-                b.AddBlob(at + Vector3.up * (h + cone + 0.0005f), Vector3.one * 0.0012f, 1, 0f, 7, (_, __) => gold);
-                b.AddBox(at + new Vector3(0.004f, h + cone + 0.01f, 0f), new Vector3(0.008f, 0.004f, 0.0006f), Pal.Hex("#E25B4F"));   // a pennant
-            }
-            foreach (int sx in new[] { -1, 1 }) foreach (int sz in new[] { -1, 1 }) Tower(new Vector3(sx * hx, 0f, sz * hz), 0.014f, 0.07f, 0.045f);
-            // The keep in the middle, taller, with its own turrets.
-            b.AddBox(new Vector3(0f, 0.045f, 0.015f), new Vector3(0.07f, 0.09f, 0.055f), wall, Pal.Shade(wall, 1.05f), Pal.Shade(wall, 0.8f));
-            for (int row = 0; row < 2; row++)
-                for (int k = 0; k < 5; k++)
-                {
-                    var c = new Vector3(-0.026f + k * 0.013f, 0.035f + row * 0.03f, 0.015f - 0.0277f);
-                    b.AddFace(c, Vector3.back, Vector3.up, 0.005f, 0.01f, Pal.Hex("#3A5A8A"));
-                }
-            b.AddFace(new Vector3(0f, 0.05f, 0.015f - 0.0278f), Vector3.back, Vector3.up, 0.014f, 0.014f, Pal.Hex("#C8392E"));   // a great rose window
-            b.AddBlob(new Vector3(0f, 0.05f, 0.015f - 0.0282f), new Vector3(0.006f, 0.006f, 0.0006f), 1, 0f, 70, (d, _) => Mathf.Abs(d.x) < 0.2f || Mathf.Abs(d.y) < 0.2f ? Pal.Brass : Pal.Hex("#4A6FC8"));
-            Tower(new Vector3(0f, 0.09f, 0.015f), 0.018f, 0.05f, 0.06f);
-            foreach (int sx in new[] { -1, 1 }) Tower(new Vector3(sx * 0.035f, 0.09f, -0.01f), 0.009f, 0.025f, 0.03f);
-            // Gatehouse and drawbridge.
-            b.AddBox(new Vector3(0f, 0.03f, -hz), new Vector3(0.036f, 0.06f, 0.016f), wall);
-            b.AddFace(new Vector3(0f, 0.014f, -hz - 0.0081f), Vector3.back, Vector3.up, 0.016f, 0.026f, Pal.Hex("#5A3A22"));
-            b.AddBox(new Vector3(0f, 0.003f, -D / 2 - 0.006f), new Vector3(0.016f, 0.002f, 0.03f), Pal.Hex("#8A5A34"));
-            return 0.25f;
         }
 
         public const float PitchHalfX = 0.075f, PitchHalfZ = 0.048f, StandHeight = 0.03f;
