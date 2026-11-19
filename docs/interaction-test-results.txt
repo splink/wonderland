@@ -39,7 +39,7 @@ PASS  The Life tool's clock chips speed the days up and stop time
 PASS  ...and let the days pass again
 PASS  The Life tool's Fête chip calls the village to the fountain, and calls it off
 PASS  The Life tool's Clouds chip hides and shows the clouds
-PASS  The stick turns and tilts the selected camera (yaw -41° -> 29°, tilt 0° -> 20°)
+PASS  The stick turns and tilts the selected camera (yaw -41° -> 29°, tilt 4° -> 24°)
 PASS  Select: trigger on a camera - its card and its live picture over the palette, with buttons round it that turn it; the trigger on the land points it there [first hidden True, selected True, buttons True, turned True, aimed True]
 PASS  Close puts the picture away
 PASS  Grip on the track bends it in any tool (label: "<b><color=#FFE3A8>Railway · trains run the way the arrows point</color></b> / <color=#FFD27A><b>Trigger</b></color>  its card / <color=#FFD27A><b>Grip</b></color>  bend it") - Track reshaped

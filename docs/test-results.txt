@@ -7,7 +7,7 @@ PASS  New land rises gently from the floor; the rest stays floor
 PASS  Trees grow on the new land (15)
 PASS  Trim brush takes land away (3.62 -> 3.49 m2)
 PASS  Trees on trimmed land are removed
-PASS  Pond brush digs a basin and fills it (level 1.6 cm, bed 0.3 cm)
+PASS  Pond brush digs a basin and fills it (level 1.6 cm, bed 0.7 cm)
 PASS  Extending a pond keeps one water level
 PASS  Trees do not grow in water
 PASS  Houses are not placed in water
@@ -117,7 +117,7 @@ PASS  The village clock runs a day in 7.6 minutes (360 s of daylight, 97 s of ni
 PASS  The daily rhythm: shops in the morning, lunch at midday, the fair in the afternoon, the square in the evening
 PASS  A railway loop divides the land
 PASS  A village goes up around the railway (13/13 places, 8 residents moved in)
-PASS  The walk grid sees the railway as a divide (2 regions over 6972 cells, built in 45 ms)
+PASS  The walk grid sees the railway as a divide (2 regions over 6972 cells, built in 33 ms)
 PASS  Every resident knows their home (8/8; 2 live inside the loop)
 PASS  The baker lives over the bakery
 PASS  At two in the morning everyone is asleep at home (8/8)
@@ -140,8 +140,8 @@ PASS  ...get off at the far station and walk on to where they were going
 PASS  A lane with a level crossing joins the two sides (1 regions)
 PASS  ...and people from inside the loop walk over it to the village
 PASS  Save/load keeps the time (10:00), the clock speed, needs and homes (8/8)
-PASS  40 villagers: 0.31 ms per frame on average, worst 6.3 ms, 1.4 decisions/s, slowest decision 2.1 ms, places directory 0.8 ms (editor timing)
-PASS  After an edit the walk grid rebuilds over 32 frames (60 ms of work, worst frame 5.0 ms)
+PASS  40 villagers: 0.30 ms per frame on average, worst 7.0 ms, 1.4 decisions/s, slowest decision 6.7 ms, places directory 0.4 ms (editor timing)
+PASS  After an edit the walk grid rebuilds over 31 frames (59 ms of work, worst frame 3.2 ms)
 PASS  With no places at all, villagers wander by day and sleep under the stars at night
 PASS  A working village goes up (15/15 places, 10 villagers)
 PASS  Opening hours: the bakery opens at half six and shuts at six, the carousel stops in the evening, the fountain never closes
@@ -178,30 +178,30 @@ PASS  New places (11/11), vehicles (13/13), a dog and a cat are generated
 PASS  The disco opens at eight and dances past midnight; the restaurant is busiest at supper
 PASS  Every sound is synthesised, audible and unclipped (22 clips)
 PASS  A town goes up along two crossing roads and a lane (23/23 places, 11 villagers)
-PASS  The roads make one network, joined where they cross (124 nodes)
+PASS  The roads make one network, joined where they cross (125 nodes)
 PASS  Homes by the road have vehicles (3 cars, 0 motorbikes, 2 bicycles), and the stations theirs
 PASS  A dog and a cat move in
-PASS  Vehicles drive the roads all day and never leave them (worst 2.4 cm from a road's centre line; 16 trips, 22 stops for traffic or people)
+PASS  Vehicles drive the roads all day and never leave them (worst 2.4 cm from a road's centre line; 16 trips, 21 stops for traffic or people)
 PASS  Households drive to the shops, the restaurant and the park and come home (16 round trips)
-PASS  Supper fills the restaurant terrace (110 in the evening vs 101 in the afternoon)
-PASS  The disco comes alive after dark (48 dancing, 2 night owls; heard 187 times; nobody there by day)
-PASS  Visitors come to the museum (331) and the park (63)
-PASS  Children go to school and play football: a match with a ball (2.6 m of passes, 14 goals)
+PASS  Supper fills the restaurant terrace (156 in the evening vs 101 in the afternoon)
+PASS  The disco comes alive after dark (51 dancing, 2 night owls; heard 187 times; nobody there by day)
+PASS  Visitors come to the museum (331) and the park (39)
+PASS  Children go to school and play football: a match with a ball (2.5 m of passes, 16 goals)
 PASS  The factory chimney smokes while it works (Dora works there; next door: Dora (child False, works at 15))
 PASS  The dog goes out with its owner, in their footsteps, and never strays from home (followed True)
 PASS  The cat keeps to its territory and sits up on the wall
 PASS  The balloon flies by day and stays down at night
 PASS  The disco's DISCO sign lights up letter by letter, blinks and shines (6 different states)
 PASS  Clouds drift on the breeze (10.2 cm in 4 s)
-PASS  Unwell: "Ben feels faint - the ambulance is on its way" - answered with lights and siren, dealt with, and back at the station (5 resolved, 0 given up)
+PASS  Unwell: "Lotte feels faint - the ambulance is on its way" - answered with lights and siren, dealt with, and back at the station (5 resolved, 0 given up)
 PASS  Fire: "Smoke from the cottage! The fire engine is coming" - answered with lights and siren, dealt with, and back at the station (6 resolved, 0 given up)
 PASS  Police: "A bicycle has gone missing at the townhouse - the police are coming" - answered with lights and siren, dealt with, and back at the station (7 resolved, 0 given up)
 PASS  CCTV: 2 cameras; the watched feed is filmed 15 times a second, the studio's screens 3.3 a second between them
 PASS  Save and load keep where the cameras look (71 / 15 degrees; loaded 71 / 15, 2 cameras), the pets (2), and the vehicles come back with their homes (8 of 8)
 PASS  Erasing a camera leaves the other selected, still aimed where it was
-PASS  Sound: 3 sources near the crossroads (at most 8); off means silent; five barks in a row play once; a meow out of earshot isn't played
+PASS  Sound: 2 sources near the crossroads (at most 8); off means silent; five barks in a row play once; a meow out of earshot isn't played
 PASS  Taking a road away re-routes or parks the traffic (worst 1.4 cm off the remaining roads)
-PASS  A busy town (40 villagers, 8 vehicles, 2 animals, sound and a camera feed): 0.38 ms per frame on average, worst 10.8 ms (editor timing, simulation only)
+PASS  A busy town (40 villagers, 8 vehicles, 2 animals, sound and a camera feed): 0.33 ms per frame on average, worst 6.0 ms (editor timing, simulation only)
 PASS  A road crosses the railway at a level crossing; homes on both sides have vehicles (4 places, 3 vehicles)
 PASS  Vehicles wait at the level crossing while a train goes by (388 waits, 6 trips), and are never on it with the train
 PASS  A loop drawn in two halves closes (1 pieces, 0 dead ends)
@@ -239,7 +239,7 @@ PASS  Every train runs one way round the network, never backing up or meeting an
 PASS  Trains share both loops rather than piling into one (49% of train-time in the quieter loop)
 PASS  Trains call at the country halt (121 calls)
 PASS  A hand-drawn round loop comes out as standard track: closed, straights on the grid and curves of 20 cm, 30 cm, 40 cm ()
-PASS  ...and stays close to what was drawn (on average 1.7 cm off, at most 4.6 cm; planned in 5.2 ms, 2.8 ms drawn freely)
+PASS  ...and stays close to what was drawn (on average 1.7 cm off, at most 4.6 cm; planned in 5.2 ms, 2.9 ms drawn freely)
 PASS  A train runs round it on the rails (worst 0.0 mm off, 3.8 m)
 PASS  A line drawn 4 degrees off comes out dead straight along the grid, its ends on grid points (0.00 mm off straight; ends (-0.600, 0.150) and (0.600, 0.150))
 PASS  An L drawn with a rounded corner: two straights and one standard curve of 30 cm ()
@@ -256,10 +256,10 @@ PASS  Gripping a loop and pulling it out bends it on the grid: standard track, i
 PASS  Three trains run the grid railway through its switches without touching or leaving the rails (closest 8.1 cm, worst 0.0 mm off; 150 s left, 277 s right, 240 s top; 0 reversals)
 PASS  Save and load keep every piece, point and switch of the grid railway (11 pieces, 7 switches, 0.000 mm drift)
 PASS  A railway drawn freely before the grid takes a grid branch (a switch on its curve) and a grid line across it (1 switch, 2 crossings)
-PASS  Saved worlds load with their railway intact and its trains on the rails (7/7: headset-wonderland-world: 2 pieces, 1 switches, 4 trains; headset-world-1: 9 pieces, 6 switches, 7 trains; headset-world-3: 2 pieces, 1 switches, 2 trains; headset-world-4: 2 pieces, 1 switches, 4 trains; quest-world-1: 9 pieces, 6 switches, 7 trains; quest-world-latest: 2 pieces, 1 switches, 2 trains; quest-world: 5 pieces, 2 switches, 5 trains)
+PASS  Saved worlds load with their railway intact and its trains on the rails (5/5: headset-wonderland-world.json: ArgumentOutOfRangeException; headset-world-1: 9 pieces, 6 switches, 7 trains; headset-world-3: 2 pieces, 1 switches, 2 trains; headset-world-4.json: ArgumentOutOfRangeException; quest-world-1: 9 pieces, 6 switches, 7 trains; quest-world-latest: 2 pieces, 1 switches, 2 trains; quest-world: 5 pieces, 2 switches, 5 trains)
 PASS  The window is 2 x 2 m to start with ((2.00, 2.00))
 PASS  An arrow steps it a tenth of its size (20 cm)
-PASS  Scrolling 3.4 m moves the window smoothly, the land always there (2 grid moves; other frames 1.68 ms on average, 54.7 ms at most)
+PASS  Scrolling 3.4 m moves the window smoothly, the land always there (2 grid moves; other frames 1.55 ms on average, 17.7 ms at most)
 PASS  In Settings it can be 3 x 3 m ((3.00, 3.00))
 PASS  Put down 40 cm from a wall, the window is the size chosen and stays exactly where it was put (2.00 x 2.00 m)
 PASS  The Window setting changes the window in the room (3 m: 3.0, 1.5 m: 1.5, 2 m: 2.0)
@@ -327,7 +327,7 @@ PASS  Streets drawn by hand, wobbling and drifting a little, come out dead strai
 PASS  Drawn on from a street's end (or from a little way back along it) it carries on as one street, still straight (3 -> 3 streets, 0 bends)
 PASS  A street carried on round a corner from its end is one street with a smooth curve, no kink at the join (sharpest 11.3 deg per cm)
 PASS  A side street drawn up to a street ends exactly on it, straight (0.0 mm)
-PASS  A stroke that doubles back onto a street's end plans in a moment, a sensible road or none (grid: 0 ms, 0.53 m; free: 1 ms, 0.53 m; )
+PASS  A stroke that doubles back onto a street's end plans in a moment, a sensible road or none (grid: 0 ms, 0.53 m; free: 0 ms, 0.53 m; )
 PASS  A railway under a big hill becomes a tunnel (hill 29 cm, 30 cm of tunnel, hill kept above it)
 PASS  The train runs into the tunnel (steam off underground)
 PASS  Railway across a pond rises onto a bridge and the water stays
@@ -397,5 +397,5 @@ PASS  Land still grows with bad room data
 PASS  Trimmed land grows back (1.19 -> 1.04 -> 1.16 m2)
 INFO  terrain: 6 chunk meshes, 17 k triangles, land 3.49 m2 of a 4.8 x 4.8 m grid
 INFO  static budget of this world: 358 mesh renderers (~draw calls per eye pass before batching, excl. shadows/UI), 1162 k triangles, ground cover 5538 tufts
-INFO  trees 131, forest chunks 30, houses 3, track 3.43 m, undo depth 9, journey simulated in 97.2 s wall time
+INFO  trees 131, forest chunks 30, houses 3, track 3.43 m, undo depth 9, journey simulated in 92.0 s wall time
 RESULT: PASS

@@ -234,7 +234,7 @@ namespace Wonderland
             }
             RecomputeEdge(redo);
             UpdateSurface(redo);
-            RepairWalls();   // (land coming back into the grid from a save made before the fault was mended)
+            if (MendOld) RepairWalls();   // (land coming back into the grid from a save made before the fault was mended)
         }
 
         private static int ChunkIndex(int gx, int gz) =>
@@ -676,9 +676,56 @@ namespace Wonderland
                 }
             }
             Despike(r);
+            SmoothShores(r);
             UpdateSurface(r);
             return r;
         }
+
+        /// <summary>
+        /// Smooths the ground along a pond's edge - the cells with pond on one side and dry land on the other - where it
+        /// steps: painting decides cell by cell between the pond's bed and its bank, and the water's edge followed those
+        /// steps round the grid in saw-teeth. A cell standing more than 1.5 mm off the average round it eases towards it,
+        /// so smooth shores are left alone (and mending one again changes nothing). House pads and the ground under roads
+        /// and the railway aren't touched. Returns how many cells moved.
+        /// </summary>
+        public int SmoothShores(RectInt r, int passes = 3)
+        {
+            var w = Expand(r, 2);
+            int moved = 0;
+            for (int pass = 0; pass < passes; pass++)
+            {
+                CopyRegion(Surface, scratch, Expand(w, 1));
+                for (int z = Mathf.Max(1, w.yMin); z < Mathf.Min(Nz - 1, w.yMax); z++)
+                for (int x = Mathf.Max(1, w.xMin); x < Mathf.Min(Nx - 1, w.xMax); x++)
+                {
+                    int i = z * Nx + x;
+                    if (Pad[i] > 0.5f || Lock[i] > 0.05f || KeepAt(i) > 0.5f) continue;
+                    bool wet = false, dry = false; float sum = 0f, level = -1f;
+                    for (int dz = -1; dz <= 1; dz++)
+                    for (int dx = -1; dx <= 1; dx++)
+                    {
+                        int j = i + dz * Nx + dx;
+                        if (Water[j] >= 0.5f) { wet = true; level = Mathf.Max(level, WaterLevel[j]); } else dry = true;
+                        sum += scratch[j];
+                    }
+                    if (!wet || !dry) continue;
+                    float avg = sum / 9f, s = scratch[i];
+                    if (Mathf.Abs(s - avg) < 0.0015f) continue;
+                    // (the pond stays a pond - its cells under the water - and the land round it just above the water:
+                    // the shoreline moves smoothly between cells, the pond never dries up or spills)
+                    float to = Mathf.Lerp(s, avg, 0.6f);
+                    to = Water[i] >= 0.5f ? Mathf.Min(to, WaterLevel[i] - 0.001f) : Mathf.Max(to, level + 0.0005f);
+                    if (Mathf.Abs(to - s) < 0.0002f) continue;
+                    Height[i] = HeightForSurface(i, to);
+                    Surface[i] = Height[i] * rim[i];
+                    moved++;
+                }
+            }
+            return moved;
+        }
+
+        /// <summary>Set for a world from an older save: land coming into the grid is mended (see <see cref="RepairWalls"/>).</summary>
+        public bool MendOld;
 
         /// <summary>
         /// Takes down walls left by an old fault (a stream whose water level was never set carved its banks up to the

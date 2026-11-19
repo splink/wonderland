@@ -82,6 +82,24 @@ namespace Wonderland.Editor
                 }
                 report.AppendLine($"roads: {pokes} places the ground comes up through the asphalt, {steps} steep steps");
             }
+            // Roads running over each other with no junction where they do.
+            {
+                var lines = w.Paths.Lines;
+                int found = 0;
+                for (int a = 0; a < lines.Count; a++)
+                for (int b = a + 1; b < lines.Count; b++)
+                {
+                    if (!PathSystem.IsCarWay(lines[a].kind) || !PathSystem.IsCarWay(lines[b].kind)) continue;
+                    float reach = (PathSystem.HalfWidth(lines[a].kind) + PathSystem.HalfWidth(lines[b].kind)) * 0.8f;
+                    int run = 0; Vector2 at = default;
+                    foreach (var p in lines[a].points)
+                    {
+                        if (PathSystem.Distance(lines[b], p) < reach && !w.Paths.NearJunction(p, 0.01f)) { run++; at = p; }
+                    }
+                    if (run >= 3) { found++; report.AppendLine($"roads {a} and {b} run over each other for {run} points with no junction, e.g. at ({at.x:0.00}, {at.y:0.00})"); if (found <= 2) shots.Add(($"overlap{found}", at)); }
+                }
+                report.AppendLine($"{found} pairs of roads overlap without a junction");
+            }
             // Driveways.
             float edge = PathSystem.HalfWidth((int)PathKind.Road) - PathSystem.KerbWidth;
             foreach (var h in w.Buildings.Houses)
@@ -107,6 +125,13 @@ namespace Wonderland.Editor
             foreach (var (name, at) in shots)
             {
                 w.SetWindowCenter(at);
+                {
+                    int pond = 0, cells = 0; float nearStream = float.MaxValue;
+                    for (float dz = -0.3f; dz <= 0.3f; dz += 0.02f) for (float dx = -0.3f; dx <= 0.3f; dx += 0.02f) { cells++; if (t.WaterAt(at.x + dx, at.y + dz) > 0.5f) pond++; }
+                    foreach (var st in w.Streams.Streams) nearStream = Mathf.Min(nearStream, StreamSystem.Nearest(st, at, out _, out _));
+                    report.AppendLine($"shot {name} at ({at.x:0.00}, {at.y:0.00}): {pond}/{cells} pond cells within 30 cm, nearest stream {nearStream * 100f:0} cm; shores smoothed now: {t.SmoothShores(t.All)}");
+                    t.UpdateSurface(t.All); w.TerrainView.RebuildAll(); w.WaterView.RebuildAll();
+                }
                 w.Forest.RebuildDirty(); w.Cover.RebuildDirty();
                 var p = w.transform.TransformPoint(new Vector3(at.x, t.SurfaceAt(at.x, at.y), at.y));
                 cam.transform.position = p + new Vector3(0.1f, 0.3f, -0.35f); cam.transform.LookAt(p); cam.fieldOfView = 45f;

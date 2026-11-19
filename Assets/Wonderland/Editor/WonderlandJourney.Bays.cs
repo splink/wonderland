@@ -36,6 +36,25 @@ namespace Wonderland.Editor
         private static void BayJourney()
         {
             {
+                // A side road stopping short on the other's pavement, and one merging into it at a shallow angle: both
+                // become junctions, nothing lying over the other.
+                bool gridWas = BuildGrid.Snap; BuildGrid.Snap = false;
+                var c = Scratch("Short ends", 740f);
+                var t = c.Terrain;
+                c.BuildPath(Line(t, new Vector2(-0.6f, 0f), new Vector2(0.6f, 0f)), PathKind.Road);
+                c.BuildPath(Line(t, new Vector2(-0.3f, -0.4f), new Vector2(-0.3f, -0.034f)), PathKind.Road);   // (stops on the pavement)
+                c.BuildPath(Line(t, new Vector2(0.55f, 0.24f), new Vector2(0.1f, 0.004f)), PathKind.Road);    // (about 28 degrees, landing on it)
+                int junctions = c.Paths.Junctions.Count, overlap = 0;
+                var lines = c.Paths.Lines;
+                for (int a = 0; a < lines.Count; a++)
+                for (int b = a + 1; b < lines.Count; b++)
+                    foreach (var p in lines[a].points)
+                        if (PathSystem.Distance(lines[b], p) < PathSystem.HalfWidth(0) * 1.6f && !c.Paths.NearJunction(p, 0.01f)) overlap++;
+                Check(junctions == 2 && overlap == 0, $"A side road stopping short on another's pavement, and one merging into it at a shallow angle, both make junctions ({junctions} junctions, {overlap} points of road lying over another)");
+                BuildGrid.Snap = gridWas;
+                Object.DestroyImmediate(c.gameObject);
+            }
+            {
                 // A car park put down carelessly beside a street - turned sideways, overlapping the pavement - turns to
                 // face it and stands back with a driveway to its way in.
                 var c = Scratch("Careless car park", 720f);

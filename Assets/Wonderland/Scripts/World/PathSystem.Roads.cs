@@ -158,7 +158,93 @@ namespace Wonderland
         }
 
         /// <summary>Moves a road's end along its own line until it lies exactly on the road it meets (within 8 cm).</summary>
-        private void OntoRoad(List<Vector2> pts, bool atStart)
+        /// <summary>
+        /// Roads whose end stops short of another road's side - on its pavement, a little way off - or runs just past
+        /// it are carried on (or cut back) to land exactly on it, so a T junction forms there instead of one road lying
+        /// over the other. Run after a road is built (it may be the one the others stop short of) and on loading.
+        /// Returns how many ends moved.
+        /// </summary>
+        public int MendEnds()
+        {
+            Index();
+            int moved = 0;
+            for (int li = 0; li < Lines.Count; li++)
+            {
+                var l = Lines[li];
+                if (!IsCarWay(l.kind) || l.closed || l.points.Count < 6) continue;
+                for (int end = 0; end < 2; end++)
+                {
+                    var e = end == 0 ? l.points[0] : l.points[^1];
+                    float d = Query(e, 0.08f, m => m != li && IsCarWay(Lines[m].kind), out int other);
+                    if (other < 0 || d > 0.06f) continue;
+                    int before = l.points.Count; var was = e;
+                    if (d >= 0.002f) OntoRoad(l.points, end == 0, li);
+                    if (Steepen(l, end == 0, other)) moved++;
+                    var now = end == 0 ? l.points[0] : l.points[^1];
+                    if ((now - was).sqrMagnitude > 1e-8f || l.points.Count != before) moved++;
+                }
+            }
+            if (moved > 0) Index();
+            return moved;
+        }
+
+        /// <summary>
+        /// A road landing on another's side at a shallow angle (under 35 degrees) lay over it for a long way, its kerbs
+        /// across the other's asphalt. Its last stretch - from where their edges first meet - is curved to arrive at 45
+        /// degrees instead, landing a little further along: a junction a car can turn into. True if it changed.
+        /// </summary>
+        private bool Steepen(PathLine l, bool atStart, int other)
+        {
+            var pts = l.points; var o = Lines[other];
+            if (pts.Count < 8 || o.points.Count < 2) return false;
+            if (!atStart) pts.Reverse();
+            try
+            {
+                var end = pts[0];
+                var travel = (pts[0] - pts[Mathf.Min(4, pts.Count - 1)]).normalized;   // (towards the end)
+                // The other road's direction where it lands.
+                int k = 0; float near = float.MaxValue;
+                for (int i = 0; i < o.points.Count; i++) { float d = (o.points[i] - end).sqrMagnitude; if (d < near) { near = d; k = i; } }
+                var t = (o.points[Mathf.Min(k + 1, o.points.Count - 1)] - o.points[Mathf.Max(k - 1, 0)]).normalized;
+                if (Vector2.Dot(t, travel) < 0f) t = -t;
+                if (Vector2.Angle(t, travel) >= 35f) return false;
+                // Back along it to where its edge clears the other's.
+                float clear = HalfWidth(l.kind) + HalfWidth(o.kind) + 0.006f;
+                int a = -1;
+                for (int i = 1; i < pts.Count; i++) if (Distance(o, pts[i]) >= clear) { a = i; break; }
+                if (a < 0 || a > pts.Count - 3) return false;
+                var A = pts[a];
+                var tA = (pts[Mathf.Max(a - 1, 0)] - pts[Mathf.Min(a + 1, pts.Count - 1)]).normalized;
+                // Land a little further along, arriving at 45 degrees.
+                float off = Distance(o, A);
+                Vector2 foot = A; float best = float.MaxValue;
+                for (int i = 0; i + 1 < o.points.Count; i++)
+                {
+                    var p0 = o.points[i]; var p1 = o.points[i + 1]; var ab = p1 - p0;
+                    float u = Mathf.Clamp01(Vector2.Dot(A - p0, ab) / Mathf.Max(ab.sqrMagnitude, 1e-9f));
+                    var q = p0 + ab * u; float d = (q - A).sqrMagnitude;
+                    if (d < best) { best = d; foot = q; }
+                }
+                var across = (foot - A).normalized;   // (towards the other road)
+                var land = foot + t * off;
+                var arrive = (t + across).normalized;  // 45 degrees between along it and into it
+                float span = (land - A).magnitude;
+                var curve = new List<Vector2>();
+                int steps = Mathf.Max(4, Mathf.CeilToInt(span / Spacing));
+                for (int s = 0; s <= steps; s++)
+                {
+                    float u = s / (float)steps, u2 = u * u, u3 = u2 * u;
+                    curve.Add((2f * u3 - 3f * u2 + 1f) * A + (u3 - 2f * u2 + u) * span * tA + (-2f * u3 + 3f * u2) * land + (u3 - u2) * span * arrive);
+                }
+                curve.Reverse();   // (end first, as the list runs here)
+                pts.RemoveRange(0, a + 1);
+                pts.InsertRange(0, curve);
+                return true;
+            }
+            finally { if (!atStart) pts.Reverse(); }
+        }
+
+        private void OntoRoad(List<Vector2> pts, bool atStart, int self = -1)
         {
             if (pts.Count < 6) return;
             if (!atStart) pts.Reverse();
@@ -167,7 +253,7 @@ namespace Wonderland
             float bestT = 0f, bestD = float.MaxValue;
             for (float t = -0.08f; t <= 0.08f; t += 0.002f)
             {
-                float d = Query(end - inward * t, 0.1f, m => IsCarWay(Lines[m].kind), out _);
+                float d = Query(end - inward * t, 0.1f, m => m != self && IsCarWay(Lines[m].kind), out _);
                 if (d < bestD) { bestD = d; bestT = t; }
             }
             if (bestD < 0.004f)

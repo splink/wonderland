@@ -352,12 +352,14 @@ namespace Wonderland
             Terrain.SetAllowed(null);
             ApplyPads(Terrain.All, reshape: false);
             lastGround.Clear();
-            GradeNewGround();
+            if (mendOld) { GradeNewGround(); Terrain.SmoothShores(Terrain.All); Terrain.UpdateSurface(Terrain.All); }
             return true;
         }
 
-        // The grid cells each road has been graded within this session (it is graded again only for land new to it).
+        // The grid cells each road has been graded within this session (it is graded again only for land new to it -
+        // in a world from an older save; a newer one's roads were graded when they were built).
         private readonly Dictionary<PathLine, RectInt> gradedIn = new();
+        private bool mendOld;
 
         /// <summary>
         /// Grades the roads to their smooth profile over land that has come into the grid since they were last graded
@@ -626,7 +628,7 @@ namespace Wonderland
         [Serializable]
         private sealed class SaveData
         {
-            public int version = 8;
+            public int version = 9;   // (9: streams levelled, roads graded smoothly, shores smoothed - older saves are mended on loading)
             public int gx, gz, nx, nz;       // v2: the grid in global cells
             public float size;               // v1: island size (its grid spanned exactly this); v2: starting patch size
             public int seed;
@@ -709,7 +711,7 @@ namespace Wonderland
         public void Deserialize(string json, WorldMaterials materials, string chunkFolder = null)
         {
             var d = JsonUtility.FromJson<SaveData>(json);
-            if (d == null || d.size <= 0f || (d.version < 1 || d.version > 8)) throw new InvalidDataException("Not a Wonderland save.");
+            if (d == null || d.size <= 0f || (d.version < 1 || d.version > 9)) throw new InvalidDataException("Not a Wonderland save.");
             float[] height = null, land = null, locks = null, soil = null, water = null, waterLevel = null;
             RectInt cells;
             if (d.chunked) cells = new RectInt(d.gx, d.gz, d.nx, d.nz);
@@ -766,11 +768,21 @@ namespace Wonderland
             foreach (var s in Streams.Streams)
                 if (s.points.Exists(q => !(q.y <= TerrainField.MaxHeight))) { StreamSystem.Relevel(s, Terrain, Streams.Streams); mend = true; }
             if (mend) Streams.Rebuild();
-            int walls = Terrain.RepairWalls();
-            if (walls > 0 || mend) Debug.Log($"Wonderland: mended the land - {walls} cells of wall taken down{(mend ? ", streams levelled again" : "")}");
-            // Roads graded the old way copied the bumps under them: grade them again to a smooth profile.
+            // A world saved before these were mended (version 8 and older) is mended once, as it loads - and its land as
+            // it comes into the grid; a newer one loads exactly as it was saved.
+            mendOld = Terrain.MendOld = d.version < 9;
             gradedIn.Clear();
-            GradeNewGround();
+            if (mendOld)
+            {
+                int walls = Terrain.RepairWalls();
+                Terrain.SmoothShores(Terrain.All);   // (ponds painted before their shores were smoothed)
+                Terrain.UpdateSurface(Terrain.All);
+                if (walls > 0 || mend) Debug.Log($"Wonderland: mended the land - {walls} cells of wall taken down{(mend ? ", streams levelled again" : "")}");
+                int ends = Paths.MendEnds();   // (roads stopping short of another's side, from before ends were mended)
+                if (ends > 0) Debug.Log($"Wonderland: {ends} road ends carried on to the road beside them");
+                GradeNewGround();   // (roads graded the old way copied the bumps under them)
+            }
+            else foreach (var l in Paths.Lines) gradedIn[l] = Terrain.Cells;
             if (d.hour >= 0f) { Clock.Hour = Mathf.Repeat(d.hour, 24f); Clock.Day = Mathf.Max(0, d.day); Clock.Mode = (ClockMode)Mathf.Clamp(d.clockMode, 0, 2); }
             People.SetSupplies(d.supplies);
             Cctv.Import(d.cameras);

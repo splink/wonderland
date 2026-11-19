@@ -15,6 +15,7 @@ namespace Wonderland
             if (line == null) return error;
             Checkpoint();
             Paths.Add(line);
+            Paths.MendEnds();   // (it, or a road stopping short of it, lands exactly on the other: a junction)
             var region = Paths.Grade(line);
             if (region.width > 0) { TerrainView.Rebuild(region); resitHouses = true; }
             RefreshBridges();
