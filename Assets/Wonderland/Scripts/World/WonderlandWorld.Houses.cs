@@ -28,7 +28,9 @@ namespace Wonderland
                 float w = d <= 0f ? 1f : Mathf.SmoothStep(1f, 0f, d / margin);
                 int i = z * Terrain.Nx + x;
                 if (Terrain.Pad[i] >= 1f) continue;   // another house's flat ground
-                if (reshape) Terrain.Height[i] = Mathf.Lerp(Terrain.Height[i], Terrain.HeightForSurface(i, target), w);
+                // (never up through a pond: by the water - a quay - the ground in front stays under it)
+                float here = Terrain.Water[i] > 0.5f ? Mathf.Min(target, Terrain.WaterLevel[i] - 0.003f) : target;
+                if (reshape) Terrain.Height[i] = Mathf.Lerp(Terrain.Height[i], Terrain.HeightForSurface(i, here), w);
                 Terrain.Pad[i] = Mathf.Max(Terrain.Pad[i], d <= 0f ? 1f : w * 0.9f);
             }
             Terrain.UpdateSurface(region);

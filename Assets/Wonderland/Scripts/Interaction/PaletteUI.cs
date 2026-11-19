@@ -441,8 +441,35 @@ namespace Wonderland
             public Option(string label, bool selected, Action onClick, bool enabled = true) { Label = label; Selected = selected; OnClick = onClick; Enabled = enabled; }
         }
 
-        /// <summary>Rebuilds the option chips (cheap: a handful of objects, only when the tool or mode changes).</summary>
-        public void SetOptions(IReadOnlyList<Option> list) => FillRow(options, optionRow, list, 0.02f);
+        /// <summary>
+        /// Rebuilds the option chips (cheap: a handful of objects, only when the tool or mode changes). Up to nine fit in the
+        /// row; more are shown eight at a time with ‹ and › (opening on the page with the chosen one), so none gets too
+        /// narrow to read or to hit.
+        /// </summary>
+        public void SetOptions(IReadOnlyList<Option> list)
+        {
+            list ??= new List<Option>();
+            string key = string.Join("|", System.Linq.Enumerable.Select(list, o => o.Label));
+            allOptions = new List<Option>(list);
+            if (key != optionsKey) { optionsKey = key; optionPage = Mathf.Max(0, allOptions.FindIndex(o => o.Selected)) / OptionsPerPage; }
+            ShowOptionPage();
+        }
+
+        public const int OptionsPerPage = 8;
+        private List<Option> allOptions = new();
+        private int optionPage;
+        private string optionsKey;
+
+        private void ShowOptionPage()
+        {
+            int pages = allOptions.Count <= OptionsPerPage + 1 ? 1 : (allOptions.Count + OptionsPerPage - 1) / OptionsPerPage;
+            optionPage = Mathf.Clamp(optionPage, 0, pages - 1);
+            if (pages <= 1) { FillRow(options, optionRow, allOptions, 0.02f); return; }
+            var page = new List<Option> { new("‹", false, () => { optionPage = (optionPage + pages - 1) % pages; ShowOptionPage(); }) };
+            for (int k = optionPage * OptionsPerPage; k < Mathf.Min(allOptions.Count, (optionPage + 1) * OptionsPerPage); k++) page.Add(allOptions[k]);
+            page.Add(new Option($"{optionPage + 1}/{pages} ›", false, () => { optionPage = (optionPage + 1) % pages; ShowOptionPage(); }));
+            FillRow(options, optionRow, page, 0.02f);
+        }
 
         public const int ItemsPerPage = 7;
         private List<Option> allItems = new();

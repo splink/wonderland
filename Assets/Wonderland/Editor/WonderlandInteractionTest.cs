@@ -674,6 +674,16 @@ namespace Wonderland.Editor
         private static void ClickButton(Vector3 hand, string label)
         {
             var button = Find(label);
+            // Not on the page showing: turn the option row's (or the items') pages until it is.
+            for (int turn = 0; button == null && turn < 6; turn++)
+            {
+                PaletteButton next = null;
+                foreach (var b in palette.GetComponentsInChildren<PaletteButton>(false)) if (b.Text != null && b.Text.EndsWith("›")) { next = b; if (turn % 2 == 0) break; }
+                if (next == null) break;
+                Physics.SyncTransforms();
+                Frame(hand, next.transform.position, false); Frame(hand, next.transform.position, true); Frame(hand, next.transform.position, false);
+                button = Find(label);
+            }
             if (button == null) { Check(false, $"Button '{label}' exists"); return; }
             Physics.SyncTransforms();
             var p = button.transform.position;

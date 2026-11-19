@@ -31,7 +31,7 @@ namespace Wonderland.Editor
             catch (Exception e) { Fail("Exception: " + e); }
             try { FreightByRail(); }
             catch (Exception e) { Fail("Exception: " + e); }
-            try { Shipping(); }
+            try { Shipping(); HarbourJourney(); }
             catch (Exception e) { Fail("Exception: " + e); }
             try { Attractions(); }
             catch (Exception e) { Fail("Exception: " + e); }

@@ -12,7 +12,7 @@ namespace Wonderland
     /// other harbour. A harbour with no other harbour across the water stays quiet; a harbour taken away (or the water
     /// cut) sends its ship away. Nothing here is saved: ships come from the harbours.
     /// </summary>
-    public sealed class HarbourSystem : MonoBehaviour
+    public sealed partial class HarbourSystem : MonoBehaviour
     {
         public const float MooringZ = -0.09f, ShipSpeed = 0.03f, CraneCycle = 2.6f, Clearance = 0.018f, Grid = 0.02f;
         private static readonly string[] Names = { "Puffin", "Kittiwake", "Gannet", "Cormorant", "Tern", "Guillemot" };
@@ -54,7 +54,8 @@ namespace Wonderland
         public void Step(float dt)
         {
             sync -= dt;
-            if (sync <= 0f) { sync = 2f; SyncPorts(); }
+            if (sync <= 0f) { sync = 2f; SyncPorts(); SyncMachines(); }
+            StepMachines(dt);
             check -= dt;
             if (check <= 0f) { check = 5f; CheckRoutes(); }
             foreach (var s in ships.ToArray()) StepShip(s, dt);

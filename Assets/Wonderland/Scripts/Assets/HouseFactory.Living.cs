@@ -21,6 +21,9 @@ namespace Wonderland
                 case Catalog.Letterbox: return PillarBox(b);
                 case Catalog.CarPark: return CarParkBays(b);
                 case Catalog.ParkingGarage: return ParkingGarage(b, ref rng);
+                case Catalog.ContainerYard: return ContainerYard(b, ref rng);
+                case Catalog.Warehouse: return WarehouseShed(b, ref rng);
+                case Catalog.HarbourGate: return HarbourGateHouse(b, ref rng);
                 case Catalog.Zebra: return ZebraStripes(b);
                 case Catalog.FreightYard: return FreightYardPad(b, ref rng);
                 case Catalog.Harbour: return HarbourQuay(b, ref rng);
@@ -312,34 +315,6 @@ namespace Wonderland
             return 0.1f;
         }
 
-        /// <summary>
-        /// A harbour quay (its front, -Z, to the water): a stone quay wall with bollards along its edge, the rail the quay
-        /// crane rolls along, a warehouse with a big door, and a few containers stacked at the back. The crane and the
-        /// containers being moved are drawn by the harbour system.
-        /// </summary>
-        private static float HarbourQuay(MeshBuilder b, ref Rng rng)
-        {
-            const float W = 0.15f, D = 0.1f;
-            var stone = Pal.Hex("#A9A49A");
-            b.AddBox(new Vector3(0f, -0.004f, 0f), new Vector3(W, 0.012f, D), stone, Pal.Hex("#B9B4AA"), Pal.Hex("#8E8A82"));
-            b.AddBox(new Vector3(0f, -0.012f, -D / 2 + 0.002f), new Vector3(W + 0.002f, 0.022f, 0.004f), Pal.StoneDark);   // the quay wall
-            for (int k = 0; k < 5; k++)
-            {
-                var at = new Vector3(-W / 2 + 0.015f + k * (W - 0.03f) / 4f, 0.002f, -D / 2 + 0.005f);
-                b.AddCylinder(at, 0.0018f, 0.0018f, 0.004f, 8, Pal.TrainBlack, Pal.TrainBlack, true);
-                b.AddCylinder(at + Vector3.up * 0.004f, 0.0024f, 0.0024f, 0.001f, 8, Pal.TrainBlack, Pal.TrainBlack, true, true);
-            }
-            foreach (float z in new[] { CraneRailZ - 0.004f, CraneRailZ + 0.004f }) b.AddBox(new Vector3(0f, 0.0025f, z), new Vector3(W - 0.004f, 0.001f, 0.0012f), Pal.Hex("#5A5A62"));
-            // A warehouse at the back.
-            var shed = Pal.Hex("#5E7E9A");
-            b.AddBox(new Vector3(W / 2 - 0.03f, 0.016f, D / 2 - 0.016f), new Vector3(0.05f, 0.032f, 0.028f), shed, Pal.Shade(shed, 1.1f), Pal.Shade(shed, 0.75f));
-            b.AddBox(new Vector3(W / 2 - 0.03f, 0.0335f, D / 2 - 0.016f), new Vector3(0.054f, 0.003f, 0.032f), Pal.Hex("#3A3A40"));
-            b.AddFace(new Vector3(W / 2 - 0.03f, 0.012f, D / 2 - 0.0301f), Vector3.back, Vector3.up, 0.022f, 0.022f, Pal.Hex("#3A4A5A"));
-            // Containers stacked at the back corner.
-            for (int k = 0; k < 4; k++) AddContainer(b, new Vector3(-W / 2 + 0.018f + (k % 2) * 0.026f, 0.002f + k / 2 * 0.0122f, D / 2 - 0.012f), k + 3);
-            return 0.1f;
-        }
-
         /// <summary>A ship moors this far out in front of a harbour (local z).</summary>
         public const float HarbourMooring = -0.085f;
 
@@ -370,27 +345,6 @@ namespace Wonderland
 
         /// <summary>The crane at a level of detail.</summary>
         public static Mesh CraneMesh(int detail) => detail == 0 ? CraneMesh() : craneLevels[detail + 1] ??= MeshBuilder.At(detail, 1f, () => { var was = crane; crane = null; try { var m = CraneMesh(); m.name += " detail " + detail; return m; } finally { crane = was; } });
-
-        public static Mesh ShipMesh()
-        {
-            if (ship != null) return ship;
-            var b = new MeshBuilder();
-            const float L = 0.16f, W = 0.034f;
-            var red = Pal.Hex("#B8342A"); var black = Pal.TrainBlack; var white = Pal.Hex("#F2EFE8");
-            b.AddBox(new Vector3(0f, -0.004f, -0.006f), new Vector3(W, 0.008f, L - 0.03f), red, red, Pal.Shade(red, 0.7f));   // below the waterline
-            b.AddBox(new Vector3(0f, 0.006f, -0.006f), new Vector3(W, 0.012f, L - 0.03f), black, Pal.Shade(black, 1.4f), black);
-            // The bow: a wedge.
-            b.AddTriangleOutward(new Vector3(-W / 2, -0.008f, L / 2 - 0.021f), new Vector3(W / 2, -0.008f, L / 2 - 0.021f), new Vector3(0f, -0.008f, L / 2), new Vector3(0f, 0.01f, L / 2 - 0.03f), red);
-            b.AddTriangleOutward(new Vector3(-W / 2, 0.012f, L / 2 - 0.021f), new Vector3(W / 2, 0.012f, L / 2 - 0.021f), new Vector3(0f, 0.014f, L / 2 + 0.002f), new Vector3(0f, -0.01f, L / 2 - 0.03f), Pal.Shade(black, 1.4f));
-            foreach (int s in new[] { -1, 1 }) b.AddQuad(new Vector3(s * W / 2, -0.008f, L / 2 - 0.021f), new Vector3(s * W / 2, 0.012f, L / 2 - 0.021f), new Vector3(0f, 0.014f, L / 2 + 0.002f), new Vector3(0f, -0.008f, L / 2), s > 0 ? black : black);
-            b.AddBox(new Vector3(0f, 0.0125f, -0.006f), new Vector3(W - 0.004f, 0.001f, L - 0.034f), Pal.Hex("#7A3A2A"));   // the deck
-            // The bridge and funnel aft.
-            b.AddBox(new Vector3(0f, 0.024f, -L / 2 + 0.02f), new Vector3(W - 0.006f, 0.022f, 0.018f), white, white, Pal.Shade(white, 0.8f));
-            b.AddBox(new Vector3(0f, 0.031f, -L / 2 + 0.029f), new Vector3(W - 0.008f, 0.004f, 0.0008f), Pal.Glow(Pal.WindowGlow));
-            b.AddBox(new Vector3(0f, 0.0365f, -L / 2 + 0.02f), new Vector3(W, 0.002f, 0.022f), white);
-            b.AddCylinder(new Vector3(0f, 0.035f, -L / 2 + 0.012f), 0.004f, 0.0045f, 0.014f, 10, Pal.Hex("#2F5A8A"), Pal.Hex("#D9C04A"), true);
-            return ship = b.ToMesh("Ship");
-        }
 
         /// <summary>The containers on a ship's deck: up to eight, two across and four along.</summary>
         public static Mesh ShipDeck(int n)
@@ -541,31 +495,6 @@ namespace Wonderland
         public const float CraneReach = -0.085f;
 
         private static Mesh crane, trolley;
-
-        /// <summary>The crane: a yellow lattice tower on rail wheels with its jib out over the railway (front, -Z), and a counterweight behind.</summary>
-        public static Mesh CraneMesh()
-        {
-            if (crane != null) return crane;
-            var b = new MeshBuilder();
-            var yellow = Pal.Hex("#F2C12E"); var dark = Pal.Hex("#3A3A40");
-            b.AddBox(new Vector3(0f, 0.004f, 0f), new Vector3(0.022f, 0.006f, 0.016f), dark);
-            foreach (int sx in new[] { -1, 1 })
-            foreach (int sz in new[] { -1, 1 })
-                b.AddBox(new Vector3(sx * 0.005f, CraneHeight / 2f, sz * 0.005f), new Vector3(0.0016f, CraneHeight, 0.0016f), yellow);
-            for (float y = 0.012f; y < CraneHeight; y += 0.012f)
-            {
-                b.AddBox(new Vector3(0f, y, -0.005f), new Vector3(0.011f, 0.001f, 0.001f), yellow);
-                b.AddBox(new Vector3(0f, y, 0.005f), new Vector3(0.011f, 0.001f, 0.001f), yellow);
-                b.AddBox(new Vector3(-0.005f, y, 0f), new Vector3(0.001f, 0.001f, 0.011f), yellow);
-                b.AddBox(new Vector3(0.005f, y, 0f), new Vector3(0.001f, 0.001f, 0.011f), yellow);
-            }
-            float reach = CraneReach - CraneRailZ;
-            b.AddBox(new Vector3(0f, CraneHeight + 0.002f, reach / 2f + 0.006f), new Vector3(0.008f, 0.004f, -reach + 0.03f), yellow);   // the jib
-            b.AddBox(new Vector3(0f, CraneHeight + 0.002f, 0.02f), new Vector3(0.014f, 0.01f, 0.012f), Pal.Hex("#7A7A82"));   // counterweight
-            b.AddBox(new Vector3(0f, CraneHeight - 0.008f, 0.008f), new Vector3(0.012f, 0.01f, 0.01f), Pal.Hex("#E25B4F"));   // the cab
-            b.AddFace(new Vector3(0f, CraneHeight - 0.008f, 0.0029f), Vector3.back, Vector3.up, 0.008f, 0.005f, Pal.Glow(Pal.WindowGlow));
-            return crane = b.ToMesh("Crane");
-        }
 
         /// <summary>The crane's trolley and hook block (the cable is a separate, stretched part).</summary>
         public static Mesh TrolleyMesh()

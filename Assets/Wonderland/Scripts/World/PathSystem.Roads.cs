@@ -57,6 +57,7 @@ namespace Wonderland
         {
             (int)PathKind.Highway => slowLane ? 0.0315f : 0.0105f,
             (int)PathKind.Road => 0.0128f,
+            (int)PathKind.ServiceRoad => 0.0105f,
             _ => 0.0105f,
         };
 

@@ -819,7 +819,7 @@ namespace Wonderland
         });
 
         /// <summary>The order of the Roads tool's chips: roads first, then country ways, then fences.</summary>
-        private static readonly PathKind[] WayOrder = { PathKind.Road, PathKind.Highway, PathKind.Lane, PathKind.Footpath, PathKind.Trail, PathKind.Fence, PathKind.Hedge, PathKind.Wall };
+        private static readonly PathKind[] WayOrder = { PathKind.Road, PathKind.Highway, PathKind.Lane, PathKind.ServiceRoad, PathKind.Footpath, PathKind.Trail, PathKind.Fence, PathKind.Hedge, PathKind.Wall, PathKind.SecurityFence };
 
         /// <summary>A vehicle chosen to put on the road (null: drawing roads).</summary>
         public VehicleKind? PlacingVehicle { get; private set; }

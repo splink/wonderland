@@ -114,7 +114,12 @@ namespace Wonderland
             D(RowingBoat, "Water", "Rows about the pond", "on the water");
             D(SailingBoat, "Water", "Sails with the wind", "on the water");
             D(Steamer, "Water", "Takes six on a trip round the lake", "on the water");
-            D(Harbour, "Water", "Cranes load container ships that sail to other harbours", "on the shore of a big lake, front to the water");
+            // Harbour: the quay is where the ships call; the rest of the port goes round it.
+            D(Harbour, "Quay & cranes", "The container quay: a gantry crane loads and unloads the container ships that sail between harbours", "on the shore of a big lake, front to the water");
+            list[Harbour].Category = PlaceCategory.Harbour;
+            D(ContainerYard, "Yard & sheds", "Blocks of containers stacked up to four high; a straddle carrier drives the aisle fetching and stacking them");
+            D(Warehouse, "Yard & sheds", "A long shed with three loading docks: a forklift brings pallets out to the lorries");
+            D(HarbourGate, "Gate & security", "The way in: a gatehouse between the lanes, barriers, a canopy, CCTV and a barbed-wire fence off either side", "where a road comes into the harbour");
             // Nature.
             D(Boulders, "Rocks", "A few mossy boulders");
             D(Crag, "Rocks", "A rocky outcrop to look out from");

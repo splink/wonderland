@@ -4,7 +4,7 @@ using UnityEngine;
 
 namespace Wonderland
 {
-    public enum PlaceCategory { Homes, Town, Shops, Services, Farm, Fun, Travel, Nature, Small, Zoo }
+    public enum PlaceCategory { Homes, Town, Shops, Services, Farm, Fun, Travel, Nature, Small, Zoo, Harbour }
 
     /// <summary>What a place does with the village's produce: farms grow it, shops and the café sell it, stations ship it.</summary>
     public enum Goods { None, Grows, Sells, Ships }
@@ -96,9 +96,9 @@ namespace Wonderland
         public static Blueprint Get(int id) => All[Mathf.Clamp(id, 0, All.Length - 1)];
 
         /// <summary>The library's categories, by <see cref="PlaceCategory"/> (shown in <see cref="CategoryOrder"/>).</summary>
-        public static readonly string[] CategoryNames = { "Homes", "Town", "Shops", "Work", "Farm", "Leisure", "Travel", "Nature", "Details", "Zoo" };
+        public static readonly string[] CategoryNames = { "Homes", "Town", "Shops", "Work", "Farm", "Leisure", "Travel", "Nature", "Details", "Zoo", "Harbour" };
         public static readonly PlaceCategory[] CategoryOrder =
-            { PlaceCategory.Homes, PlaceCategory.Town, PlaceCategory.Shops, PlaceCategory.Services, PlaceCategory.Farm, PlaceCategory.Fun, PlaceCategory.Zoo, PlaceCategory.Travel, PlaceCategory.Nature, PlaceCategory.Small };
+            { PlaceCategory.Homes, PlaceCategory.Town, PlaceCategory.Shops, PlaceCategory.Services, PlaceCategory.Farm, PlaceCategory.Fun, PlaceCategory.Zoo, PlaceCategory.Travel, PlaceCategory.Harbour, PlaceCategory.Nature, PlaceCategory.Small };
 
         public static List<int> InCategory(PlaceCategory c)
         {
@@ -117,7 +117,7 @@ namespace Wonderland
             Camera = 50, Balloon = 51, Jetty = 52, RowingBoat = 53, SailingBoat = 54, Steamer = 55, Halt = 56, TaxiRank = 57,
             Sawmill = 58, FurnitureShop = 59, IceCream = 60, Pub = 61, Hotel = 62, PostOffice = 63, Letterbox = 64, CarPark = 65, FreightYard = 66, Harbour = 67, Zoo = 68, FairyCastle = 69, Stadium = 70, Zebra = 71,
             ZooGate = 72, ZooPlaza = 73, Savanna = 74, ElephantHouse = 75, LionRock = 76, PenguinPool = 77, MonkeyIsland = 78, Aviary = 79, TropicalHouse = 80,
-            PettingZoo = 81, ZooKiosk = 82, SafariCafe = 83, ZooGarden = 84, BusStop = 85, Farmhouse = 86, Theatre = 87, ParkingGarage = 88;
+            PettingZoo = 81, ZooKiosk = 82, SafariCafe = 83, ZooGarden = 84, BusStop = 85, Farmhouse = 86, Theatre = 87, ParkingGarage = 88, ContainerYard = 89, Warehouse = 90, HarbourGate = 91;
 
         /// <summary>A station of any size (the big one, or a country halt): trains stop beside it.</summary>
         public static bool IsStation(int variant) => variant == Station || variant == Halt || variant == FreightYard;
@@ -297,6 +297,9 @@ namespace Wonderland
             list.Add(new() { Name = "Theatre", Short = "Theatre", Category = PlaceCategory.Town, Half = new Vector2(0.064f, 0.062f), Height = 0.13f, Styles = 1, Hint = "an audience every evening",
                 Spots = new[] { Door(0f, 0.062f), new ActivitySpot(-0.03f, -0.075f, SpotKind.Gather), new ActivitySpot(0f, -0.08f, SpotKind.Gather), new ActivitySpot(0.03f, -0.075f, SpotKind.Gather), new ActivitySpot(0.045f, -0.068f, SpotKind.Watch, -20f) } });
             list.Add(new() { Name = "Parking garage", Short = "Garage", Category = PlaceCategory.Travel, Half = new Vector2(0.066f, 0.056f), Height = 0.08f, Styles = 1, Hint = "cars drive in off the street and park on its decks - put it by a road near the shops" });
+            list.Add(new() { Name = "Container yard", Short = "Yard", Category = PlaceCategory.Harbour, Half = new Vector2(0.11f, 0.075f), Height = 0.06f, Styles = 1, Hint = "containers stacked high; a straddle carrier moves them" });
+            list.Add(new() { Name = "Warehouse", Short = "Warehouse", Category = PlaceCategory.Harbour, Half = new Vector2(0.08f, 0.055f), Height = 0.05f, Styles = 1, Hint = "goods in and out at its loading docks; a forklift busy outside" });
+            list.Add(new() { Name = "Harbour gate", Short = "Gate", Category = PlaceCategory.Harbour, Half = new Vector2(0.07f, 0.04f), Height = 0.05f, Styles = 1, Walkable = true, Hint = "the way into the harbour: a gatehouse, barriers and a barbed-wire fence" });
             for (int i = 0; i < list.Count; i++) list[i].Id = i;
             // What each place is for: the needs it satisfies decide who comes and when (see Needs).
             foreach (var b in list)

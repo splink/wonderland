@@ -5,7 +5,7 @@ using UnityEngine.Rendering;
 
 namespace Wonderland
 {
-    public enum PathKind { Road = 0, Lane = 1, Footpath = 2, Trail = 3, Fence = 4, Hedge = 5, Wall = 6, Highway = 7 }
+    public enum PathKind { Road = 0, Lane = 1, Footpath = 2, Trail = 3, Fence = 4, Hedge = 5, Wall = 6, Highway = 7, SecurityFence = 8, ServiceRoad = 9 }
 
     [Serializable]
     public sealed class PathLine
@@ -28,7 +28,7 @@ namespace Wonderland
     /// </summary>
     public sealed partial class PathSystem : MonoBehaviour
     {
-        public static readonly string[] Names = { "Road", "Lane", "Path", "Trail", "Fence", "Hedge", "Wall", "Highway" };
+        public static readonly string[] Names = { "Road", "Lane", "Path", "Trail", "Fence", "Hedge", "Wall", "Highway", "Security fence", "Service road" };
         public const float Spacing = 0.01f, Snap = 0.045f;
         public readonly List<PathLine> Lines = new();
         /// <summary>Level crossings: centre and the way's direction there.</summary>
@@ -46,13 +46,13 @@ namespace Wonderland
         private const float CellSize = 0.05f;
         private static long CellKey(int x, int z) => ((long)x << 32) ^ (uint)z;
 
-        public static bool IsWay(int kind) => kind <= (int)PathKind.Trail || kind == (int)PathKind.Highway;
-        public static bool IsBarrier(int kind) => kind >= (int)PathKind.Fence && kind <= (int)PathKind.Wall;
+        public static bool IsWay(int kind) => kind <= (int)PathKind.Trail || kind == (int)PathKind.Highway || kind == (int)PathKind.ServiceRoad;
+        public static bool IsBarrier(int kind) => kind >= (int)PathKind.Fence && kind <= (int)PathKind.Wall || kind == (int)PathKind.SecurityFence;
         /// <summary>Asphalt roads with lanes and markings (a street, a highway): drawn straight with rounded corners, with junctions and traffic lights.</summary>
         public static bool IsRoad(int kind) => kind == (int)PathKind.Road || kind == (int)PathKind.Highway;
         /// <summary>Ways cars drive on.</summary>
-        public static bool IsCarWay(int kind) => IsRoad(kind) || kind == (int)PathKind.Lane;
-        public static float HalfWidth(int kind) => kind switch { 0 => 0.0315f, 1 => 0.02f, 2 => 0.012f, 3 => 0.008f, 4 => 0.003f, 5 => 0.007f, 7 => 0.0475f, _ => 0.006f };   // (a road's kerbs included)
+        public static bool IsCarWay(int kind) => IsRoad(kind) || kind == (int)PathKind.Lane || kind == (int)PathKind.ServiceRoad;
+        public static float HalfWidth(int kind) => kind switch { 0 => 0.0315f, 1 => 0.02f, 2 => 0.012f, 3 => 0.008f, 4 => 0.003f, 5 => 0.007f, 7 => 0.0475f, 8 => 0.003f, 9 => 0.022f, _ => 0.006f };   // (a road's kerbs included)
 
         public void Init(TerrainField field, Material lit, Func<TrackNetwork> railway)
         {
@@ -317,7 +317,7 @@ namespace Wonderland
             foreach (var l in Lines)
             {
                 if (!IsBarrier(l.kind) || Distance(l, p) > HalfWidth(l.kind) + 0.002f) continue;
-                return l.kind == (int)PathKind.Fence ? 0.013f : l.kind == (int)PathKind.Hedge ? 0.017f : 0.011f;
+                return l.kind == (int)PathKind.Fence ? 0.013f : l.kind == (int)PathKind.Hedge ? 0.017f : l.kind == (int)PathKind.SecurityFence ? 0.03f : 0.011f;
             }
             return 0f;
         }
@@ -450,6 +450,9 @@ namespace Wonderland
                     if (Mathf.Abs(across) < 0.22f) return Pal.Shade(Pal.Hex("#7FA04A"), 0.85f + 0.25f * cell);
                     return Pal.Shade(Pal.Hex("#A8865E"), 0.85f + 0.25f * cell);
                 case 2: return Pal.Shade(Pal.Hex("#D8C49A"), 0.88f + 0.2f * cell);   // gravel
+                case 9:   // a service road: concrete slabs, yellow lines along its edges
+                    if (Mathf.Abs(across) > 0.86f && Mathf.Abs(across) < 0.94f) return Pal.Hex("#E8B92E");
+                    return Pal.Shade(Pal.Hex("#B4B0A8"), (Mathf.Repeat(p.x * 40f + p.y * 40f, 1f) < 0.04f ? 0.8f : 0.92f) + 0.1f * cell);
                 default: return Pal.Shade(Pal.Hex("#8E6A44"), 0.85f + 0.25f * cell);  // trodden earth
             }
         }
@@ -458,7 +461,7 @@ namespace Wonderland
         {
             int n = l.points.Count;
             if (n < 2) return;
-            float hw = HalfWidth(l.kind), lift = 0.0014f + 0.00025f * (3 - l.kind);
+            float hw = HalfWidth(l.kind), lift = l.kind == (int)PathKind.ServiceRoad ? 0.0017f : 0.0014f + 0.00025f * (3 - l.kind);
             const int across = 4;
             int start = b.VertexCount;
             var hidden = new bool[n];
@@ -549,6 +552,70 @@ namespace Wonderland
                         {
                             var c = rng.Chance(0.5f) ? Pal.FlowerWhite : Pal.FlowerPink;
                             b.AddBlob(p + new Vector3(rng.Range(-0.005f, 0.005f), 0.012f, rng.Range(-0.005f, 0.005f)), Vector3.one * 0.0016f, 0, 0f, i, (_, __) => c);
+                        }
+                    }
+                    break;
+                }
+                case PathKind.SecurityFence:
+                {
+                    // Steel posts, chain-link between them, and an arm leaning out at the top with three strands of
+                    // barbed wire and a coil of razor wire along it.
+                    var steel = Pal.Hex("#7E848C"); var mesh = new Color(0.62f, 0.66f, 0.7f); var wire = Pal.Hex("#5C6168");
+                    const float H = 0.026f;
+                    int step = 2;
+                    for (int i = 0; i < n; i += step)
+                    {
+                        var p = At(i);
+                        int j = Mathf.Min(i + step, l.closed ? i + step : n - 1);
+                        var q = j == i ? p : At(j % n);
+                        var along = q - p; along.y = 0f;
+                        var side = along.sqrMagnitude > 1e-10f ? Vector3.Cross(Vector3.up, along.normalized) : Vector3.right;
+                        b.AddBox(p + Vector3.up * H * 0.5f, new Vector3(0.0014f, H, 0.0014f), steel);
+                        b.Push(p + Vector3.up * H, Quaternion.LookRotation(side, Vector3.up) * Quaternion.Euler(-45f, 0f, 0f));
+                        b.AddBox(new Vector3(0f, 0.0035f, 0f), new Vector3(0.0008f, 0.007f, 0.0008f), steel);   // the arm, leaning out
+                        b.Pop();
+                        if (j == i) continue;
+                        // The chain-link: a fine diagonal lattice (a pale panel far off).
+                        var mid = (p + q) * 0.5f; float len = (q - p).magnitude;
+                        var rot = Quaternion.LookRotation(along.sqrMagnitude > 1e-10f ? along.normalized : Vector3.forward, Vector3.up);
+                        if (b.TooSmall(0.002f)) { b.Push(mid + Vector3.up * H * 0.47f, rot); b.AddBox(Vector3.zero, new Vector3(0.0003f, H * 0.9f, len), mesh); b.Pop(); }
+                        else
+                        {
+                            int cells = Mathf.Max(2, Mathf.RoundToInt(len / 0.003f));
+                            b.Push(mid + Vector3.up * H * 0.47f, rot);
+                            foreach (int dir in new[] { -1, 1 })
+                                for (int k = 0; k <= cells; k++)
+                                {
+                                    float z = -len / 2 + len * k / cells;
+                                    b.Push(new Vector3(0f, 0f, z), Quaternion.Euler(dir * 45f, 0f, 0f));
+                                    b.AddBox(Vector3.zero, new Vector3(0.00025f, H * 1.25f, 0.00025f), mesh);
+                                    b.Pop();
+                                }
+                            b.AddBox(new Vector3(0f, H * 0.47f, 0f), new Vector3(0.0006f, 0.0006f, len), steel);    // top rail
+                            b.AddBox(new Vector3(0f, -H * 0.45f, 0f), new Vector3(0.0005f, 0.0005f, len), steel);   // bottom wire
+                            b.Pop();
+                        }
+                        // Barbed wire along the arms, and a coil of razor wire.
+                        for (int s = 1; s <= 3; s++)
+                        {
+                            float o = s * 0.0022f;
+                            var a = p + Vector3.up * (H + o * 0.7f) + side * o * 0.7f; var c = q + Vector3.up * (H + o * 0.7f) + side * o * 0.7f;
+                            b.Push((a + c) * 0.5f, Quaternion.LookRotation((c - a).normalized, Vector3.up));
+                            b.AddBox(Vector3.zero, new Vector3(0.0003f, 0.0003f, (c - a).magnitude), wire);
+                            if (!b.TooSmall(0.002f)) for (float z = -(c - a).magnitude / 2; z < (c - a).magnitude / 2; z += 0.002f) b.AddBox(new Vector3(0f, 0f, z), new Vector3(0.0009f, 0.0009f, 0.0003f), wire);   // (the barbs)
+                            b.Pop();
+                        }
+                        if (!b.TooSmall(0.002f))
+                        {
+                            var c0 = p + Vector3.up * (H + 0.004f) + side * 0.002f; var c1 = q + Vector3.up * (H + 0.004f) + side * 0.002f;
+                            int loops = Mathf.Max(3, Mathf.RoundToInt(len / 0.003f));
+                            for (int k = 0; k < loops; k++)
+                            {
+                                var at = Vector3.Lerp(c0, c1, (k + 0.5f) / loops);
+                                b.Push(at, Quaternion.LookRotation((c1 - c0).normalized, Vector3.up) * Quaternion.Euler(0f, 0f, k * 37f));
+                                b.AddCylinder(new Vector3(0f, -0.0002f, 0f), 0.0024f, 0.0024f, 0.0004f, 8, Pal.Hex("#A9AEB4"), Pal.Hex("#A9AEB4"), false);
+                                b.Pop();
+                            }
                         }
                     }
                     break;
