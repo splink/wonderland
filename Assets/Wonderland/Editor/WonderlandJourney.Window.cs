@@ -18,7 +18,7 @@ namespace Wonderland.Editor
         {
             Report.Clear(); failures = 0;
             bool gridWas = BuildGrid.Snap;
-            try { WindowJourney(); }
+            try { WindowJourney(); StreamingJourney(); }
             catch (Exception e) { Fail("Exception: " + e); }
             finally { BuildGrid.Snap = gridWas; Shader.SetGlobalFloat("_WL_WindowOn", 0f); }
             Report.AppendLine(failures == 0 ? "RESULT: PASS" : $"RESULT: FAIL ({failures})");
@@ -96,8 +96,10 @@ namespace Wonderland.Editor
 
             // 5. Back home: everything there as it was.
             w.Navigate(new Vector2Int(-1, 0)); w.FinishSlide(); w.SendMessage("LateUpdate");
-            Check(w.WindowCenter == Vector2.zero && new Vector2(w.Buildings.Houses[0].x, w.Buildings.Houses[0].z) == houseAt && w.Track.Network.Edges[0].Layout.Points[0] == trackStart
-                && (w.PlacementPosition - placed).magnitude < 1e-4f, "Back west, home is exactly as it was");
+            var startNow = w.Track.Network.Edges[0].Layout.Points[0];
+            Check(w.WindowCenter == Vector2.zero && new Vector2(w.Buildings.Houses[0].x, w.Buildings.Houses[0].z) == houseAt && new Vector2(startNow.x, startNow.z) == new Vector2(trackStart.x, trackStart.z)
+                && Mathf.Abs(startNow.y - trackStart.y) < 0.001f && (w.PlacementPosition - placed).magnitude < 1e-4f,
+                $"Back west, home is exactly as it was (track start {trackStart.x:0.0000},{trackStart.y:0.0000},{trackStart.z:0.0000} -> {startNow.x:0.0000},{startNow.y:0.0000},{startNow.z:0.0000})");
 
             // 6. Every direction and back, many steps, and home.
             bool all = true;
@@ -180,6 +182,106 @@ namespace Wonderland.Editor
                 }
             if (notes.Count == 0) Report.AppendLine("INFO  No saved world Tests/Saves/headset-world-3.json to migrate");
             else Check(migrated == 1 && notes.Count == 1, $"An older island world becomes endless with everything it had ({string.Join("; ", notes)})");
+        }
+
+        /// <summary>
+        /// Streaming: the grid covers the window and no more however far it goes, the ground left behind is kept (only
+        /// where it was changed) and comes back exactly, saves write chunk files (only the changed ones), and undo goes one
+        /// action at a time - across navigation - without turning back the trains.
+        /// </summary>
+        private static void StreamingJourney()
+        {
+            var w = Endless("Streaming", 1100f);
+            var t = w.Terrain;
+            // A hill and a house at home.
+            w.Checkpoint();
+            for (int k = 0; k < 30; k++) w.TerrainStroke(TerrainBrush.Raise, new Vector3(0.6f, 0f, 0.6f), 0.3f, 1f, 0.05f, 0f);
+            float hill = t.SurfaceAt(0.6f, 0.6f);
+            string house = Put(w, 0, -0.7f, -0.6f);
+            int gridCells = t.Nx * t.Nz;
+
+            // Far east: the grid follows the window, home leaves it - and is kept.
+            int maxCells = 0;
+            for (int i = 0; i < 8; i++) { w.Navigate(new Vector2Int(1, 0)); w.FinishSlide(); maxCells = Mathf.Max(maxCells, t.Nx * t.Nz); }
+            float offGrid = t.SurfaceAt(0.6f, 0.6f);
+            Check(hill > TerrainField.BaseHeight + 0.02f && house == null && !t.Inside(0.6f, 0.6f) && Mathf.Abs(offGrid - hill) < 1e-5f,
+                $"12 m east, home is off the grid but its hill is still known ({hill * 100f:0.0} cm, off the grid {offGrid * 100f:0.0} cm)");
+            Check(maxCells <= 6 * 6 * 61 * 61 && t.Nx * t.Cell < 6.2f, $"The grid covers the window and no more ({t.Nx * t.Cell:0.0} x {t.Nz * t.Cell:0.0} m; at most {Mathf.Sqrt(maxCells) * t.Cell:0.0} m square; at home {Mathf.Sqrt(gridCells) * t.Cell:0.0} m)");
+            int kept = t.Store.Count;
+            Check(kept > 0 && kept <= 12, $"Only the land that was changed is kept ({kept} chunks of 1.2 m, after crossing {8 * 1.5f:0} m)");
+            Check(Mathf.Abs(t.SurfaceAt(40f, -25f) - TerrainField.BaseHeight) < 0.006f && t.LandAt(40f, -25f) && t.WaterLevelAt(40f, -25f) < 0f, "Land nobody has been to is fresh flat land");
+
+            // Back home: the hill exactly as it was.
+            w.NavigateHome(); w.FinishSlide();
+            Check(t.Inside(0.6f, 0.6f) && t.SurfaceAt(0.6f, 0.6f) == hill && w.Buildings.Houses.Count == 1, $"Back home, the hill is exactly as it was ({t.SurfaceAt(0.6f, 0.6f) * 100f:0.000} cm)");
+
+            // Saved to a file: chunk files beside it, the JSON without the ground; loaded again, all there.
+            string dir = Path.Combine(Path.GetTempPath(), "wonderland-stream-test");
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);
+            Directory.CreateDirectory(dir);
+            string path = Path.Combine(dir, "world.json");
+            w.Navigate(new Vector2Int(1, 1)); w.FinishSlide();
+            w.Save(path);
+            var files = Directory.GetFiles(WonderlandWorld.ChunkFolder(path), "*.chunk");
+            long jsonSize = new FileInfo(path).Length;
+            var times = new Dictionary<string, DateTime>(); foreach (var f in files) times[f] = File.GetLastWriteTimeUtc(f);
+            System.Threading.Thread.Sleep(1100);
+            w.Save(path);
+            int rewritten = 0; foreach (var f in files) if (File.GetLastWriteTimeUtc(f) != times[f]) rewritten++;
+            Check(files.Length > 0 && files.Length <= 16 && jsonSize < 400_000, $"Saved: {files.Length} chunk files beside a {jsonSize / 1024} KB file");
+            Check(rewritten == 0, $"Saving again with nothing changed writes no chunk again ({rewritten} rewritten)");
+            var loaded = new GameObject("Streaming loaded").AddComponent<WonderlandWorld>();
+            loaded.transform.position = new Vector3(1150f, 0f, 0f);
+            loaded.Load(Materials(), path);
+            loaded.UseWindow(true);
+            loaded.NavigateHome(); loaded.FinishSlide();
+            Check(loaded.Terrain.Endless && loaded.Terrain.SurfaceAt(0.6f, 0.6f) == hill && loaded.Buildings.Houses.Count == 1,
+                $"Loaded from its files, the world is all there ({loaded.Terrain.SurfaceAt(0.6f, 0.6f) * 100f:0.000} cm hill, {loaded.Buildings.Houses.Count} house)");
+            UnityEngine.Object.DestroyImmediate(loaded.gameObject);
+            // A broken chunk file doesn't break the world: that land is fresh again.
+            File.WriteAllText(files[0], "not a chunk");
+            var broken = new GameObject("Streaming broken").AddComponent<WonderlandWorld>();
+            broken.transform.position = new Vector3(1200f, 0f, 0f);
+            bool loads = true;
+            try { broken.Load(Materials(), path); broken.UseWindow(true); broken.NavigateHome(); broken.FinishSlide(); }
+            catch (Exception e) { loads = false; Report.AppendLine("INFO  " + e.Message); }
+            Check(loads && broken.Buildings.Houses.Count == 1, "A damaged chunk file costs only that piece of land, not the world");
+            UnityEngine.Object.DestroyImmediate(broken.gameObject);
+            Directory.Delete(dir, true);
+
+            // Undo, one action at a time, across navigation.
+            w.NavigateHome(); w.FinishSlide();
+            w.Checkpoint();
+            for (int k = 0; k < 30; k++) w.TerrainStroke(TerrainBrush.Raise, new Vector3(-0.6f, 0f, 0.6f), 0.25f, 1f, 0.05f, 0f);
+            float second = t.SurfaceAt(-0.6f, 0.6f);
+            w.Navigate(new Vector2Int(1, 0)); w.FinishSlide(); w.Navigate(new Vector2Int(1, 0)); w.FinishSlide();
+            string east = Put(w, 0, 3.4f, 0.4f);
+            bool undid1 = w.Undo();
+            int housesAfter1 = w.Buildings.Houses.Count;
+            bool undid2 = w.Undo();
+            float offAfterUndo = t.SurfaceAt(-0.6f, 0.6f);
+            bool redid = w.Redo();
+            float offAfterRedo = t.SurfaceAt(-0.6f, 0.6f);
+            Check(east == null && undid1 && housesAfter1 == 1 && undid2 && Mathf.Abs(offAfterUndo - TerrainField.BaseHeight) < 0.006f && redid && Mathf.Abs(offAfterRedo - second) < 1e-5f,
+                $"Undo takes back the last action, then the one before - even on land the window has left - and redo brings it back (house {east ?? "placed"}; hill {second * 100f:0.0} -> {offAfterUndo * 100f:0.0} -> {offAfterRedo * 100f:0.0} cm)");
+            w.NavigateHome(); w.FinishSlide();
+            Check(Mathf.Abs(t.SurfaceAt(-0.6f, 0.6f) - second) < 1e-5f, "Back home, the redone hill is there");
+            for (int i = 0; i < 14; i++) Put(w, 0, -1.2f + (i % 7) * 0.3f, -1.2f + (i / 7) * 0.3f);
+            int undone = 0; while (w.Undo()) undone++;
+            Check(undone == WonderlandWorld.MaxUndo, $"Undo goes back {WonderlandWorld.MaxUndo} actions ({undone})");
+
+            // A train keeps running through an undo that has nothing to do with it.
+            w.BuildTrack(Line(t, new Vector2(-1.3f, 1.1f), new Vector2(1.3f, 1.1f)));
+            w.PlaceTrain(t.PointAt(-0.8f, 1.1f), TrainKind.Passenger, Vector3.right, out var train);
+            for (int i = 0; i < 60; i++) w.Trains.Step(Dt);
+            int housesBefore = w.Buildings.Houses.Count;
+            string later = Put(w, 0, 0.9f, -1.0f);
+            for (int i = 0; i < 60; i++) w.Trains.Step(Dt);
+            var before = train != null ? w.Trains.LocoPosition(train) : Vector3.zero;
+            w.Undo();
+            bool same = train != null && w.Trains.Trains.Contains(train) && (w.Trains.LocoPosition(train) - before).magnitude < 0.002f;
+            Check(later == null && same && w.Buildings.Houses.Count == housesBefore, $"Undoing a house leaves the running train where it is ({(train != null && w.Trains.Trains.Contains(train) ? $"{(w.Trains.LocoPosition(train) - before).magnitude * 1000f:0.0} mm" : "train replaced")})");
+            UnityEngine.Object.DestroyImmediate(w.gameObject);
         }
 
         /// <summary>The window seen from a player's eye height: the cut edge, the arrows, half a window after going east.</summary>

@@ -109,7 +109,7 @@ namespace Wonderland
         public bool NavigateTo(Vector2 center)
         {
             center = new Vector2(Snap(center.x), Snap(center.y));
-            float reach = TerrainField.MaxReach - 0.5f;
+            float reach = Terrain.Store != null ? 5000f : TerrainField.MaxReach - 0.5f;   // (endless: far further than anyone walks)
             if (Mathf.Abs(center.x) + WindowSize.x * 0.5f > reach || Mathf.Abs(center.y) + WindowSize.y * 0.5f > reach) return false;
             if (center == WindowTarget && !Sliding) return true;
             // The land the window slides onto is there before it shows.

@@ -52,6 +52,12 @@ namespace Wonderland
         /// it - and land, edge and height are those of fresh flat land outside the grid.
         /// </summary>
         public bool Endless { get; private set; }
+        /// <summary>
+        /// The ground outside the grid (an endless world): the grid hands it the chunks it lets go of and takes them back
+        /// when it comes their way, and every query off the grid reads it - or fresh flat land where nothing was changed -
+        /// so the land is known everywhere (the trains and people out of sight walk and run on the real ground).
+        /// </summary>
+        public TerrainStore Store;
         /// <summary>The part of the world shown (local XZ): the pointer finds the land only inside it. Null: everywhere.</summary>
         public Rect? Window;
         /// <summary>1 where land may grow (free floor inside the room).</summary>
@@ -107,7 +113,7 @@ namespace Wonderland
             for (int x = 0; x < Nx; x++)
             {
                 int i = z * Nx + x;
-                InitCell(i, x, z, hills);
+                InitCell(i, x, z, hills || endless);   // (endless: fresh land everywhere is the same gently uneven land)
                 if (!endless) Land[i] = OrganicPatch(PatchSize, seed, LocalX(x), LocalZ(z));
             }
             if (hills)
@@ -186,6 +192,7 @@ namespace Wonderland
             if (cells == Cells) return;
             int oldNx = Nx, oldGX = GX0, oldGZ = GZ0;
             var oldRect = Cells;
+            if (Store != null) Evict(oldRect, cells);
             float[] h = Height, l = Land, lk = Lock, so = Soil, wa = Water, wl = WaterLevel;
             Allocate(cells);
             for (int z = 0; z < Nz; z++)
@@ -193,12 +200,177 @@ namespace Wonderland
             {
                 int i = z * Nx + x, gx = GX0 + x, gz = GZ0 + z;
                 InitCell(i, x, z);
-                if (gx < oldRect.xMin || gx >= oldRect.xMax || gz < oldRect.yMin || gz >= oldRect.yMax) continue;
+                if (gx < oldRect.xMin || gx >= oldRect.xMax || gz < oldRect.yMin || gz >= oldRect.yMax)
+                {
+                    // Coming back into the grid: the ground as it was left.
+                    if (Store != null && Store.TryGet(TerrainStore.ChunkOf(gx), TerrainStore.ChunkOf(gz), out var c))
+                    {
+                        int k = ChunkIndex(gx, gz);
+                        Height[i] = c.Height[k]; Land[i] = c.Land[k] / 255f; Lock[i] = c.Lock[k] / 255f; Soil[i] = c.Soil[k] / 255f; Water[i] = c.Water[k] / 255f; WaterLevel[i] = c.WaterLevel[k];
+                    }
+                    continue;
+                }
                 int j = (gz - oldGZ) * oldNx + (gx - oldGX);
                 Height[i] = h[j]; Land[i] = l[j]; Lock[i] = lk[j]; Soil[i] = so[j]; Water[i] = wa[j]; WaterLevel[i] = wl[j];
             }
             RecomputeEdge(All);
             UpdateSurface(All);
+        }
+
+        private static int ChunkIndex(int gx, int gz) =>
+            (gz - TerrainStore.ChunkOf(gz) * TerrainStore.Cells) * TerrainStore.Cells + (gx - TerrainStore.ChunkOf(gx) * TerrainStore.Cells);
+
+        /// <summary>Fresh land's height at a global cell (the same however the grid is cut).</summary>
+        private float FreshHeight(int gx, int gz) => BaseHeight + (Noise.Fbm2(gx * Cell * 4f + Seed, gz * Cell * 4f) - 0.5f) * 0.008f;
+
+        /// <summary>
+        /// Hands the store every chunk the grid is letting go of (the part of it leaving the grid; the rest as the store
+        /// had it, or fresh land) - unless it is fresh land through and through, which needs no keeping.
+        /// </summary>
+        private void Evict(RectInt from, RectInt to)
+        {
+            int n = TerrainStore.Cells;
+            for (int cz = TerrainStore.ChunkOf(from.yMin); cz <= TerrainStore.ChunkOf(from.yMax - 1); cz++)
+            for (int cx = TerrainStore.ChunkOf(from.xMin); cx <= TerrainStore.ChunkOf(from.xMax - 1); cx++)
+            {
+                var span = new RectInt(cx * n, cz * n, n, n);
+                bool leaving = false;
+                for (int gz = Mathf.Max(span.yMin, from.yMin); gz < Mathf.Min(span.yMax, from.yMax) && !leaving; gz++)
+                for (int gx = Mathf.Max(span.xMin, from.xMin); gx < Mathf.Min(span.xMax, from.xMax) && !leaving; gx++)
+                    leaving = !to.Contains(new Vector2Int(gx, gz));
+                if (!leaving) continue;
+                bool kept = Store.TryGet(cx, cz, out var c);
+                if (!kept) c = FreshChunk(cx, cz);
+                bool fresh = !kept, changed = false;
+                for (int gz = Mathf.Max(span.yMin, from.yMin); gz < Mathf.Min(span.yMax, from.yMax); gz++)
+                for (int gx = Mathf.Max(span.xMin, from.xMin); gx < Mathf.Min(span.xMax, from.xMax); gx++)
+                {
+                    int i = (gz - GZ0) * Nx + (gx - GX0), k = ChunkIndex(gx, gz);
+                    if (kept && !changed) changed = c.Height[k] != Height[i] || c.Surface[k] != Surface[i] || c.WaterLevel[k] != WaterLevel[i] || c.Land[k] != Byte(Land[i])
+                        || c.Lock[k] != Byte(Lock[i]) || c.Soil[k] != Byte(Soil[i]) || c.Water[k] != Byte(Water[i]);
+                    c.Height[k] = Height[i]; c.Surface[k] = Surface[i]; c.WaterLevel[k] = WaterLevel[i];
+                    c.Land[k] = Byte(Land[i]); c.Lock[k] = Byte(Lock[i]); c.Soil[k] = Byte(Soil[i]); c.Water[k] = Byte(Water[i]);
+                    if (fresh && (c.Lock[k] != 0 || c.Soil[k] != 0 || c.Water[k] != 0 || c.Land[k] != 255 || Mathf.Abs(Height[i] - FreshHeight(gx, gz)) > 1e-5f || Mathf.Abs(Surface[i] - Height[i]) > 1e-5f))
+                        fresh = false;
+                }
+                if (!fresh && (!kept || changed)) Store.Put(cx, cz, c);
+            }
+        }
+
+        private static byte Byte(float v) => (byte)Mathf.RoundToInt(Mathf.Clamp01(v) * 255f);
+
+        /// <summary>A chunk of fresh flat land.</summary>
+        private TerrainStore.Chunk FreshChunk(int cx, int cz)
+        {
+            var c = new TerrainStore.Chunk();
+            int n = TerrainStore.Cells;
+            for (int z = 0; z < n; z++)
+            for (int x = 0; x < n; x++)
+            {
+                int k = z * n + x;
+                c.Height[k] = c.Surface[k] = FreshHeight(cx * n + x, cz * n + z);
+                c.Land[k] = (byte)(Endless ? 255 : 0);
+            }
+            return c;
+        }
+
+        /// <summary>
+        /// Puts ground back as it was (undo): the cells of <paramref name="span"/> (global) that are in the grid into it,
+        /// the rest into the store. Returns the grid cells whose look may have changed (empty when nothing did).
+        /// </summary>
+        public RectInt WriteCells(RectInt span, float[] height, float[] waterLevel, byte[] land, byte[] locks, byte[] soil, byte[] water)
+        {
+            int x0 = int.MaxValue, z0 = int.MaxValue, x1 = int.MinValue, z1 = int.MinValue;
+            TerrainStore.Chunk chunk = null; int ccx = 0, ccz = 0; bool chunkChanged = false;
+            for (int gz = span.yMin; gz < span.yMax; gz++)
+            for (int gx = span.xMin; gx < span.xMax; gx++)
+            {
+                int k = (gz - span.yMin) * span.width + (gx - span.xMin);
+                if (gx >= GX0 && gx < GX0 + Nx && gz >= GZ0 && gz < GZ0 + Nz)
+                {
+                    int i = (gz - GZ0) * Nx + (gx - GX0);
+                    if (Height[i] == height[k] && WaterLevel[i] == waterLevel[k] && Byte(Land[i]) == land[k] && Byte(Lock[i]) == locks[k] && Byte(Soil[i]) == soil[k] && Byte(Water[i]) == water[k]) continue;
+                    Height[i] = height[k]; WaterLevel[i] = waterLevel[k];
+                    Land[i] = land[k] / 255f; Lock[i] = locks[k] / 255f; Soil[i] = soil[k] / 255f; Water[i] = water[k] / 255f;
+                    int x = gx - GX0, z = gz - GZ0;
+                    x0 = Mathf.Min(x0, x); z0 = Mathf.Min(z0, z); x1 = Mathf.Max(x1, x); z1 = Mathf.Max(z1, z);
+                }
+                else if (Store != null)
+                {
+                    if (chunk == null)
+                    {
+                        ccx = TerrainStore.ChunkOf(gx); ccz = TerrainStore.ChunkOf(gz);
+                        if (!Store.TryGet(ccx, ccz, out chunk)) chunk = FreshChunk(ccx, ccz);
+                    }
+                    int c = ChunkIndex(gx, gz);
+                    chunk.Height[c] = chunk.Surface[c] = height[k]; chunk.WaterLevel[c] = waterLevel[k];
+                    chunk.Land[c] = land[k]; chunk.Lock[c] = locks[k]; chunk.Soil[c] = soil[k]; chunk.Water[c] = water[k];
+                    chunkChanged = true;
+                }
+            }
+            if (chunkChanged) Store.Put(ccx, ccz, chunk);
+            if (x0 > x1) return new RectInt(0, 0, 0, 0);
+            var r = Expand(new RectInt(x0, z0, x1 - x0 + 1, z1 - z0 + 1), RimCells + 2);
+            RecomputeEdge(r);
+            UpdateSurface(r);
+            return r;
+        }
+
+        /// <summary>
+        /// Cuts the grid to <paramref name="cells"/> from the store alone (a world being loaded from its chunk files): what
+        /// the grid held before is dropped, not kept.
+        /// </summary>
+        public void LoadFromStore(RectInt cells)
+        {
+            Allocate(cells);
+            for (int z = 0; z < Nz; z++)
+            for (int x = 0; x < Nx; x++)
+            {
+                int i = z * Nx + x, gx = GX0 + x, gz = GZ0 + z;
+                InitCell(i, x, z);
+                if (Store != null && Store.TryGet(TerrainStore.ChunkOf(gx), TerrainStore.ChunkOf(gz), out var c))
+                {
+                    int k = ChunkIndex(gx, gz);
+                    Height[i] = c.Height[k]; Land[i] = c.Land[k] / 255f; Lock[i] = c.Lock[k] / 255f; Soil[i] = c.Soil[k] / 255f; Water[i] = c.Water[k] / 255f; WaterLevel[i] = c.WaterLevel[k];
+                }
+            }
+            RecomputeEdge(All);
+            UpdateSurface(All);
+        }
+
+        /// <summary>Hands the store the whole grid (before saving: the chunk files then hold everything).</summary>
+        public void FlushToStore()
+        {
+            if (Store == null) return;
+            var none = new RectInt(int.MinValue / 4, int.MinValue / 4, 1, 1);
+            Evict(Cells, none);
+        }
+
+        /// <summary>A global cell's value off the grid: what the store keeps, or fresh land's.</summary>
+        private float OffGrid(int gx, int gz, int what)
+        {
+            if (gx >= GX0 && gx < GX0 + Nx && gz >= GZ0 && gz < GZ0 + Nz)
+            {
+                int i = (gz - GZ0) * Nx + (gx - GX0);
+                return what switch { 0 => Surface[i], 1 => Land[i], 2 => Edge[i], 3 => Water[i], 4 => WaterLevel[i], _ => Lock[i] };
+            }
+            if (Store != null && Store.TryGet(TerrainStore.ChunkOf(gx), TerrainStore.ChunkOf(gz), out var c))
+            {
+                int k = ChunkIndex(gx, gz);
+                return what switch { 0 => c.Surface[k], 1 or 2 => c.Land[k] / 255f, 3 => c.Water[k] / 255f, 4 => c.WaterLevel[k], _ => c.Lock[k] / 255f };
+            }
+            return what switch { 0 => FreshHeight(gx, gz), 1 or 2 => Endless ? 1f : 0f, _ => 0f };
+        }
+
+        /// <summary>Bilinear off the grid (0 surface, 1 land, 2 edge, 3 water, 4 water level, 5 lock).</summary>
+        private float SampleOff(float x, float z, int what)
+        {
+            float fx = x / Cell, fz = z / Cell;
+            int gx = Mathf.FloorToInt(fx), gz = Mathf.FloorToInt(fz);
+            fx -= gx; fz -= gz;
+            float a = Mathf.Lerp(OffGrid(gx, gz, what), OffGrid(gx + 1, gz, what), fx);
+            float b = Mathf.Lerp(OffGrid(gx, gz + 1, what), OffGrid(gx + 1, gz + 1, what), fx);
+            return Mathf.Lerp(a, b, fz);
         }
 
         /// <summary>Global cell rectangle covering the local XZ rectangle <paramref name="r"/>.</summary>
@@ -367,17 +539,22 @@ namespace Wonderland
             return Mathf.Lerp(a, b, fz);
         }
 
-        public float SurfaceAt(float x, float z) => Bilinear(Surface, x, z);
-        public float EdgeAt(float x, float z) => Inside(x, z) ? Bilinear(Edge, x, z) : Endless ? 1f : 0f;
-        public bool LandAt(float x, float z) => Inside(x, z) ? Bilinear(Land, x, z) >= 0.5f : Endless;
+        public float SurfaceAt(float x, float z) => Inside(x, z) || !Endless ? Bilinear(Surface, x, z) : SampleOff(x, z, 0);
+        public float EdgeAt(float x, float z) => Inside(x, z) ? Bilinear(Edge, x, z) : Endless ? SampleOff(x, z, 2) : 0f;
+        public bool LandAt(float x, float z) => Inside(x, z) ? Bilinear(Land, x, z) >= 0.5f : Endless && SampleOff(x, z, 1) >= 0.5f;
         /// <summary>Whether a point is inside the window (or there is no window).</summary>
         public bool Shown(float x, float z) => Window is not Rect w || x >= w.xMin && x <= w.xMax && z >= w.yMin && z <= w.yMax;
-        public float WaterAt(float x, float z) => Inside(x, z) ? Bilinear(Water, x, z) : 0f;
+        public float WaterAt(float x, float z) => Inside(x, z) ? Bilinear(Water, x, z) : Endless ? SampleOff(x, z, 3) : 0f;
 
         /// <summary>Water surface height at a point (the level of the nearest water cell), or -1 when dry.</summary>
         public float WaterLevelAt(float x, float z)
         {
-            if (!Inside(x, z)) return -1f;
+            if (!Inside(x, z))
+            {
+                if (!Endless) return -1f;
+                int gx = Mathf.RoundToInt(x / Cell), gz = Mathf.RoundToInt(z / Cell);
+                return OffGrid(gx, gz, 3) >= 0.5f ? OffGrid(gx, gz, 4) : -1f;
+            }
             int ix = Mathf.Clamp(Mathf.RoundToInt((x - X0) / Cell), 0, Nx - 1), iz = Mathf.Clamp(Mathf.RoundToInt((z - Z0) / Cell), 0, Nz - 1);
             int i = iz * Nx + ix;
             return Water[i] >= 0.5f ? WaterLevel[i] : -1f;
@@ -430,7 +607,7 @@ namespace Wonderland
             UpdateSurface(r);
             return r;
         }
-        public float LockAt(float x, float z) => Inside(x, z) ? Bilinear(Lock, x, z) : 0f;
+        public float LockAt(float x, float z) => Inside(x, z) ? Bilinear(Lock, x, z) : Endless ? SampleOff(x, z, 5) : 0f;
         public Vector3 PointAt(float x, float z) => new(x, SurfaceAt(x, z), z);
 
         public Vector3 NormalAt(float x, float z)

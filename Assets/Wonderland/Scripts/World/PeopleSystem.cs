@@ -33,6 +33,8 @@ namespace Wonderland
         public const int MaxDecisionsPerStep = 1;     // choosing (and routing) is spread over frames
         public readonly List<PersonInstance> People = new();
         private readonly List<Agent> agents = new();
+        /// <summary>How many people live in the world.</summary>
+        public int Population => agents.Count;
         private WonderlandWorld world;
         private Material material;
         private float clock;

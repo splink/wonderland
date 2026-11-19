@@ -117,7 +117,7 @@ PASS  The village clock runs a day in 7.6 minutes (360 s of daylight, 97 s of ni
 PASS  The daily rhythm: shops in the morning, lunch at midday, the fair in the afternoon, the square in the evening
 PASS  A railway loop divides the land
 PASS  A village goes up around the railway (13/13 places, 8 residents moved in)
-PASS  The walk grid sees the railway as a divide (2 regions over 6972 cells, built in 22 ms)
+PASS  The walk grid sees the railway as a divide (2 regions over 6972 cells, built in 24 ms)
 PASS  Every resident knows their home (8/8; 2 live inside the loop)
 PASS  The baker lives over the bakery
 PASS  At two in the morning everyone is asleep at home (8/8)
@@ -140,8 +140,8 @@ PASS  ...get off at the far station and walk on to where they were going
 PASS  A lane with a level crossing joins the two sides (1 regions)
 PASS  ...and people from inside the loop walk over it to the village
 PASS  Save/load keeps the time (10:00), the clock speed, needs and homes (8/8)
-PASS  40 villagers: 0.30 ms per frame on average, worst 6.8 ms, 1.4 decisions/s, slowest decision 2.2 ms, places directory 0.4 ms (editor timing)
-PASS  After an edit the walk grid rebuilds over 31 frames (60 ms of work, worst frame 3.3 ms)
+PASS  40 villagers: 0.30 ms per frame on average, worst 6.4 ms, 1.4 decisions/s, slowest decision 2.2 ms, places directory 0.4 ms (editor timing)
+PASS  After an edit the walk grid rebuilds over 32 frames (59 ms of work, worst frame 3.2 ms)
 PASS  With no places at all, villagers wander by day and sleep under the stars at night
 PASS  A working village goes up (15/15 places, 10 villagers)
 PASS  Opening hours: the bakery opens at half six and shuts at six, the carousel stops in the evening, the fountain never closes
@@ -201,7 +201,7 @@ PASS  Save and load keep where the cameras look (71 / 15 degrees; loaded 71 / 15
 PASS  Erasing a camera leaves the other selected, still aimed where it was
 PASS  Sound: 4 sources near the crossroads (at most 8); off means silent; five barks in a row play once; a meow out of earshot isn't played
 PASS  Taking a road away re-routes or parks the traffic (worst 1.4 cm off the remaining roads)
-PASS  A busy town (40 villagers, 8 vehicles, 2 animals, sound and a camera feed): 0.28 ms per frame on average, worst 3.7 ms (editor timing, simulation only)
+PASS  A busy town (40 villagers, 8 vehicles, 2 animals, sound and a camera feed): 0.29 ms per frame on average, worst 7.6 ms (editor timing, simulation only)
 PASS  A road crosses the railway at a level crossing; homes on both sides have vehicles (4 places, 3 vehicles)
 PASS  Vehicles wait at the level crossing while a train goes by (413 waits, 6 trips), and are never on it with the train
 PASS  A loop drawn in two halves closes (1 pieces, 0 dead ends)
@@ -257,6 +257,29 @@ PASS  Three trains run the grid railway through its switches without touching or
 PASS  Save and load keep every piece, point and switch of the grid railway (11 pieces, 7 switches, 0.000 mm drift)
 PASS  A railway drawn freely before the grid takes a grid branch (a switch on its curve) and a grid line across it (1 switch, 2 crossings)
 PASS  Saved worlds load with their railway intact and its trains on the rails (7/7: headset-wonderland-world: 2 pieces, 1 switches, 4 trains; headset-world-1: 9 pieces, 6 switches, 7 trains; headset-world-3: 2 pieces, 1 switches, 2 trains; headset-world-4: 2 pieces, 1 switches, 4 trains; quest-world-1: 9 pieces, 6 switches, 7 trains; quest-world-latest: 2 pieces, 1 switches, 2 trains; quest-world: 5 pieces, 2 switches, 5 trains)
+PASS  Without a room the window is 3 x 3 m, at home ((3.00, 3.00))
+PASS  The land is flat everywhere, with no shore at the grid's edge (23.6 mm at the edge, 21.8 mm inside)
+PASS  The window has a clean cut edge round it (2420 vertices)
+PASS  The shaders draw just the window ((0.00, 0.00, 1.50, 1.50))
+PASS  Building at home works as before (house ok, track ok, street ok)
+PASS  Going east slides the window half its width; it stays where it is in the room (centre (1.50, 0.00), placement moved 0.000 mm)
+PASS  What is built keeps its place in the world and slides 1.5 m west in the room ((-1.36, 0.00, 0.63))
+PASS  The cut follows the window ((1.50, 0.00, 1.50, 1.50); pointer within (x:0.00, y:-1.50, width:3.00, height:3.00))
+PASS  The land the window slid onto is there
+PASS  The pointer finds the land only inside the window (outside: False, inside: True)
+PASS  The construction grid doesn't shift when the window moves
+PASS  The railway carries on across the old edge as one line (1 pieces, to x = 2.70; built)
+PASS  So does the street (1 roads, to x = 2.70; built)
+PASS  Building in the new land works (ok)
+PASS  Back west, home is exactly as it was (track start -1.2000,0.0231,0.5000 -> -1.2000,0.0228,0.5000)
+PASS  The window goes all eight ways and back
+PASS  Step after step north-east, there is always land under the window (20 steps to (30.00, 30.00); 30.0 m east, 30.0 m north of home)
+PASS  Home goes back to where the world started
+PASS  Eight arrows lie round the window, each found by pointing at it
+PASS  Lifted off the floor, the world stays at its height while it slides
+PASS  Saved and loaded: the land everywhere, the window where it was, everything built ((1.50, 0.00), 2 houses, 1 track pieces, 1 roads)
+PASS  In a 2.4 x 4 m room the window is 2.35 x 3.00 m
+PASS  An older island world becomes endless with everything it had (headset-world-3: 40 houses, 2 track pieces, 47 trees)
 PASS  A shower: rain falls from the clouds over the land (369 drops)
 PASS  Villagers know it is raining: the park is out, the museum is in
 PASS  14 clouds drift on the wind
@@ -368,5 +391,5 @@ PASS  Land still grows with bad room data
 PASS  Trimmed land grows back (1.19 -> 1.04 -> 1.16 m2)
 INFO  terrain: 6 chunk meshes, 17 k triangles, land 3.49 m2 of a 4.8 x 4.8 m grid
 INFO  static budget of this world: 346 mesh renderers (~draw calls per eye pass before batching, excl. shadows/UI), 1166 k triangles, ground cover 5538 tufts
-INFO  trees 131, forest chunks 30, houses 3, track 3.43 m, undo depth 9, journey simulated in 98.2 s wall time
+INFO  trees 131, forest chunks 30, houses 3, track 3.43 m, undo depth 9, journey simulated in 112.0 s wall time
 RESULT: PASS

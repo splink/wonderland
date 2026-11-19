@@ -19,8 +19,6 @@ namespace Wonderland
     /// </summary>
     public sealed partial class WonderlandWorld : MonoBehaviour
     {
-        public const int MaxUndo = 20;
-        private const long UndoBudgetBytes = 48L * 1024 * 1024;   // big grids keep fewer snapshots
         public TerrainField Terrain { get; private set; }
         public TerrainRenderer TerrainView { get; private set; }
         public ForestSystem Forest { get; private set; }
@@ -49,7 +47,6 @@ namespace Wonderland
         public int Seed { get; private set; }
         public int UndoDepth => undo.Count;
 
-        private readonly List<Snapshot> undo = new();
         private bool resitHouses;
         private RoomFootprint room;
         private RoomFootprint.Local roomLocal;
@@ -81,6 +78,7 @@ namespace Wonderland
             platforms = null;
             Clock = new VillageClock();
             Terrain = new TerrainField(size, seed, hills, null, endless);
+            if (endless) Terrain.Store = new TerrainStore();
             TerrainView = Child<TerrainRenderer>("Terrain");
             TerrainView.CutMaterial = materials.Lit;
             Navigator = Child<WindowNavigator>("Window arrows");
@@ -170,7 +168,7 @@ namespace Wonderland
             Animals.PerchAt = p => Paths.BarrierTop(p);
             Animals.GroundAt = p => People.GroundHeight(p);
             Animals.Voice += (p, kind) => Sounds.Cue(kind == AnimalKind.Dog ? SoundCue.Bark : SoundCue.Meow, p);
-            undo.Clear();
+            ClearUndo();
             FitToRoom();
         }
 
@@ -240,6 +238,7 @@ namespace Wonderland
         /// </summary>
         public bool EnsureGridCovers(Rect area)
         {
+            if (Terrain.Store != null) return SlideGrid(area);
             float margin = TerrainField.RimWidth + 0.1f;
             var need = Rect.MinMaxRect(area.xMin - margin, area.yMin - margin, area.xMax + margin, area.yMax + margin);
             if (need.xMin >= Terrain.X0 && need.xMax <= Terrain.XMax && need.yMin >= Terrain.Z0 && need.yMax <= Terrain.ZMax) return false;
@@ -303,130 +302,31 @@ namespace Wonderland
             if (Track.HasTrack) trackDirty = true;
         }
 
-        // ------------------------------------------------------------------ undo
-
-        private sealed class Snapshot
-        {
-            public RectInt Cells;
-            public float[] Height, WaterLevel;
-            public byte[] Land, Lock, Soil, Water;   // 0..1 masks, quantised: snapshots of a room-sized grid stay small
-            public TreeInstance[] Trees;
-            public HouseInstance[] Houses;
-            public AnimalInstance[] Animals;
-            public PersonInstance[] People;
-            public List<StreamPath> Streams;
-            public List<PathLine> Paths;
-            public List<BridgeChoice> Bridges;
-            public TrackNetwork.Data Network;
-            public List<TrainSystem.TrainData> TrainList;
-            public List<SignalInstance> Signals;
-            public SwitchMode Mode;
-            public BoatInstance[] Boats;
-            public List<TrafficSystem.PlacedVehicle> Cars;
-        }
-
-        private static byte[] Quantise(float[] v)
-        {
-            var b = new byte[v.Length];
-            for (int i = 0; i < v.Length; i++) b[i] = (byte)Mathf.RoundToInt(Mathf.Clamp01(v[i]) * 255f);
-            return b;
-        }
-
-        private static float[] Expand(byte[] b)
-        {
-            var v = new float[b.Length];
-            for (int i = 0; i < b.Length; i++) v[i] = b[i] / 255f;
-            return v;
-        }
-
-        private Snapshot Capture() => new()
-        {
-            Cells = Terrain.Cells,
-            Height = (float[])Terrain.Height.Clone(), Land = Quantise(Terrain.Land), Lock = Quantise(Terrain.Lock), Soil = Quantise(Terrain.Soil),
-            Water = Quantise(Terrain.Water), WaterLevel = (float[])Terrain.WaterLevel.Clone(),
-            Trees = Forest.Trees.ToArray(), Houses = Buildings.Houses.ToArray(), Animals = Animals.Animals.ToArray(), People = People.Export(),
-            Streams = CopyStreams(Streams.Streams), Paths = PathSystem.Copy(Paths.Lines), Bridges = new List<BridgeChoice>(Bridges.Choices),
-            Network = Track.Network.ToData(), TrainList = Trains.ToData(), Signals = new List<SignalInstance>(Track.Signals), Mode = Trains.Mode,
-            Boats = Boats.Export(),
-            Cars = Traffic.ExportPlaced(),
-        };
-
-        private static List<StreamPath> CopyStreams(List<StreamPath> streams)
-        {
-            var copy = new List<StreamPath>(streams.Count);
-            foreach (var st in streams) copy.Add(new StreamPath { points = new List<Vector3>(st.points), width = st.width });
-            return copy;
-        }
-
-        private void Restore(Snapshot s)
-        {
-            if (s.Cells != Terrain.Cells) { Terrain.Resize(s.Cells); TerrainView.Reinit(); Cover.Scatter(); }
-            Terrain.CopyFrom(s.Height, Expand(s.Land), Expand(s.Lock), Expand(s.Soil), s.Water != null ? Expand(s.Water) : null, s.WaterLevel);
-            TerrainView.RebuildAll();
-            WaterView.RebuildAll();
-            Forest.SetTrees(s.Trees);
-            Buildings.SetHouses(s.Houses);
-            ApplyPads();
-            Animals.SetAnimals(s.Animals ?? new AnimalInstance[0]);
-            People.SetPeople(s.People ?? new PersonInstance[0]);
-            Streams.SetStreams(s.Streams ?? new List<StreamPath>());
-            Paths.SetLines(s.Paths);
-            Track.Signals.Clear();
-            if (s.Signals != null) Track.Signals.AddRange(s.Signals);
-            Trains.Mode = s.Mode;
-            Track.SetNetwork(TrackNetwork.FromData(s.Network), WaterLevelFor, Terrain);
-            Trains.FromData(s.TrainList);
-            Bridges.Choices.Clear();
-            if (s.Bridges != null) Bridges.Choices.AddRange(s.Bridges);
-            RefreshBridges();
-            Boats.SetBoats(s.Boats);
-            Traffic.ImportPlaced(s.Cars);
-            RebuildStations();
-            Cover.MarkAllDirty();
-            if (room != null) FitToRoom();
-        }
-
-        /// <summary>Remember the world before an operation, so Undo can return to it.</summary>
-        public void Checkpoint()
-        {
-            undo.Add(Capture());
-            redo.Clear();            // a new step: what was undone stays undone
-            People.WorldChanged();   // whatever comes next changes where people can walk
-            long perSnapshot = (long)Terrain.Nx * Terrain.Nz * 12;
-            int limit = (int)Mathf.Clamp(UndoBudgetBytes / Mathf.Max(1L, perSnapshot), 4, MaxUndo);
-            while (undo.Count > limit) undo.RemoveAt(0);
-        }
-
-        /// <summary>Back one step (the player's Undo: it can be redone).</summary>
-        public bool Undo() => Undo(true);
-
-        /// <summary>Back one step; <paramref name="redoable"/> false for taking back a step that didn't work out (a refused railway).</summary>
-        public bool Undo(bool redoable)
-        {
-            if (undo.Count == 0) return false;
-            var s = undo[^1];
-            undo.RemoveAt(undo.Count - 1);
-            if (redoable) redo.Add(Capture());
-            Restore(s);
-            return true;
-        }
-
-        /// <summary>Forward again after an Undo (until something new is done).</summary>
-        public bool Redo()
-        {
-            if (redo.Count == 0) return false;
-            var s = redo[^1];
-            redo.RemoveAt(redo.Count - 1);
-            undo.Add(Capture());
-            Restore(s);
-            return true;
-        }
-
-        public bool CanUndo => undo.Count > 0;
-        public bool CanRedo => redo.Count > 0;
-        private readonly List<Snapshot> redo = new();
-
         // ------------------------------------------------------------------ terrain
+
+        /// <summary>
+        /// An endless world's grid: just the chunks under <paramref name="area"/> (and a margin), aligned with the store's
+        /// lattice - it shrinks as well as grows, handing the ground it lets go of to the store. Returns whether it changed.
+        /// </summary>
+        private bool SlideGrid(Rect area)
+        {
+            const float margin = 0.4f;
+            float size = TerrainStore.Cells * TerrainField.CellSize;
+            int cx0 = Mathf.FloorToInt((area.xMin - margin) / size), cx1 = Mathf.FloorToInt((area.xMax + margin) / size);
+            int cz0 = Mathf.FloorToInt((area.yMin - margin) / size), cz1 = Mathf.FloorToInt((area.yMax + margin) / size);
+            int n = TerrainStore.Cells;
+            var cells = new RectInt(cx0 * n, cz0 * n, (cx1 - cx0 + 1) * n + 1, (cz1 - cz0 + 1) * n + 1);
+            if (cells == Terrain.Cells) return false;
+            Terrain.Resize(cells);
+            TerrainView.Reinit();
+            if (WaterView != null) WaterView.RebuildAll();
+            Cover.Scatter();
+            Forest.MarkAllDirty();
+            Terrain.SetAllowed(null);
+            ApplyPads();
+            lastGround.Clear();
+            return true;
+        }
 
         public void TerrainStroke(TerrainBrush brush, Vector3 local, float radius, float strength, float dt, float flattenTarget)
         {
@@ -662,9 +562,12 @@ namespace Wonderland
         // ------------------------------------------------------------------ save / load
 
         [Serializable]
+        private sealed class ChunkText { public int x, z; public string data; }
+
+        [Serializable]
         private sealed class SaveData
         {
-            public int version = 7;
+            public int version = 8;
             public int gx, gz, nx, nz;       // v2: the grid in global cells
             public float size;               // v1: island size (its grid spanned exactly this); v2: starting patch size
             public int seed;
@@ -688,6 +591,8 @@ namespace Wonderland
             public List<TrafficSystem.PlacedVehicle> cars;   // v6+: the player's cars and lorries on the roads
             public bool endless;                       // v7: land everywhere, seen through the window
             public float windowX, windowZ;             // v7: where the window was (local XZ)
+            public bool chunked;                       // v8: the ground is in the chunk files beside the save, not in here
+            public List<ChunkText> chunks;             // v8: the land beyond the grid, in a save that is all in one piece
             public List<Vector3> track;                // v1 / v2: the single railway and its train
             public bool trackClosed, trainPlaced, trainRunning;
             public float trainS;
@@ -709,11 +614,16 @@ namespace Wonderland
             return values;
         }
 
-        public string Serialize() => JsonUtility.ToJson(new SaveData
+        /// <summary>The world as JSON, all in one piece (the land beyond the grid too).</summary>
+        public string Serialize() => Serialize(false);
+
+        /// <summary>The world as JSON; <paramref name="chunked"/>: without the ground, which goes in the chunk files.</summary>
+        private string Serialize(bool chunked) => JsonUtility.ToJson(new SaveData
         {
             gx = Terrain.GX0, gz = Terrain.GZ0, nx = Terrain.Nx, nz = Terrain.Nz, size = Terrain.PatchSize, seed = Seed,
-            height = Pack(Terrain.Height), land = Pack(Terrain.Land), locks = Pack(Terrain.Lock), soil = Pack(Terrain.Soil),
-            water = Pack(Terrain.Water), waterLevel = Pack(Terrain.WaterLevel),
+            height = chunked ? null : Pack(Terrain.Height), land = chunked ? null : Pack(Terrain.Land), locks = chunked ? null : Pack(Terrain.Lock), soil = chunked ? null : Pack(Terrain.Soil),
+            water = chunked ? null : Pack(Terrain.Water), waterLevel = chunked ? null : Pack(Terrain.WaterLevel),
+            chunked = chunked, chunks = chunked ? null : ChunkTexts(),
             trees = new List<TreeInstance>(Forest.Trees), houses = new List<HouseInstance>(Buildings.Houses), animals = new List<AnimalInstance>(Animals.Animals), people = new List<PersonInstance>(People.Export()), streams = CopyStreams(Streams.Streams), paths = PathSystem.Copy(Paths.Lines), bridges = new List<BridgeChoice>(Bridges.Choices),
             network = Track.Network.ToData(), trains = Trains.ToData(), signals = new List<SignalInstance>(Track.Signals), switchMode = (int)Trains.Mode,
             hour = Clock.Hour, day = Clock.Day, clockMode = (int)Clock.Mode,
@@ -724,13 +634,27 @@ namespace Wonderland
             endless = Terrain.Endless, windowX = WindowTarget.x, windowZ = WindowTarget.y,
         });
 
-        public void Deserialize(string json, WorldMaterials materials)
+        /// <summary>The land beyond the grid, chunk by chunk, as text.</summary>
+        private List<ChunkText> ChunkTexts()
+        {
+            if (Terrain.Store == null) return null;
+            var list = new List<ChunkText>();
+            foreach (var k in new List<long>(Terrain.Store.Keys)) { var (cx, cz) = TerrainStore.Unkey(k); list.Add(new ChunkText { x = cx, z = cz, data = Terrain.Store.Export(cx, cz) }); }
+            return list;
+        }
+
+        /// <summary>
+        /// Loads a world from JSON. An endless world saved to a file keeps its ground in chunk files in
+        /// <paramref name="chunkFolder"/> (read as the window comes to them).
+        /// </summary>
+        public void Deserialize(string json, WorldMaterials materials, string chunkFolder = null)
         {
             var d = JsonUtility.FromJson<SaveData>(json);
-            if (d == null || d.size <= 0f || (d.version < 1 || d.version > 7)) throw new InvalidDataException("Not a Wonderland save.");
-            float[] height, land, locks, soil, water = null, waterLevel = null;
+            if (d == null || d.size <= 0f || (d.version < 1 || d.version > 8)) throw new InvalidDataException("Not a Wonderland save.");
+            float[] height = null, land = null, locks = null, soil = null, water = null, waterLevel = null;
             RectInt cells;
-            if (d.version >= 2)
+            if (d.chunked) cells = new RectInt(d.gx, d.gz, d.nx, d.nz);
+            else if (d.version >= 2)
             {
                 cells = new RectInt(d.gx, d.gz, d.nx, d.nz);
                 int count = d.nx * d.nz;
@@ -756,16 +680,27 @@ namespace Wonderland
             }
             var keepRoom = room; room = null;   // fit once, after the data is in
             Create(d.size, materials, d.seed, false, d.endless);
+            // The ground: from the chunk files (and any carried in the save itself) and the saved grid.
+            if (Terrain.Store != null)
+            {
+                if (d.chunked && chunkFolder != null) Terrain.Store.Open(chunkFolder);
+                if (d.chunks != null) foreach (var c in d.chunks) Terrain.Store.Import(c.x, c.z, c.data);
+            }
+            Terrain.LoadFromStore(cells);
+            if (height != null) Terrain.CopyFrom(height, land, locks, soil, water, waterLevel);
+            var exact = (float[])Terrain.Height.Clone();   // (as saved: putting the houses back mustn't re-grade their pads)
+            TerrainView.Reinit();
+            Cover.Scatter();
             Restore(new Snapshot
             {
-                Cells = cells, Height = height, Land = Quantise(land), Lock = Quantise(locks), Soil = Quantise(soil),
-                Water = water != null ? Quantise(water) : null, WaterLevel = waterLevel, Trees = (d.trees ?? new List<TreeInstance>()).ToArray(),
+                Cells = cells, Trees = (d.trees ?? new List<TreeInstance>()).ToArray(),
                 Houses = (d.houses ?? new List<HouseInstance>()).ToArray(), Animals = (d.animals ?? new List<AnimalInstance>()).ToArray(), People = (d.people ?? new List<PersonInstance>()).ToArray(), Streams = d.streams, Paths = d.paths, Bridges = d.bridges,
                 Network = network, TrainList = trains, Signals = d.signals, Mode = (SwitchMode)Mathf.Clamp(d.switchMode, 0, 2),
                 Boats = d.boats?.ToArray(),
                 Cars = d.cars,
-            });
-            Terrain.CopyFrom(height, land, locks, soil, water, waterLevel);   // exact values (snapshots are quantised)
+            }, everything: true);
+            System.Array.Copy(exact, Terrain.Height, exact.Length);
+            Terrain.UpdateSurface(Terrain.All);
             if (d.hour >= 0f) { Clock.Hour = Mathf.Repeat(d.hour, 24f); Clock.Day = Mathf.Max(0, d.day); Clock.Mode = (ClockMode)Mathf.Clamp(d.clockMode, 0, 2); }
             People.SetSupplies(d.supplies);
             Cctv.Import(d.cameras);
@@ -784,12 +719,13 @@ namespace Wonderland
         {
             if (Terrain.Endless) return;
             Terrain.MakeEndless();
+            Terrain.Store ??= new TerrainStore();
             TerrainView.RebuildAll();
             WaterView.RebuildAll();
             Cover.Scatter();
             Forest.MarkAllDirty();
             ApplyPads();
-            undo.Clear();
+            ClearUndo();
             FitToRoom();
         }
 
@@ -826,11 +762,17 @@ namespace Wonderland
             }
         }
 
+        /// <summary>
+        /// Saves the world to <paramref name="path"/>. An endless world's ground goes into chunk files in a folder beside it
+        /// (only what changed since the last save is written; each file whole, then swapped in), the rest into the JSON.
+        /// </summary>
         public void Save(string path = null)
         {
             path ??= SavePath;
+            bool chunked = Terrain.Store != null;
+            if (chunked) { Terrain.FlushToStore(); Terrain.Store.Save(ChunkFolder(path)); }
             string tmp = path + ".tmp";
-            File.WriteAllText(tmp, Serialize());
+            File.WriteAllText(tmp, Serialize(chunked));
             if (File.Exists(path)) File.Delete(path);
             File.Move(tmp, path);
         }
@@ -865,6 +807,9 @@ namespace Wonderland
         /// <summary>Loads World <paramref name="n"/> in place of this one.</summary>
         public void LoadSlot(int n, WorldMaterials materials) { Load(materials, SlotPath(n)); CurrentSlot = n; }
 
-        public void Load(WorldMaterials materials, string path = null) => Deserialize(File.ReadAllText(path ?? SavePath), materials);
+        public void Load(WorldMaterials materials, string path = null) => Deserialize(File.ReadAllText(path ?? SavePath), materials, ChunkFolder(path ?? SavePath));
+
+        /// <summary>Where a save's terrain chunks are kept: a folder beside it.</summary>
+        public static string ChunkFolder(string path) => path + ".chunks";
     }
 }
