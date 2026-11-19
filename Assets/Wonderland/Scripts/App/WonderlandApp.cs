@@ -82,6 +82,7 @@ namespace Wonderland
 
             Tools = new GameObject("Tools").AddComponent<ToolController>();
             Tools.Init(World, Palette, Rig != null ? Rig.rightControllerAnchor : null);
+            Tools.LeftHand = Rig != null ? Rig.leftControllerAnchor : null;
             Tools.Head = Rig != null ? Rig.centerEyeAnchor : null;
             StartCoroutine(HouseFactory.WarmPreviews());   // (the library's tile models, ready before they are asked for)
             // The map above the palette: the whole world from above, the trains and cars moving on it.
@@ -91,8 +92,10 @@ namespace Wonderland
             map.Init(World, Materials.Screen);
             Tools.Map = map;
             Tools.ResetRequested = () => { World.Create(StartSize, Materials, endless: true); World.UseWindow(true); WonderlandWorld.CurrentSlot = 0; Tools.SelectTool(Tool.Terrain); Tools.Say("A fresh landscape - Save it as a world to keep it"); };
-            Palette.AddGlobal("Undo", () => Tools.Say(World.Undo() ? "Undone (B does this too)" : "Nothing to undo"));
-            Palette.AddGlobal("Redo", () => Tools.Say(World.Redo() ? "Redone" : "Nothing to redo"));
+            // The bottom bar in three clusters: editing (Undo, Redo), the world as a whole (World, Home), worlds (save,
+            // load, new); Help and Settings sit in the header.
+            Palette.AddGlobal(new PaletteUI.Option("Undo", false, () => Tools.Say(World.Undo() ? "Undone (B does this too)" : "Nothing to undo")) { Kind = OptionKind.Action, Tip = "Takes back the last change. B on the right controller does this too." }, 0);
+            Palette.AddGlobal(new PaletteUI.Option("Redo", false, () => Tools.Say(World.Redo() ? "Redone" : "Nothing to redo")) { Kind = OptionKind.Action, Tip = "Puts back what Undo took back." }, 0);
             // Several worlds: Save and Load list World 1-6; the one being played is kept up to date by the autosave.
             Tools.SaveWorld = n =>
             {
@@ -104,10 +107,9 @@ namespace Wonderland
                 try { World.LoadSlot(n, Materials); World.MakeEndless(); World.UseWindow(true); World.Save(); Tools.SelectTool(Tool.Terrain); Tools.Say($"World {n} loaded"); }
                 catch (System.Exception e) { Tools.Say($"Could not load World {n}: " + e.Message); }
             };
-            Palette.AddGlobal("Save", () => Tools.ShowWorlds(true));
-            Palette.AddGlobal("Load", () => Tools.ShowWorlds(false));
-            Palette.AddGlobal("World", Tools.ToggleMoving);
-            Palette.AddGlobal("Home", () => Tools.Say(World.WindowTarget == Vector2.zero ? "Already home, where the world started" : World.NavigateHome() ? "Back home, where the world started" : "Can't get home from here"));
+            Palette.AddGlobal(new PaletteUI.Option("World", false, Tools.ToggleMoving) { Kind = OptionKind.Open, Tip = "The world as a whole: move it in the room, lift it, turn it, its window's size and scale. (To turn it quickly: hold both grips and twist.)" }, 1);
+            Palette.AddGlobal(new PaletteUI.Option("Home", false, () => Tools.Say(World.WindowTarget == Vector2.zero ? "Already home, where the world started" : World.NavigateHome() ? "Back home, where the world started" : "Can't get home from here")) { Kind = OptionKind.Action, Tip = "Scrolls back to where the world started." }, 1);
+            Palette.AddGlobal(new PaletteUI.Option("Worlds", false, Tools.ToggleWorlds) { Kind = OptionKind.Open, Tip = "Save this world, load another, or start a new one." }, 2);
             // Sound, tips, labels, the grid, stats, performance and New world: all under Settings.
             Tools.SoundState = () => SoundSystem.Setting switch { SoundSetting.On => "On", SoundSetting.Quiet => "Quiet", _ => "Off" };
             Tools.CycleSound = () =>
@@ -115,8 +117,8 @@ namespace Wonderland
                 SoundSystem.Setting = (SoundSetting)(((int)SoundSystem.Setting + 1) % 3);
                 Tools.Say(SoundSystem.Setting switch { SoundSetting.On => "Sound on", SoundSetting.Quiet => "Sound quiet", _ => "Sound off" });
             };
-            Palette.AddGlobal("Help", Tools.ToggleHelp);
-            Palette.AddGlobal("Settings", Tools.ToggleSettings);
+            Palette.AddHeaderButton(new PaletteUI.Option("Help", false, Tools.ToggleHelp) { Kind = OptionKind.Open, Tip = "How everything works, topic by topic." });
+            Palette.AddHeaderButton(new PaletteUI.Option("Settings", false, Tools.ToggleSettings) { Kind = OptionKind.Open, Tip = "Sound, tips, labels, the grid, stats and performance." });
             Tools.Perf = GetComponent<PerfLog>();
             // The little figures (2-3 cm) are not drawn further than 3 m from the eyes: barely a pixel there, and in a big
             // world over a thousand draws saved (the CCTV camera still sees them).

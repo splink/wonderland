@@ -15,7 +15,7 @@ namespace Wonderland
     {
         public WonderlandWorld World;
         public PaletteUI Palette;
-        public Transform RightHand;
+        public Transform RightHand, LeftHand;
         /// <summary>The player's head (scrolling goes the way they face); the main camera when not set.</summary>
         public Transform Head;
         public System.Func<PointerInput> InputOverride;   // tests / desktop
@@ -248,150 +248,6 @@ namespace Wonderland
         public void Say(string text, float seconds = 3f) { message = text; messageUntil = Time.time + seconds; }
         public string LastMessage => message;
 
-        private void RefreshOptions()
-        {
-            var o = new List<PaletteUI.Option>();
-            var items = new List<PaletteUI.Option>();
-            switch (Tool)
-            {
-                case Tool.Terrain:
-                    foreach (TerrainBrush m in System.Enum.GetValues(typeof(TerrainBrush)))
-                    {
-                        var mode = m;
-                        o.Add(new PaletteUI.Option(m.ToString(), TerrainMode == m, () => { TerrainMode = mode; RefreshOptions(); }));
-                    }
-                    break;
-                case Tool.Water:
-                    o.Add(new PaletteUI.Option("Pond", !Draining && !StreamMode, () => { Draining = false; StreamMode = false; RefreshOptions(); }));
-                    o.Add(new PaletteUI.Option("Stream", StreamMode, () => { Draining = false; StreamMode = true; RefreshOptions(); }));
-                    o.Add(new PaletteUI.Option("Drain", Draining, () => { Draining = true; StreamMode = false; RefreshOptions(); }));
-                    if (StreamMode)
-                    {
-                        // How wide: a creek, a stream (neither chip lit), or a broad river.
-                        o.Add(new PaletteUI.Option("Creek", StreamWidth < 1f, () => { StreamWidth = StreamWidth < 1f ? 1f : 0.6f; Say(StreamWidth < 1f ? "Creeks: narrow and shallow" : "Streams"); RefreshOptions(); }));
-                        o.Add(new PaletteUI.Option("River", StreamWidth > 1f, () => { StreamWidth = StreamWidth > 1f ? 1f : 2.2f; Say(StreamWidth > 1f ? "Rivers: broad and deep - lead one into a lake" : "Streams"); RefreshOptions(); }));
-                    }
-                    else if (!Draining)
-                        o.Add(new PaletteUI.Option("Lake", Radius > 0.3f, () => { radius[(int)Tool.Water] = Radius > 0.3f ? 0.12f : 0.38f; Say(Radius > 0.3f ? "Lake: a big brush for open water - room for ships" : "Pond"); RefreshOptions(); }));
-                    break;
-                case Tool.Forest:
-                    o.Add(new PaletteUI.Option("Paint", !ForestErase, () => { ForestErase = false; RefreshOptions(); }));
-                    o.Add(new PaletteUI.Option("Erase", ForestErase, () => { ForestErase = true; RefreshOptions(); }));
-                    o.Add(new PaletteUI.Option("Sparse", density < 0.45f, () => { density = 0.3f; RefreshOptions(); }));
-                    o.Add(new PaletteUI.Option("Dense", density > 0.75f, () => { density = 0.95f; RefreshOptions(); }));
-                    break;
-                case Tool.Track:
-                    o.Add(new PaletteUI.Option("Draw", !SignalMode, () => { SignalMode = false; RefreshOptions(); }));
-                    o.Add(new PaletteUI.Option("Signal", SignalMode, () => { SignalMode = true; RefreshOptions(); }));
-                    o.Add(GridChip());
-                    o.Add(new PaletteUI.Option("Remove all", false, () => { if (World.Track.HasTrack) { World.RemoveTrack(); Say("Railway removed"); RefreshOptions(); } }, World.Track.HasTrack));
-                    break;
-                case Tool.Train:
-                    foreach (var (kind, label) in new[] { (TrainKind.Passenger, "Steam"), (TrainKind.Express, "Express"), (TrainKind.Tank, "Tank"), (TrainKind.Goods, "Goods"), (TrainKind.Railcar, "Railcar") })
-                    {
-                        var k = kind;
-                        items.Add(new PaletteUI.Option(label, TrainKind == k, () => { TrainKind = k; RefreshOptions(); }));   // (the second row: which train)
-                    }
-                    // Carriages for the train last pointed at.
-                    var chosen = lastTrain != null && World.Trains.Trains.Contains(lastTrain) ? lastTrain : null;
-                    o.Add(new PaletteUI.Option("- Carriage", false, () => Couple(chosen, -1), chosen != null));
-                    o.Add(new PaletteUI.Option("+ Carriage", false, () => Couple(chosen, 1), chosen != null));
-                    bool running = World.Trains.AnyRunning;
-                    o.Add(new PaletteUI.Option(running ? "Stop all" : "Start all", running, () => { ToggleAll(); }, World.Trains.Any));
-                    o.Add(new PaletteUI.Option("Switches: " + (World.Trains.Mode == SwitchMode.Explore ? "Spread" : World.Trains.Mode.ToString()), false, () =>
-                    {
-                        World.Trains.Mode = (SwitchMode)(((int)World.Trains.Mode + 1) % 3);
-                        Say(World.Trains.Mode switch
-                        {
-                            SwitchMode.Explore => "Switches spread the trains: each goes the way with fewer trains ahead, so they cover the whole railway",
-                            SwitchMode.Random => "Switches pick a way at random",
-                            _ => "Switches stay as you set them",
-                        });
-                        RefreshOptions();
-                    }));
-                    break;
-                case Tool.Houses:
-                    // The library: a category, then a family (the second row), then the object (its tile beside the palette).
-                    foreach (var cat in Catalog.CategoryOrder)
-                    {
-                        var c = cat;
-                        o.Add(new PaletteUI.Option(Catalog.CategoryNames[(int)c], BuildCategory == c, () => SelectCategory(c)));
-                    }
-                    var families = Catalog.Families(BuildCategory);
-                    if (!families.Contains(BuildFamily)) BuildFamily = Catalog.Get(HouseVariant).Category == BuildCategory ? Catalog.Get(HouseVariant).Family : families[0];
-                    foreach (var family in families)
-                    {
-                        string f = family;
-                        items.Add(new PaletteUI.Option(f, BuildFamily == f, () => SelectFamily(f)));
-                    }
-                    var tiles = new List<PaletteUI.LibraryTile>();
-                    foreach (int id in Catalog.InFamily(BuildCategory, BuildFamily))
-                    {
-                        int v = id;
-                        tiles.Add(new PaletteUI.LibraryTile { Id = id, Label = Catalog.Get(id).Name, Model = HouseFactory.Preview(id), Selected = HouseVariant == id && !carrying,
-                            OnClick = () => { HouseVariant = v; carrying = false; houseStyle %= Mathf.Max(1, Catalog.Get(v).Styles); RefreshOptions(); } });
-                    }
-                    Palette.ShowLibrary($"{Catalog.CategoryNames[(int)BuildCategory]} · {BuildFamily}", tiles, Catalog.Info);
-                    break;
-                case Tool.Decor:
-                    o.Add(new PaletteUI.Option("People", DecorKind == Villager, () => { DecorKind = Villager; RefreshOptions(); }));
-                    for (int k = 0; k < AnimalFactory.KindCount; k++)
-                    {
-                        int kind = k;
-                        o.Add(new PaletteUI.Option(AnimalFactory.Names[k], DecorKind == k, () => { DecorKind = kind; RefreshOptions(); }));
-                    }
-                    // The village clock: let the days go by, hurry them, or stop the time of day.
-                    foreach (var (mode, label, said) in new[] { (ClockMode.Normal, "Days pass", "Days pass - the village keeps its routine"), (ClockMode.Fast, "Fast days", "Fast days - watch a whole day go by"), (ClockMode.Paused, "Stop time", "Time stands still - it stays") })
-                    {
-                        var m = mode; string s = said;
-                        items.Add(new PaletteUI.Option(label, World.Clock.Mode == m, () => { World.Clock.Mode = m; Say(m == ClockMode.Paused ? $"{s} {World.Clock.Label} ({VillageClock.PartName(World.Clock.Part)})" : s); RefreshOptions(); }));
-                    }
-                    // A fête: the whole village gathers (the first decider from outside the villagers' own routine).
-                    items.Add(new PaletteUI.Option("Fête", World.Fete != null, () => { Say(World.HoldFete(), 4f); RefreshOptions(); }));
-                    // An emergency now (the ambulance, police or fire engine sets off), and the clouds on or off.
-                    items.Add(new PaletteUI.Option("Emergency", World.Traffic.Active != null, () => { Say(World.Traffic.RaiseIncident(), 4f); RefreshOptions(); }));
-                    items.Add(new PaletteUI.Option("Clouds", World.Sky.Shown, () => { World.Sky.Shown = !World.Sky.Shown; Say(World.Sky.Shown ? "Clouds drift over the land" : "Clear skies"); RefreshOptions(); }));
-                    items.Add(new PaletteUI.Option("Rain", World.Sky.Raining, () => { if (!World.Sky.Shown) World.Sky.Shown = true; Say(World.Sky.ToggleRain()); RefreshOptions(); }));
-                    break;
-                case Tool.Select:
-                {
-                    // The cameras (and the trains' cameras): a chip opens one, its picture on the monitor.
-                    var cctv = World.Cctv;
-                    for (int k = 0; k < cctv.Feeds && k < 10; k++)
-                    {
-                        int cam = k;
-                        bool on = Watching(cam);
-                        o.Add(new PaletteUI.Option(k < cctv.Count ? $"Cam {k + 1}" : $"Train {k - cctv.Count + 1}", on, () => { OpenFeed(cam); RefreshOptions(); }));
-                    }
-                    break;
-                }
-                case Tool.Paths:
-                    foreach (var kind in WayOrder)
-                    {
-                        var k = kind;
-                        o.Add(new PaletteUI.Option(PathSystem.Names[(int)k], PathKind == k && PlacingVehicle == null, () => { PathKind = k; PlacingVehicle = null; RefreshOptions(); }));
-                    }
-                    o.Add(GridChip());
-                    // The second row: cars and lorries to put on the roads.
-                    foreach (var vk in VehicleFactory.Placeable)
-                    {
-                        var k = vk;
-                        items.Add(new PaletteUI.Option(VehicleName(k), PlacingVehicle == k, () => { PlacingVehicle = PlacingVehicle == k ? null : k; RefreshOptions(); Say(PlacingVehicle != null ? $"Point at a road and pull the trigger: a {VehicleName(k).ToLower()} drives off about the town" : "Draw roads"); }));
-                    }
-                    break;
-                case Tool.Eraser:
-                    o.Add(new PaletteUI.Option("Tap: anything you built", false, null));
-                    o.Add(new PaletteUI.Option("Hold: trees", false, null));
-                    break;
-            }
-            if (worldMenu != 0) { items.Clear(); WorldItems(items); }
-            Palette.SetOptions(o);
-            Palette.SetItems(items);
-            if (Tool != Tool.Houses) Palette.HideLibrary();
-            if (infoMode == 2) ShowHelp();
-            Palette.SetTitle(WonderlandWorld.CurrentSlot > 0 ? $"Wonderland · World {WonderlandWorld.CurrentSlot}" : "Wonderland");
-        }
-
         /// <summary>A: start / stop the train being pointed at, or all trains.</summary>
         private void ToggleTrain()
         {
@@ -478,7 +334,7 @@ namespace Wonderland
         private void Update()
         {
             if (World == null || Palette == null) return;
-            var input = InputOverride != null ? InputOverride() : quest.Read(RightHand);
+            var input = InputOverride != null ? InputOverride() : quest.Read(RightHand, LeftHand);
             if (resetArmed && Time.time > resetUntil) resetArmed = false;
             if (World.People.NewsVersion != newsSeen) { newsSeen = World.People.NewsVersion; if (World.People.News != null) Say(World.People.News, 4f); }
             Palette.SetStatus(Time.time < messageUntil ? message : "");
@@ -494,6 +350,7 @@ namespace Wonderland
             UpdateTips(dt);
             Palette.SetHint(PlacingWorld ? "Point at the floor and pull the trigger to put the world there  ·  stick left/right: turn it, up/down: raise or lower it" : Peek() ?? Hint());
             UpdateInspection(dt);
+            if (Twist(input)) return;   // (both grips: the world turns with the hands, nothing else this frame)
             if (PlacingWorld) TurnAndLift(input.Stick + input.LeftStick, dt);
             else if (input.Grip && !Holding) GripTurn(input, dt);
             else { GripTurn(input, dt); Scroll(input.Stick, dt); }
@@ -811,12 +668,12 @@ namespace Wonderland
         /// <summary>The Grid chip (Roads, Track and Build tools): snapping to the building grid on or off.</summary>
         private const string GridOnSaid = "Grid on: roads and railway come out straight and square, curves are standard, buildings line up along the roads";
 
-        private PaletteUI.Option GridChip() => new(BuildGrid.Snap ? "Grid" : "No grid", BuildGrid.Snap, () =>
+        private PaletteUI.Option GridChip() => new("Grid", BuildGrid.Snap, () =>
         {
             BuildGrid.Snap = !BuildGrid.Snap;
             Say(BuildGrid.Snap ? GridOnSaid : "Grid off: draw and place freely");
             RefreshOptions();
-        });
+        }) { Kind = OptionKind.Toggle, Tip = "Grid on: roads and railway come out straight and square with standard curves, and buildings line up along the roads. Off: draw and place freely." };
 
         /// <summary>The order of the Roads tool's chips: roads first, then country ways, then fences.</summary>
         private static readonly PathKind[] WayOrder = { PathKind.Road, PathKind.Highway, PathKind.Lane, PathKind.ServiceRoad, PathKind.Footpath, PathKind.Trail, PathKind.Fence, PathKind.Hedge, PathKind.Wall, PathKind.SecurityFence };
@@ -1294,23 +1151,25 @@ namespace Wonderland
         public void StartMoving()
         {
             PlacingWorld = true;
+            worldTab = 0;
             if (infoMode != 5) infoMode = 5;
             ShowWorldPanel();
             Say("Point where the world should lie and pull the trigger to put it down", 5f);
         }
 
+        // The World panel's tab: 0 place, 1 turn, 2 height, 3 size.
+        private int worldTab;
+
+        /// <summary>
+        /// The World panel, in four tabs - Place (move it in the room, or go home), Turn, Height and Size (its window and
+        /// scale) - each with a word on what it does and only its own buttons.
+        /// </summary>
         private void ShowWorldPanel()
         {
             string height = World.Lift < 0.005f ? "on the floor" : $"{World.Lift * 100f:0} cm above the floor";
-            float scale = PerfSettings.WorldScale;
             var size = World.WindowSize * World.transform.lossyScale.x;
-            var body = new CardText(26).Section("The world")
-                .Row("Window", $"{size.x:0.0} x {size.y:0.0} m" + (World.WindowLimit != null ? $" ({World.WindowLimit})" : ""))
-                .Row("Scale", $"{scale * 100f:0} % - smaller shows more of the world")
-                .Row("Height", height)
-                .Row("Move", PlacingWorld ? "point at the floor - trigger puts it down" : "Move, then point where it should go")
-                .Row("Turn", "the buttons, or hold grip and push the right stick sideways");
-            Palette.ShowInfo("World", PlacingWorld ? "moving - trigger on the floor puts it down" : height, body.ToString(), CloseWorldPanel);
+            var body = new CardText(30);
+            var o = new List<PaletteUI.Option>();
             void Lift(float to)
             {
                 var p = World.PlacementPosition;
@@ -1321,28 +1180,52 @@ namespace Wonderland
                 ShowWorldPanel();
             }
             void Turn(float degrees) { TurnWorld(degrees); if (!PlacingWorld) WorldPlaced?.Invoke(); ShowWorldPanel(); }
-            Palette.SetInfoButtons(new[]
+            switch (worldTab)
             {
-                new PaletteUI.Option(PlacingWorld ? "Put it here" : "Move", PlacingWorld, () => { if (PlacingWorld) FinishMoving(); else StartMoving(); }),
-                new PaletteUI.Option($"Window: {WonderlandWorld.MaxWindow:0.#} m", false, () =>
-                {
-                    var sizes = WonderlandWorld.WindowSizes;
-                    int at = System.Array.FindIndex(sizes, x => Mathf.Abs(x - WonderlandWorld.MaxWindow) < 0.01f);
-                    WonderlandWorld.MaxWindow = sizes[(at + 1) % sizes.Length];
-                    World.FitToRoom();
-                    var now = World.WindowSize * World.transform.lossyScale.x;
-                    Say($"The window: {now.x:0.0} x {now.y:0.0} m" + (World.WindowLimit != null ? $" - {World.WindowLimit}" : ""));
-                    ShowWorldPanel();
-                }),
-                new PaletteUI.Option($"Scale: {PerfSettings.WorldScale * 100f:0} %", false, () => { PerfSettings.WorldSize.Next(); Say($"The world at {PerfSettings.WorldScale * 100f:0} % - its window stays the same size in the room"); ShowWorldPanel(); }),
-                new PaletteUI.Option("Turn left", false, () => Turn(-15f)),
-                new PaletteUI.Option("Turn right", false, () => Turn(15f)),
-                new PaletteUI.Option("Higher", false, () => Lift(World.Lift + 0.05f)),
-                new PaletteUI.Option("Lower", false, () => Lift(World.Lift - 0.05f)),
-                new PaletteUI.Option("Table", false, () => Lift(0.72f)),
-                new PaletteUI.Option("Floor", World.Lift < 0.005f, () => Lift(0f)),
-                new PaletteUI.Option("Done", false, CloseWorldPanel),
-            });
+                case 0:
+                    body.Section("Place").Line(PlacingWorld ? "Point at the floor where the world should lie and pull the trigger." : "Move the world to another spot in your room: press Move, point at the floor, pull the trigger.")
+                        .Row("Now", height);
+                    o.Add(new PaletteUI.Option(PlacingWorld ? "Put it here" : "Move", PlacingWorld, () => { if (PlacingWorld) FinishMoving(); else StartMoving(); }) { Kind = OptionKind.Action, Tip = "The world follows the pointer over the floor; pull the trigger to put it down there." });
+                    break;
+                case 1:
+                    body.Section("Turn").Line("Hold BOTH grips (the side buttons on both controllers) and twist your hands, as if turning a model on a table. Let go to put it down.")
+                        .Line("Or turn it a step at a time:", true);
+                    o.Add(new PaletteUI.Option("Turn left", false, () => Turn(-15f)) { Kind = OptionKind.Action, Tip = "Turns the world 15 degrees anticlockwise." });
+                    o.Add(new PaletteUI.Option("Turn right", false, () => Turn(15f)) { Kind = OptionKind.Action, Tip = "Turns the world 15 degrees clockwise." });
+                    break;
+                case 2:
+                    body.Section("Height").Line("On the floor the whole room is the world; at table height you build standing up.").Row("Now", height);
+                    o.Add(new PaletteUI.Option("Floor", World.Lift < 0.005f, () => Lift(0f)) { Tip = "On the floor." });
+                    o.Add(new PaletteUI.Option("Table", World.Lift > 0.7f && World.Lift < 0.74f, () => Lift(0.72f)) { Tip = "At table height, 72 cm." });
+                    o.Add(new PaletteUI.Option("Lower", false, () => Lift(World.Lift - 0.05f)) { Kind = OptionKind.Action, Tip = "5 cm lower." });
+                    o.Add(new PaletteUI.Option("Higher", false, () => Lift(World.Lift + 0.05f)) { Kind = OptionKind.Action, Tip = "5 cm higher." });
+                    break;
+                default:
+                    body.Section("Size").Row("Window", $"{size.x:0.0} x {size.y:0.0} m: how much of your room the world fills" + (World.WindowLimit != null ? $" ({World.WindowLimit})" : ""))
+                        .Row("Scale", $"{PerfSettings.WorldScale * 100f:0} %: smaller shows more of the world in the same window");
+                    o.Add(new PaletteUI.Option($"Window: {WonderlandWorld.MaxWindow:0.#} m", false, () =>
+                    {
+                        var sizes = WonderlandWorld.WindowSizes;
+                        int at = System.Array.FindIndex(sizes, x => Mathf.Abs(x - WonderlandWorld.MaxWindow) < 0.01f);
+                        WonderlandWorld.MaxWindow = sizes[(at + 1) % sizes.Length];
+                        World.FitToRoom();
+                        var now = World.WindowSize * World.transform.lossyScale.x;
+                        Say($"The window: {now.x:0.0} x {now.y:0.0} m" + (World.WindowLimit != null ? $" - {World.WindowLimit}" : ""));
+                        ShowWorldPanel();
+                    }) { Kind = OptionKind.Action, Tip = "Each press the next size: 2, 3, 4, 1.5 m." });
+                    o.Add(new PaletteUI.Option($"Scale: {PerfSettings.WorldScale * 100f:0} %", false, () => { PerfSettings.WorldSize.Next(); Say($"The world at {PerfSettings.WorldScale * 100f:0} % - its window stays the same size in the room"); ShowWorldPanel(); })
+                        { Kind = OptionKind.Action, Tip = "Each press the next scale. Smaller shows more of the world; bigger brings it closer." });
+                    break;
+            }
+            Palette.ShowInfo("World", PlacingWorld ? "moving - trigger on the floor puts it down" : "the world as a whole, in your room", body.ToString(), CloseWorldPanel);
+            var tabs = new List<PaletteUI.Option>();
+            foreach (var (label, tip, tab) in new[] { ("Place", "Move it in your room", 0), ("Turn", "Turn it round", 1), ("Height", "Floor, table or in between", 2), ("Size", "Its window and its scale", 3) })
+            {
+                int t = tab;
+                tabs.Add(new PaletteUI.Option(label, worldTab == t, () => { worldTab = t; ShowWorldPanel(); }) { Tip = tip });
+            }
+            Palette.SetInfoTabs(tabs);
+            Palette.SetInfoButtons(o);
         }
 
         /// <summary>Turns the whole world about the window's middle (it stays where it is in the room).</summary>
@@ -1371,6 +1254,41 @@ namespace Wonderland
             Haptic(0.5f, 0.06f);
             if (infoMode == 5) ShowWorldPanel();
         }
+
+        // Grabbing the world with both hands: where the hands were and how the world lay when both grips closed.
+        private bool twisting;
+        private float twistFrom;
+        private Quaternion twistWorld;
+
+        /// <summary>
+        /// Both grips held (nothing in hand): the world is grabbed with both hands and turns as they turn round each other -
+        /// like turning a model on a table by its edges - about the window's middle; letting go of either grip puts it
+        /// down there. True while it is held so.
+        /// </summary>
+        private bool Twist(PointerInput input)
+        {
+            bool both = input.Grip && input.LeftGrip && !Holding && input.LeftHand != Vector3.zero && input.RightHand != Vector3.zero;
+            if (!both)
+            {
+                if (twisting) { twisting = false; World.FitToRoom(); WorldPlaced?.Invoke(); Haptic(0.4f, 0.05f); }
+                return false;
+            }
+            var d = input.RightHand - input.LeftHand;
+            float angle = Mathf.Atan2(d.x, d.z) * Mathf.Rad2Deg;
+            if (!twisting)
+            {
+                twisting = true; twistFrom = angle; twistWorld = World.PlacementRotation;
+                Haptic(0.5f, 0.05f);
+                Say("Turning the world: twist your hands, let go to put it down", 3f);
+                twistSaid = true;
+                return true;
+            }
+            World.Place(World.PlacementPosition, Quaternion.Euler(0f, Mathf.DeltaAngle(twistFrom, angle), 0f) * twistWorld);
+            return true;
+        }
+
+        /// <summary>Whether the world has been turned with both hands yet (else a tip offers it).</summary>
+        private bool twistSaid;
 
         /// <summary>Grip held (nothing in hand) and the right stick sideways: the world turns, like a turntable.</summary>
         private void GripTurn(PointerInput input, float dt)
@@ -1412,27 +1330,52 @@ namespace Wonderland
         private int armedSlot;
         public System.Action<int> SaveWorld, LoadWorld;
 
-        /// <summary>Opens the list of worlds to save into (<paramref name="save"/>) or load from; pressing the same button again closes it.</summary>
+        /// <summary>
+        /// The Worlds panel (the Worlds button): Save, Load and New as tabs. Save and Load list the six worlds - which hold
+        /// a world, which is open now - as buttons; saving over another world takes a second tap. New starts a fresh
+        /// landscape (a second tap, too). <paramref name="save"/> opens it at Save (else Load); pressing it again closes it.
+        /// </summary>
         public void ShowWorlds(bool save)
         {
-            int menu = save ? 1 : 2;
-            worldMenu = worldMenu == menu ? 0 : menu;
-            armedSlot = 0;
-            if (worldMenu != 0) Say(save ? "Save as which world? Tap one (a saved world needs a second tap to save over it)" : "Load which world?", 5f);
-            RefreshOptions();
+            if (infoMode == 6 && worldMenu == (save ? 1 : 2)) { CloseInfo(); return; }
+            infoMode = 6; worldMenu = save ? 1 : 2; armedSlot = 0;
+            ShowWorldsPanel();
         }
 
-        private void WorldItems(List<PaletteUI.Option> items)
+        /// <summary>The Worlds button: opens the panel (at Save) or closes it.</summary>
+        public void ToggleWorlds() { if (infoMode == 6) CloseInfo(); else ShowWorlds(true); }
+
+        private void ShowWorldsPanel()
         {
-            bool save = worldMenu == 1;
-            for (int n = 1; n <= WonderlandWorld.Slots; n++)
+            int current = WonderlandWorld.CurrentSlot;
+            var body = new CardText(30);
+            body.Section(worldMenu == 1 ? "Save" : worldMenu == 2 ? "Load" : "New world");
+            if (worldMenu == 1) body.Line("Keep this world in one of six places. From then on it keeps itself up to date there. Saving over another world needs a second tap.");
+            else if (worldMenu == 2) body.Line("Open a world you saved. The one open now is kept as it is.");
+            else body.Line("Start again from a fresh landscape. The world open now stays saved if you saved it; otherwise it is lost. Press twice.");
+            body.Section("Now").Row("Open", current > 0 ? $"World {current}" : "a world not saved yet", current > 0 ? null : CardText.Warn);
+            Palette.ShowInfo("Worlds", "save, load or start a new one", body.ToString(), CloseInfo);
+            Palette.SetInfoTabs(new[]
             {
-                int slot = n;
-                bool used = WonderlandWorld.SlotUsed(n);
-                string label = $"World {n}";
-                items.Add(new PaletteUI.Option(label, armedSlot == n || n == WonderlandWorld.CurrentSlot, () => PickWorld(slot), save || used));
-            }
-            items.Add(new PaletteUI.Option("Cancel", false, () => { worldMenu = 0; RefreshOptions(); }));
+                new PaletteUI.Option("Save", worldMenu == 1, () => { worldMenu = 1; armedSlot = 0; ShowWorldsPanel(); }) { Tip = "Keep this world in one of six places." },
+                new PaletteUI.Option("Load", worldMenu == 2, () => { worldMenu = 2; armedSlot = 0; ShowWorldsPanel(); }) { Tip = "Open a world you saved." },
+                new PaletteUI.Option("New", worldMenu == 3, () => { worldMenu = 3; ShowWorldsPanel(); }) { Tip = "Start again from a fresh landscape." },
+            });
+            var o = new List<PaletteUI.Option>();
+            if (worldMenu == 3)
+                o.Add(new PaletteUI.Option(resetArmed && Time.time < resetUntil ? "Sure? Press again" : "Start a new world", resetArmed && Time.time < resetUntil, () => { RequestReset(); if (infoMode == 6) ShowWorldsPanel(); })
+                    { Kind = OptionKind.Danger, Tip = "A fresh landscape. Press twice." });
+            else
+                for (int n = 1; n <= WonderlandWorld.Slots; n++)
+                {
+                    int slot = n;
+                    bool used = WonderlandWorld.SlotUsed(n);
+                    string state = n == current ? "open now" : used ? "saved" : "empty";
+                    string label = worldMenu == 1 ? (armedSlot == n ? $"World {n}: over it?" : $"World {n} · {state}") : $"World {n} · {state}";
+                    o.Add(new PaletteUI.Option(label, n == current || armedSlot == n, () => PickWorld(slot), worldMenu == 1 || used && n != current)
+                        { Kind = worldMenu == 1 && used && n != current ? OptionKind.Danger : OptionKind.Action, Tip = worldMenu == 1 ? (used && n != current ? "Holds another world: saving here replaces it (tap twice)." : "Save this world here.") : used ? "Open this world." : "Nothing saved here yet." });
+                }
+            Palette.SetInfoButtons(o);
         }
 
         private void PickWorld(int n)
@@ -1442,11 +1385,12 @@ namespace Wonderland
             {
                 armedSlot = n;
                 Say($"{WonderlandWorld.SlotLabel(n)} holds another world - tap it again to save over it", 4f);
-                RefreshOptions();
+                ShowWorldsPanel();
                 return;
             }
-            worldMenu = 0; armedSlot = 0;
+            armedSlot = 0;
             if (save) SaveWorld?.Invoke(n); else LoadWorld?.Invoke(n);
+            if (infoMode == 6) ShowWorldsPanel();
             RefreshOptions();
         }
 

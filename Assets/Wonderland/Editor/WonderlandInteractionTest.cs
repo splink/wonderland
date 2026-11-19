@@ -59,7 +59,7 @@ namespace Wonderland.Editor
             tools = new GameObject("Tools").AddComponent<ToolController>();
             tools.HapticsEnabled = false;
             tools.Init(world, palette, null);
-            palette.AddGlobal("Undo", () => world.Undo());
+            AppButtons();
             // Named worlds, kept in a scratch folder for the test.
             WonderlandWorld.SlotFolder = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "wonderland-slots-test");
             if (System.IO.Directory.Exists(WonderlandWorld.SlotFolder)) System.IO.Directory.Delete(WonderlandWorld.SlotFolder, true);
@@ -67,11 +67,6 @@ namespace Wonderland.Editor
             int keepSlot = WonderlandWorld.CurrentSlot;
             tools.SaveWorld = n => world.SaveSlot(n);
             tools.LoadWorld = n => world.LoadSlot(n, WonderlandJourney.Materials());
-            palette.AddGlobal("Save", () => tools.ShowWorlds(true));
-            palette.AddGlobal("Load", () => tools.ShowWorlds(false));
-            palette.AddGlobal("Redo", () => world.Redo());
-            palette.AddGlobal("Help", tools.ToggleHelp);
-            palette.AddGlobal("Settings", tools.ToggleSettings);
             bool keepTips = ToolController.TipsOn;
             var hand = new Vector3(0.2f, 1.1f, 0.25f);
             // Tips: on, a first tip appears in the banner above the palette after a moment; the Tips button turns them off.
@@ -79,8 +74,9 @@ namespace Wonderland.Editor
             for (int i = 0; i < 72 * 6; i++) Frame(hand, hand + Vector3.forward, false);
             string firstTip = palette.TipText;
             ClickButton(hand, "Settings");
-            ClickButton(hand, "Tips: On");
-            bool tipsSaysOff = Find("Tips: Off") != null;
+            ClickButton(hand, "Tips");
+            var tipsSwitch = Find("Tips");
+            bool tipsSaysOff = tipsSwitch != null && !tipsSwitch.Selected;   // (its light off)
             ClickButton(hand, "Settings");
             for (int i = 0; i < 3; i++) Frame(hand, hand + Vector3.forward, false);
             Check(!string.IsNullOrEmpty(firstTip) && !ToolController.TipsOn && tipsSaysOff && string.IsNullOrEmpty(palette.TipText) && !palette.InfoShown,
@@ -106,12 +102,14 @@ namespace Wonderland.Editor
             Check(tools.TerrainMode == TerrainBrush.Lower, "A switches Raise -> Lower");
 
             // Grow: pick the mode chip, aim past the shore at the floor, hold the trigger.
+            ClickButton(hand, "Land");
             ClickButton(hand, "Grow");
             Check(tools.TerrainMode == TerrainBrush.Grow, "Grow chip selects the land brush");
             float landBefore = world.Terrain.LandArea();
             var floor = world.transform.TransformPoint(new Vector3(1.15f, 0f, -0.2f));
             HoldAt(hand, () => floor, 1.5f);
             Check(world.Terrain.EdgeAt(1.15f, -0.2f) > 0.1f && world.Terrain.LandArea() > landBefore, $"Aiming at the floor beyond the shore grows land ({landBefore:0.00} -> {world.Terrain.LandArea():0.00} m2)");
+            ClickButton(hand, "Shape");
             ClickButton(hand, "Raise");
 
             // Palette: click the Forest tile, paint.
@@ -185,12 +183,14 @@ namespace Wonderland.Editor
                 var at = world.transform.TransformPoint(world.Trains.LocoPosition(tr));
                 Frame(hand, at, false);
                 int cars = TrainSystem.CarsOf(tr);
+                ClickButton(hand, "Carriages");
                 ClickButton(hand, "+ Carriage");
                 int more = TrainSystem.CarsOf(tr);
                 ClickButton(hand, "- Carriage");
                 Check(more == cars + 1 && TrainSystem.CarsOf(tr) == cars, $"Point at a train, then + / - Carriage couple and uncouple a carriage ({cars} -> {more} -> {TrainSystem.CarsOf(tr)})");
                 Check(Find("Turn round") == null && tr.Dir > 0, "Trains run engine first, the way the arrows point (no Turn round)");
             }
+            ClickButton(hand, "Running");
             ClickButton(hand, "Stop all");
             Check(!world.Trains.AnyRunning, "Stop all stops the trains");
             ClickButton(hand, "Start all");
@@ -259,33 +259,42 @@ namespace Wonderland.Editor
 
             // Paths: draw a footpath; draw a fence.
             ClickButton(hand, "Roads");
+            ClickButton(hand, "Paths");
+            var pathRow = Find("Path");
+            Check(palette.DetailsShown && palette.DetailsTitle != null && palette.DetailsTitle.Contains("Paths") && pathRow != null && pathRow.Shown.Contains("people on foot") && Find("Streets") is { Kind: OptionKind.Choice },
+                $"The palette's row holds groups (Streets, Paths, Fences, Vehicles); picking one lists its kinds beside it, each with what it is ({palette.DetailsTitle})");
             ClickButton(hand, "Path");
             HoldPath(hand, new Vector3(-0.3f, 0f, -0.02f), new Vector3(-0.05f, 0f, 0.05f), 1f);
             Check(world.Paths.Lines.Count == 1 && world.Paths.Lines[0].kind == (int)PathKind.Footpath, $"Drawing with the Paths tool lays a footpath ({world.Paths.Lines.Count})");
+            ClickButton(hand, "Fences");
             ClickButton(hand, "Fence");
             HoldPath(hand, new Vector3(-0.3f, 0f, -0.2f), new Vector3(-0.1f, 0f, -0.25f), 1f);
             Check(world.Paths.Lines.Count == 2 && world.Paths.Lines[1].kind == (int)PathKind.Fence, "...and a fence");
             // Roads: a wobbly stroke comes out straight; a bus chip puts a bus on it that drives off.
+            ClickButton(hand, "Streets");
             ClickButton(hand, "Road");
             HoldPath(hand, new Vector3(-0.35f, 0f, 0.14f), new Vector3(0.25f, 0f, 0.16f), 1.2f);
             var road = world.Paths.Lines[^1];
             Check(world.Paths.Lines.Count == 3 && road.kind == (int)PathKind.Road, $"The Road chip lays a road ({tools.LastMessage})");
+            ClickButton(hand, "Vehicles");
             ClickButton(hand, "Bus");
             var stop = world.transform.TransformPoint(new Vector3(0f, world.Terrain.SurfaceAt(0f, 0.15f), 0.15f));
             Frame(hand, stop, true); Frame(hand, stop, false);
             var bus = world.Traffic.Vehicles.Find(v => v.Roams);
             Check(bus != null && bus.Kind == VehicleKind.Bus, $"The Bus chip puts a bus on the road ({tools.LastMessage})");
-            ClickButton(hand, "Road");
-            Check(tools.PlacingVehicle == null, "...and the Road chip goes back to drawing roads");
+            ClickButton(hand, "Streets");
+            Check(tools.PlacingVehicle == null, "...and the Streets group goes back to drawing roads");
 
             // Life: a hen on the grass.
             ClickButton(hand, "Life");
+            ClickButton(hand, "Farm");
             ClickButton(hand, "Hen");
             var yard = world.transform.TransformPoint(new Vector3(0.05f, world.Terrain.SurfaceAt(0.05f, 0.05f), 0.05f));
             int animals = world.Animals.Animals.Count;
             Frame(hand, yard, true); Frame(hand, yard, false);
             Check(world.Animals.Animals.Count == animals + 1 && world.Animals.Animals[^1].kind == (int)AnimalKind.Chicken, "The Life tool's chips place a hen");
             // ...and set the pace of the village clock.
+            ClickButton(hand, "Time");
             ClickButton(hand, "Fast days");
             bool fast = world.Clock.Mode == ClockMode.Fast;
             ClickButton(hand, "Stop time");
@@ -302,12 +311,14 @@ namespace Wonderland.Editor
             }
             if (world.People.People.Count == 0) world.PlacePerson(new Vector3(0.1f, 0f, 0.1f), 0, 77);
             world.Clock.Hour = 15f;
+            ClickButton(hand, "Events");
             ClickButton(hand, "Fête");
             bool on = world.Fete != null;
             ClickButton(hand, "Fête");
             Check(fountain == null && on && world.Fete == null, "The Life tool's Fête chip calls the village to the fountain, and calls it off" + (fountain == null ? "" : $" (\"{fountain}\")"));
             // ...the clouds come and go.
             bool clouds = world.Sky.Shown;
+            ClickButton(hand, "Weather");
             ClickButton(hand, "Clouds");
             bool toggled = world.Sky.Shown != clouds;
             ClickButton(hand, "Clouds");
@@ -449,14 +460,14 @@ namespace Wonderland.Editor
 
             // Several worlds: save this one as World 2, change it, save that as World 3, and load World 2 back.
             int houses = world.Buildings.Houses.Count;
-            ClickButton(hand, "Save"); ClickButton(hand, "World 2");
+            ClickButton(hand, "Worlds"); ClickButton(hand, "Save"); ClickButton(hand, WorldButton(2));
             bool saved2 = WonderlandWorld.SlotUsed(2) && WonderlandWorld.CurrentSlot == 2;
             string extra = null;
             foreach (var at in new[] { new Vector2(-0.3f, -0.35f), new Vector2(0.35f, -0.3f), new Vector2(-0.35f, 0.35f) })
                 if ((extra = world.PlaceHouse(new HouseInstance { x = at.x, z = at.y, variant = Catalog.Bench })) == null) break;
-            ClickButton(hand, "Save"); ClickButton(hand, "World 3");
+            ClickButton(hand, "Save"); ClickButton(hand, WorldButton(3));
             bool saved3 = WonderlandWorld.SlotUsed(3) && WonderlandWorld.CurrentSlot == 3 && world.Buildings.Houses.Count == houses + 1;
-            ClickButton(hand, "Load"); ClickButton(hand, "World 2");
+            ClickButton(hand, "Load"); ClickButton(hand, WorldButton(2));
             bool back = WonderlandWorld.CurrentSlot == 2 && world.Buildings.Houses.Count == houses;
             Check(extra == null && saved2 && saved3 && back, $"Save and Load keep several worlds: saved as World 2 and World 3, and World 2 loads back as it was ({world.Buildings.Houses.Count} buildings)");
             WonderlandWorld.CurrentSlot = keepSlot;
@@ -466,13 +477,31 @@ namespace Wonderland.Editor
             ClickButton(hand, "Help");
             var infoPanel = palette.transform.Find("Info");
             bool helpOpen = infoPanel != null && infoPanel.gameObject.activeSelf && palette.InfoShown;
+            // Help in topics, as tabs along its top; each topic says what it's for, how, with an example.
+            bool everyTopic = true;
+            foreach (var topic in ToolController.HelpTopics) everyTopic &= Find(topic) != null;
+            ClickButton(hand, "Moving");
+            string moving = palette.InfoBody ?? "";
+            ClickButton(hand, "Buildings");
+            string buildings = palette.InfoBody ?? "";
+            Check(helpOpen && everyTopic && moving.Contains("BOTH grips") && buildings != moving && buildings.Contains("EXAMPLE") && tools.HelpTopic == System.Array.IndexOf(ToolController.HelpTopics, "Buildings"),
+                $"Help opens in {ToolController.HelpTopics.Length} topics as tabs; Moving tells of the two-hand twist, Buildings has its own page with an example" + (helpOpen && everyTopic ? "" : $" (open {helpOpen}, tabs {everyTopic})"));
+            // A tooltip: the pointer resting on a button says more about it after a moment, and goes when it moves off.
+            var undo = Find("Undo");
+            Physics.SyncTransforms();
+            var paletteUpdate = typeof(PaletteUI).GetMethod("Update", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);   // (no player loop here)
+            for (int i = 0; i < 20; i++) { Frame(hand, undo.transform.position, false); paletteUpdate.Invoke(palette, null); }
+            string tip = palette.TooltipShown;
+            for (int i = 0; i < 3; i++) { Frame(hand, hand + Vector3.down, false); paletteUpdate.Invoke(palette, null); }
+            Check(!string.IsNullOrEmpty(tip) && tip == undo.Tip && palette.TooltipShown == null, $"Resting the pointer on a button shows its tooltip (\"{tip}\"), and it goes again");
             // Settings: the label at the pointer can be turned off (and on); Grid shows its state.
             ClickButton(hand, "Settings");
-            bool settingsOpen = palette.InfoShown && Find("Labels: On") != null && Find(BuildGrid.Snap ? "Grid: On" : "Grid: Off") != null && Find("New world") != null;
-            ClickButton(hand, "Labels: On");
-            bool labelsOff = !ToolController.LabelsOn && Find("Labels: Off") != null;
-            ClickButton(hand, "Labels: Off");
-            Check(settingsOpen && labelsOff && ToolController.LabelsOn, "Settings beside the palette: Sound, Tips, Labels, Grid, World stats, Performance, New world - each says its state and a tap changes it");
+            bool settingsOpen = palette.InfoShown && Find("Labels") is { Selected: true } && Find("Grid") is { } grid && grid.Selected == BuildGrid.Snap && grid.Kind == OptionKind.Toggle
+                && Find("World stats") is { Kind: OptionKind.Open };
+            ClickButton(hand, "Labels");
+            bool labelsOff = !ToolController.LabelsOn && Find("Labels") is { Selected: false };
+            ClickButton(hand, "Labels");
+            Check(settingsOpen && labelsOff && ToolController.LabelsOn, "Settings beside the palette: switches (Tips, Labels, Grid) show their state by their light and a tap changes it; World stats and Performance open panels");
             ClickButton(hand, "World stats");
             string stats = tools.StatsText();
             bool statsTrue = palette.InfoShown && stats.Contains($"{world.People.People.Count} people") && stats.Contains($"{world.Buildings.Houses.Count} buildings");
@@ -647,14 +676,34 @@ namespace Wonderland.Editor
             Frame(hand, aim + Vector3.up * 3f, false);
             float turnedBy = Mathf.DeltaAngle(turnedFrom, world.PlacementRotation.eulerAngles.y);
             Check(turnedBy > 20f && (world.PlacementPosition - middle).magnitude < 1e-3f, $"Grip and the right stick sideways turn the world about the window's middle ({turnedBy:0} degrees in half a second)");
-            // The World panel: Move, Higher / Lower / Table / Floor, Turn, Window, Scale - and either stick while moving.
+            // Both grips held, hands twisted: the world turns with them, about its middle; letting go puts it down.
+            var twistFrom = world.PlacementRotation.eulerAngles.y;
+            var left0 = new Vector3(-0.2f, 1.1f, 0.3f); var right0 = new Vector3(0.2f, 1.1f, 0.3f);
+            Frame(hand, aim + Vector3.up * 3f, false, grip: true, leftGrip: true, leftHand: left0, rightHand: right0);
+            for (int i = 1; i <= 10; i++)
+            {
+                var r = Quaternion.Euler(0f, 4f * i, 0f);   // (the hands turn 40 degrees about the point between them)
+                Frame(hand, aim + Vector3.up * 3f, false, grip: true, leftGrip: true, leftHand: (left0 + right0) / 2 + r * (left0 - (left0 + right0) / 2), rightHand: (left0 + right0) / 2 + r * (right0 - (left0 + right0) / 2));
+            }
+            float twisted = Mathf.DeltaAngle(twistFrom, world.PlacementRotation.eulerAngles.y);
+            Frame(hand, aim + Vector3.up * 3f, false);
+            Frame(hand, aim + Vector3.up * 3f, false, grip: true, leftHand: left0, rightHand: right0 + Vector3.forward * 0.2f);   // (one grip: no turning)
+            Frame(hand, aim + Vector3.up * 3f, false);
+            Check(Mathf.Abs(twisted - 40f) < 1f && Mathf.Abs(Mathf.DeltaAngle(twistFrom, world.PlacementRotation.eulerAngles.y) - 40f) < 1f,
+                $"Both grips held and the hands twisted turn the world with them ({twisted:0} of 40 degrees); one grip alone does not");
+            // The World panel, in tabs: Place (Move), Turn, Height (Floor, Table, Lower, Higher), Size (Window, Scale).
             tools.ToggleMoving();
-            Check(!tools.PlacingWorld && Find("Higher") != null && Find("Floor") != null && Find("Turn left") != null && Find("Scale: 100 %") != null && Find("Window: 2 m") != null,
-                "The World button opens one panel: Move, Higher, Lower, Table, Floor, Turn, the window's size and the world's scale");
+            bool tabs = Find("Place") != null && Find("Turn") != null && Find("Height") != null && Find("Size") != null && Find("Move") != null;
+            ClickButton(hand, "Size");
+            Check(!tools.PlacingWorld && tabs && Find("Scale: 100 %") != null && Find("Window: 2 m") != null,
+                "The World button opens one panel in tabs - Place, Turn, Height, Size - each with its own buttons");
             float facing = world.PlacementRotation.eulerAngles.y;
+            ClickButton(hand, "Turn");
             ClickButton(hand, "Turn right");
             Check(Mathf.Abs(Mathf.DeltaAngle(facing, world.PlacementRotation.eulerAngles.y) - 15f) < 0.1f, "Turn right turns the world 15 degrees");
+            ClickButton(hand, "Place");
             ClickButton(hand, "Move");
+            ClickButton(hand, "Height");
             float lift = world.Lift;
             float floorY = world.PlacementPosition.y - world.Lift;
             ClickButton(hand, "Higher"); ClickButton(hand, "Higher");
@@ -665,8 +714,8 @@ namespace Wonderland.Editor
             ClickButton(hand, "Table");
             Check(Mathf.Abs(world.Lift - 0.72f) < 1e-3f, $"Table puts it at table height ({world.Lift * 100f:0} cm)");
             ClickButton(hand, "Floor");
-            ClickButton(hand, "Done");
-            Check(world.Lift == 0f && !tools.PlacingWorld && !palette.InfoShown && Mathf.Abs(world.PlacementPosition.y - floorY) < 1e-3f, "Floor puts it back on the floor, Done puts it down and closes the panel");
+            ClickButton(hand, "Close");
+            Check(world.Lift == 0f && !tools.PlacingWorld && !palette.InfoShown && Mathf.Abs(world.PlacementPosition.y - floorY) < 1e-3f, "Floor puts it back on the floor, Close puts it down and closes the panel");
             world.UseWindow(false);
             UnityEngine.Object.DestroyImmediate(head.gameObject);
         }
@@ -678,21 +727,32 @@ namespace Wonderland.Editor
             for (int turn = 0; button == null && turn < 6; turn++)
             {
                 PaletteButton next = null;
-                foreach (var b in palette.GetComponentsInChildren<PaletteButton>(false)) if (b.Text != null && b.Text.EndsWith("›")) { next = b; if (turn % 2 == 0) break; }
+                foreach (var b in palette.GetComponentsInChildren<PaletteButton>(false)) if (b.Text != null && b.Text.EndsWith("›") && b.Kind != OptionKind.Open) { next = b; if (turn % 2 == 0) break; }
                 if (next == null) break;
                 Physics.SyncTransforms();
-                Frame(hand, next.transform.position, false); Frame(hand, next.transform.position, true); Frame(hand, next.transform.position, false);
+                var at = next.transform.position;   // (the click rebuilds the row: the pager itself may go)
+                Frame(hand, at, false); Frame(hand, at, true); Frame(hand, at, false);
                 button = Find(label);
             }
             if (button == null) { Check(false, $"Button '{label}' exists"); return; }
             Physics.SyncTransforms();
             var p = button.transform.position;
             Frame(hand, p, false); Frame(hand, p, true); Frame(hand, p, false);
-            if (palette.Hovered != null && palette.Hovered != button) Debug.Log($"Click on '{label}' hit '{palette.Hovered.Text}' instead");
+            if (button != null && palette.Hovered != null && palette.Hovered != button) Debug.Log($"Click on '{label}' ({Path(button.transform)} at {palette.transform.InverseTransformPoint(p)}) hit '{palette.Hovered.Text}' ({Path(palette.Hovered.transform)} at {palette.transform.InverseTransformPoint(palette.Hovered.transform.position)}) instead");
+            static string Path(Transform t) { var s = t.name; while (t.parent != null && t.parent != palette.transform) { t = t.parent; s = t.name + "/" + s; } return s; }
+        }
+
+        /// <summary>A world's button in the Worlds panel, whatever it says of its state ("World 2 · saved").</summary>
+        private static string WorldButton(int n)
+        {
+            foreach (var b in palette.InfoButtons) if (b.Text != null && b.Text.StartsWith($"World {n} ")) return b.Text;
+            return $"World {n}";
         }
 
         private static PaletteButton Find(string label)
         {
+            foreach (var b in palette.GetComponentsInChildren<PaletteButton>(false))   // (a showing one first)
+                if (b.Text == label) return b;
             foreach (var b in palette.GetComponentsInChildren<PaletteButton>(true))
                 if (b.Text == label) return b;
             return null;
@@ -716,7 +776,8 @@ namespace Wonderland.Editor
         }
 
         /// <summary>One simulated frame: the hand aims at <paramref name="target"/> with the given buttons.</summary>
-        private static void Frame(Vector3 hand, Vector3 target, bool trigger, Vector2 stick = default, bool primary = false, bool secondary = false, bool grip = false, Vector2 scroll = default)
+        private static void Frame(Vector3 hand, Vector3 target, bool trigger, Vector2 stick = default, bool primary = false, bool secondary = false, bool grip = false, Vector2 scroll = default,
+            bool leftGrip = false, Vector3 leftHand = default, Vector3 rightHand = default)
         {
             Physics.SyncTransforms();
             var input = new PointerInput
@@ -724,10 +785,62 @@ namespace Wonderland.Editor
                 Valid = true, Ray = new Ray(hand, (target - hand).normalized),
                 Trigger = trigger, TriggerDown = trigger && !triggerHeld, TriggerUp = !trigger && triggerHeld,
                 LeftStick = stick, Stick = scroll, PrimaryDown = primary, SecondaryDown = secondary, Grip = grip, GripDown = grip && !gripHeld, GripUp = !grip && gripHeld,
+                LeftGrip = leftGrip, LeftHand = leftHand, RightHand = rightHand,
             };
             triggerHeld = trigger; gripHeld = grip;
             tools.Process(input, Dt);
             world.Forest.RebuildDirty();
+        }
+
+        /// <summary>The palette set up as the app sets it up: the bottom bar in clusters, Help and Settings in the header.</summary>
+        private static void AppButtons()
+        {
+            palette.AddGlobal(new PaletteUI.Option("Undo", false, () => world.Undo()) { Kind = OptionKind.Action, Tip = "Takes back the last change. B on the right controller does this too." }, 0);
+            palette.AddGlobal(new PaletteUI.Option("Redo", false, () => world.Redo()) { Kind = OptionKind.Action, Tip = "Puts back what Undo took back." }, 0);
+            palette.AddGlobal(new PaletteUI.Option("World", false, tools.ToggleMoving) { Kind = OptionKind.Open, Tip = "The world as a whole: move it, lift it, turn it, its window and scale." }, 1);
+            palette.AddGlobal(new PaletteUI.Option("Home", false, () => world.NavigateHome()) { Kind = OptionKind.Action, Tip = "Scrolls back to where the world started." }, 1);
+            palette.AddGlobal(new PaletteUI.Option("Worlds", false, tools.ToggleWorlds) { Kind = OptionKind.Open, Tip = "Save this world, load another, or start a new one." }, 2);
+            palette.AddHeaderButton(new PaletteUI.Option("Help", false, tools.ToggleHelp) { Kind = OptionKind.Open, Tip = "How everything works, topic by topic." });
+            palette.AddHeaderButton(new PaletteUI.Option("Settings", false, tools.ToggleSettings) { Kind = OptionKind.Open, Tip = "Sound, tips, labels, the grid, stats and performance." });
+        }
+
+        /// <summary>
+        /// The palette in its states, as the player sees it (docs/renders/editor-panel-*.png): Terrain with its detail
+        /// panel and a tooltip, Roads, Life, Build with the library, Help, Settings, Worlds and the World panel.
+        /// </summary>
+        public static void PanelRenders()
+        {
+            EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            WonderlandLighting.CreateKeyLight();
+            world = new GameObject("Wonderland").AddComponent<WonderlandWorld>();
+            world.transform.position = new Vector3(0f, 0f, 1.3f);
+            world.Create(1.8f, WonderlandJourney.Materials());
+            palette = new GameObject("Palette").AddComponent<PaletteUI>();
+            palette.transform.SetPositionAndRotation(new Vector3(0f, 1.0f, 0.3f), Quaternion.Euler(38f, 0f, 0f));
+            palette.Build(world.Materials.UI, world.Materials.Lit);
+            tools = new GameObject("Tools").AddComponent<ToolController>();
+            tools.HapticsEnabled = false;
+            tools.Init(world, palette, null);
+            AppButtons();
+            var cam = new GameObject("Camera").AddComponent<Camera>();
+            cam.clearFlags = CameraClearFlags.SolidColor; cam.backgroundColor = new Color(0.32f, 0.3f, 0.28f);
+            cam.nearClipPlane = 0.05f; cam.fieldOfView = 34f;
+            cam.transform.position = palette.transform.position - palette.transform.forward * 0.62f;
+            cam.transform.rotation = Quaternion.LookRotation(palette.transform.forward, palette.transform.up);
+            cam.tag = "MainCamera";
+            var hand = palette.transform.position - palette.transform.forward * 0.35f + palette.transform.right * 0.12f - palette.transform.up * 0.15f;   // (in front of it, low and to the right)
+            void Shot(string name) { for (int k = 0; k < 12; k++) palette.SendMessage("Update"); WonderlandRenders.Capture(cam, $"editor-panel-{name}.png", 2400, 1000); }
+            void Point(string label) { foreach (var pb in palette.GetComponentsInChildren<PaletteButton>()) if (pb.Text == label) { Physics.SyncTransforms(); Frame(hand, pb.transform.position, false); break; } }
+            tools.SelectTool(Tool.Terrain);
+            Point("Shape"); Shot("terrain");
+            tools.SelectTool(Tool.Paths); Point("Road"); Shot("roads");
+            tools.SelectTool(Tool.Decor); Point("Farm"); Shot("life");
+            tools.SelectTool(Tool.Houses); Point("Homes"); Shot("build");
+            tools.SelectTool(Tool.Train); tools.ToggleHelp(); Point("Help"); Shot("help");
+            tools.ToggleSettings(); Point("Grid"); Shot("settings");
+            tools.ToggleWorlds(); Shot("worlds");
+            tools.ToggleMoving(); Point("World"); Shot("world");
+            if (Application.isBatchMode) EditorApplication.Exit(0);
         }
 
         /// <summary>
@@ -748,9 +861,7 @@ namespace Wonderland.Editor
             tools = new GameObject("Tools").AddComponent<ToolController>();
             tools.HapticsEnabled = false;
             tools.Init(world, palette, null);
-            foreach (var g in new[] { "Undo", "Redo", "Save", "Load", "Move" }) palette.AddGlobal(g, null);
-            palette.AddGlobal("Help", tools.ToggleHelp);
-            palette.AddGlobal("Settings", tools.ToggleSettings);
+            AppButtons();
             var t = world.Terrain;
             world.BuildPath(new System.Collections.Generic.List<Vector3> { t.PointAt(-0.6f, 0f), t.PointAt(0f, 0f), t.PointAt(0.6f, 0f) }, PathKind.Road);
             foreach (var (id, x, z, rot) in new[] { (Catalog.Cottage, -0.45f, 0.12f, 0f), (Catalog.Townhouse, -0.25f, 0.12f, 0f), (Catalog.Apartments, 0.0f, 0.13f, 0f), (Catalog.Cottage, 0.25f, 0.12f, 0f),

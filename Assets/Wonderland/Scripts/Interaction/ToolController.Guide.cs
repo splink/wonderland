@@ -49,6 +49,8 @@ namespace Wonderland
             {
                 new() { Id = "welcome", When = () => true, Times = 1,
                     Text = "Welcome! Point at the palette and pull the trigger to pick a tool. Try Track to lay a railway, or Terrain to shape the land." },
+                new() { Id = "turn-world", When = () => !twistSaid && tipClock > 60f, Times = 2,
+                    Text = "To turn the world, hold both grips (the side buttons on both controllers) and twist your hands, as if turning a model on a table. Let go to put it down." },
                 new() { Id = "first-track", When = () => Tool == Tool.Track && net().Empty,
                     Text = "Hold the trigger and draw a big circle. Come back to where you started and it becomes a loop - trains run round loops." },
                 new() { Id = "drawing", When = () => Tool == Tool.Track && drawn.Count > 5,

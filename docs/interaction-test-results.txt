@@ -29,11 +29,12 @@ PASS  The library: Leisure, then Evenings, then the disco's tile with its model 
 PASS  Pointing at a tile says what it is, what it does and where it must go ("<b>Station</b> / A station on the platform's edge: trains stop and passengers get on and off / <color=#E8D7A8>a station master works here 6:00-21:00 · a taxi waits here</color> / <color=#9FD0FF>Put it beside the railway line</color>")
 PASS  Every object in the library is in a category and a family, with a description (92 of 92, 0 without)
 PASS  Category and item chips place a fountain from the Town set (Fountain placed; selected 13)
+PASS  The palette's row holds groups (Streets, Paths, Fences, Vehicles); picking one lists its kinds beside it, each with what it is (Roads · Paths)
 PASS  Drawing with the Paths tool lays a footpath (1)
 PASS  ...and a fence
 PASS  The Road chip lays a road (Road added)
 PASS  The Bus chip puts a bus on the road (Bus on the road - off it goes)
-PASS  ...and the Road chip goes back to drawing roads
+PASS  ...and the Streets group goes back to drawing roads
 PASS  The Life tool's chips place a hen
 PASS  The Life tool's clock chips speed the days up and stop time
 PASS  ...and let the days pass again
@@ -49,7 +50,9 @@ PASS  Select a switch: its card says where each way leads, and Always left / Alw
 PASS  Select the track: its card's Bend button bends it, the trigger puts it down [card True, bending1 True] - Track reshaped
 PASS  A building's card has Remove; B brings it back [card True, removed True, back True]
 PASS  Save and Load keep several worlds: saved as World 2 and World 3, and World 2 loads back as it was (4 buildings)
-PASS  Settings beside the palette: Sound, Tips, Labels, Grid, World stats, Performance, New world - each says its state and a tap changes it
+PASS  Help opens in 8 topics as tabs; Moving tells of the two-hand twist, Buildings has its own page with an example
+PASS  Resting the pointer on a button shows its tooltip ("Takes back the last change. B on the right controller does this too."), and it goes again
+PASS  Settings beside the palette: switches (Tips, Labels, Grid) show their state by their light and a tap changes it; World stats and Performance open panels
 PASS  Stats opens the performance panel; Grass cycles to Off (no tufts) and Defaults brings them back (5538 tufts)
 PASS  Help and Stats open beside the palette (with the world's own numbers) and close again
 PASS  No blocky stand-ins anywhere: further away the same buildings and trees are drawn with less detail (60 simpler levels)
@@ -68,10 +71,11 @@ PASS  Undo takes a step back and Redo puts it back
 PASS  The right stick scrolls the world the way the player faces (80 cm east in a second, facing east); the world stays where it is in the room, the brush as it was
 PASS  ...and left and right (22 cm north for left, facing east)
 PASS  Grip and the right stick sideways turn the world about the window's middle (30 degrees in half a second)
-PASS  The World button opens one panel: Move, Higher, Lower, Table, Floor, Turn, the window's size and the world's scale
+PASS  Both grips held and the hands twisted turn the world with them (40 of 40 degrees); one grip alone does not
+PASS  The World button opens one panel in tabs - Place, Turn, Height, Size - each with its own buttons
 PASS  Turn right turns the world 15 degrees
 PASS  Higher lifts the world 5 cm a tap (10 cm)
 PASS  ...and so does the stick, up (28 cm)
 PASS  Table puts it at table height (72 cm)
-PASS  Floor puts it back on the floor, Done puts it down and closes the panel
+PASS  Floor puts it back on the floor, Close puts it down and closes the panel
 RESULT: PASS

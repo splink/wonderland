@@ -453,14 +453,14 @@ namespace Wonderland
         public void ToggleStats() { infoMode = infoMode is 1 or 3 ? 0 : 1; infoTimer = 0f; if (infoMode == 0) Palette.ShowInfo(null, null, null); else ShowStats(); }
 
         /// <summary>The Help button: the controls of the tool in hand (again: closes).</summary>
-        public void ToggleHelp() { infoMode = infoMode == 2 ? 0 : 2; if (infoMode == 0) Palette.ShowInfo(null, null, null); else { ShowHelp(); Palette.SetInfoButtons(null); } }
+        public void ToggleHelp() { infoMode = infoMode == 2 ? 0 : 2; if (infoMode == 0) Palette.ShowInfo(null, null, null); else { helpTopic = TopicFor(Tool); ShowHelp(); } }
 
         private void CloseInfo() { infoMode = 0; Palette.ShowInfo(null, null, null); }
 
         private void ShowStats()
         {
             Palette.ShowInfo("Stats", $"{World.Clock.Label} · day {World.Clock.Day + 1}", StatsText(), CloseInfo);
-            Palette.SetInfoButtons(new[] { new PaletteUI.Option("Performance", false, () => { infoMode = 3; ShowPerf(); }) });
+            Palette.SetInfoButtons(new[] { new PaletteUI.Option("Performance", false, () => { infoMode = 3; ShowPerf(); }) { Kind = OptionKind.Open, Tip = "How the headset is keeping up, and switches that make the world lighter to draw." } });
         }
 
         // ------------------------------------------------------------------ the performance panel
@@ -482,9 +482,9 @@ namespace Wonderland
                 var setting = s;
                 buttons.Add(new PaletteUI.Option(s.Label, s.Value != s.Default, () => { setting.Next(); Say($"{setting.Label} - {setting.Help}"); ShowPerf(); }, !measuring));
             }
-            buttons.Add(new PaletteUI.Option(measuring ? "Measuring..." : "Measure", measuring, StartMeasure, !measuring));
-            buttons.Add(new PaletteUI.Option("Defaults", false, () => { PerfSettings.ResetAll(); Say("Performance settings back to their defaults"); ShowPerf(); }, !measuring));
-            buttons.Add(new PaletteUI.Option("World stats", false, () => { infoMode = 1; ShowStats(); }));
+            buttons.Add(new PaletteUI.Option(measuring ? "Measuring..." : "Measure", measuring, StartMeasure, !measuring) { Kind = OptionKind.Action, Tip = "Times a few seconds of drawing and says what costs most." });
+            buttons.Add(new PaletteUI.Option("Defaults", false, () => { PerfSettings.ResetAll(); Say("Performance settings back to their defaults"); ShowPerf(); }, !measuring) { Kind = OptionKind.Action, Tip = "Every setting back as it came." });
+            buttons.Add(new PaletteUI.Option("World stats", false, () => { infoMode = 1; ShowStats(); }) { Kind = OptionKind.Open, Tip = "The world in numbers." });
             Palette.SetInfoButtons(buttons);
         }
 
@@ -657,45 +657,5 @@ namespace Wonderland
             return s.Length > 0 ? s : new CardText().Line("A quiet spot: nobody visits it on purpose", true).ToString();
         }
 
-        /// <summary>Help as sections: this tool's controls (one row per control), then everywhere.</summary>
-        private static string HelpBody(string text)
-        {
-            var t = new CardText(30);
-            int split = text.IndexOf("\n\nEverywhere: ");
-            string here = split >= 0 ? text.Substring(0, split) : text, everywhere = split >= 0 ? text.Substring(split + 14) : null;
-            void Rows(string block)
-            {
-                foreach (var line in block.Split('\n'))
-                    foreach (var piece in line.Split(" · "))
-                    {
-                        int colon = piece.IndexOf(": ");
-                        if (colon > 0 && colon < 20) t.Row(piece.Substring(0, colon), piece.Substring(colon + 2)); else t.Line(piece);
-                    }
-            }
-            t.Section("This tool"); Rows(here);
-            if (everywhere != null) { t.Section("Everywhere"); Rows(everywhere); }
-            return t.ToString();
-        }
-
-        private void ShowHelp() => Palette.ShowInfo("Help", $"{PaletteUI.ToolNames[(int)Tool]} tool", HelpBody(HelpText(Tool)), CloseInfo);
-
-        /// <summary>What the controller does - with the tool in hand, then everywhere.</summary>
-        public static string HelpText(Tool tool)
-        {
-            string here = tool switch
-            {
-                Tool.Terrain => "Trigger: sculpt where you point (Raise, Lower, Smooth, Flatten, Peaks; Grow / Trim paint land on or off the floor)\nLeft stick left/right: brush size · up/down: strength\nA: next brush",
-                Tool.Water => "Trigger: dig a pond (start inside one to grow it) · Stream: draw it, it flows downhill · Drain: hold over water\nLeft stick: size · A: Pond / Stream / Drain",
-                Tool.Forest => "Trigger: paint trees · A: erase instead\nLeft stick left/right: size · up/down: density",
-                Tool.Paths => "Trigger: draw a road, lane, path, trail, fence, hedge or wall (chips) - start on a way to join it; across water a way gets a bridge; tap a bridge for another style\nA: next kind",
-                Tool.Track => "Trigger: draw a railway. Come back to the start (the ring lights up) for a loop\nWhile drawing: green = it can be built, red = it can't (the banner says why); green arrows show which way trains will run\nOne way: the whole railway runs the way the arrows on the track point, so trains never meet head-on\nStart on a track: a branch · end on a track: join it · from one loop to another: link them - and a second link back, so trains can return\nTap a switch to throw it · grip on the track: bend it\nA: Signals - trigger beside the track puts one up (automatic: red while a train is near); tap it to hold trains at red",
-                Tool.Train => "Trigger on the track: a train - pick it on the second row (Steam, Express, Tank engine, Goods, Railcar); it runs the way the arrows point\nPointing at a train: trigger stop / go · left stick up/down: speed · grip: pick it up and put it elsewhere\nCarriages: point at a train, then + Carriage / - Carriage (trains always run engine first, the way the arrows point)\nThe hint says what it is doing and why it waits (a red signal, the train ahead, the buffers)\nSwitches: Spread (trains take the way with fewer trains ahead, so they cover the whole railway), Random, Manual (tap a switch) · A: start / stop all",
-                Tool.Houses => "Pick a category, then a building. Trigger: place it · left stick: a flick turns it 15°, hold to turn smoothly (the arrow is its front) · A: next\nTrigger (or grip) on a building: pick it up and move it · pointing at one says who is there\nTravel: a landing stage at a pond's edge, and boats on the water",
-                Tool.Decor => "Trigger: place people or animals (hold and sweep for a herd)\nTrigger on a villager or animal: their card - a marker follows them, a line shows where they are going, pins mark home and work\nChips: days pass / fast / stop time, Fête, Emergency, Clouds · A: next kind",
-                Tool.Select => "Trigger: on anything with a gold ring under it - a villager, a building, a train, a switch, the track - its card, with buttons for what you can do with it\nVillagers: their card follows them with their camera · trains: Camera rides along at the front\nCameras: their picture on the monitor - the buttons round it or the left stick turn it, the trigger on the land points it (put one up: Build, Small, Camera)\nCam / Train chips: open a camera · A: next camera",
-                _ => "Trigger on anything you built: take it away · hold over trees: clear them",
-            };
-            return here + "\n\nEverywhere: Right stick: scroll the world (the map: tap a place to go there) · Move: put the world elsewhere, Higher / Lower lift it · Label: beside the pointer, what each button does to what you point at · Grip: pick it up and move it (track bends) · B undo (Redo below) · point at the palette and pull the trigger to choose\nSave / Load: Worlds 1-6 · Move: place the world elsewhere · New: start again (press twice) · Sound: on / quiet / muted · Stats: frame rate and the world's numbers";
-        }
     }
 }

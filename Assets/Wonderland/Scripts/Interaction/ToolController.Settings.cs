@@ -26,36 +26,32 @@ namespace Wonderland
 
         private void ShowSettings()
         {
-            var body = new CardText(26).Section("Settings");
-            if (CycleSound != null) body.Row("Sound", "on, quiet or off");
-            body.Row("Tips", "a word now and then about what you can do")
-                .Row("Labels", "beside the pointer: what each button does to what you point at")
-                .Row("Grid", "roads come out straight and square, buildings line up along them")
-                .Row("World", "its window's size, its scale, where it lies, how high, which way it faces")
+            var body = new CardText(30).Section("Switches")
+                .Row("Sound", "the village's sounds: on, quiet or off")
+                .Row("Tips", "a word now and then about what you can do next")
+                .Row("Labels", "beside the pointer: what each controller button does to what you point at")
+                .Row("Grid", "roads and railway straight and square, buildings lined up along the roads")
                 .Section("More")
-                .Row("World stats", "how many people, buildings, trains...")
-                .Row("Performance", "what the headset is doing, and switches to make it lighter")
-                .Row("New world", "start again from a fresh landscape (press twice)");
-            Palette.ShowInfo("Settings", "tap a button to change it", body.ToString(), CloseInfo);
+                .Row("World stats", "how many people, homes, buildings, trains and vehicles")
+                .Row("Performance", "how the headset is keeping up, and switches to make it lighter");
+            Palette.ShowInfo("Settings", "switches and more panels", body.ToString(), CloseInfo);
             var o = new List<PaletteUI.Option>();
-            if (CycleSound != null) o.Add(new PaletteUI.Option("Sound: " + SoundState(), false, () => { CycleSound(); ShowSettings(); }));
-            o.Add(new PaletteUI.Option("Tips: " + OnOff(TipsOn), TipsOn, () => { ToggleTips(); ShowSettings(); }));
-            o.Add(new PaletteUI.Option("Labels: " + OnOff(LabelsOn), LabelsOn, () =>
+            if (CycleSound != null) o.Add(new PaletteUI.Option("Sound: " + SoundState(), false, () => { CycleSound(); ShowSettings(); }) { Kind = OptionKind.Action, Tip = "Each press: on, quiet, off." });
+            o.Add(new PaletteUI.Option("Tips", TipsOn, () => { ToggleTips(); ShowSettings(); }) { Kind = OptionKind.Toggle, Tip = "A word now and then in the amber banner about what you can do next. Turning them on again starts from the first." });
+            o.Add(new PaletteUI.Option("Labels", LabelsOn, () =>
             {
                 LabelsOn = !LabelsOn; labelKey = 0;
                 Say(LabelsOn ? "Labels on: the pointer says what each button does" : "Labels off - Help still explains each tool");
                 ShowSettings();
-            }));
-            o.Add(new PaletteUI.Option("Grid: " + OnOff(BuildGrid.Snap), BuildGrid.Snap, () =>
+            }) { Kind = OptionKind.Toggle, Tip = "A little label beside the pointer saying what the trigger, grip and A would do to what you point at." });
+            o.Add(new PaletteUI.Option("Grid", BuildGrid.Snap, () =>
             {
                 BuildGrid.Snap = !BuildGrid.Snap;
                 Say(BuildGrid.Snap ? GridOnSaid : "Grid off: draw and place freely");
                 RefreshOptions(); ShowSettings();
-            }));
-            o.Add(new PaletteUI.Option("World: size, scale, place", false, OpenWorldPanel));
-            o.Add(new PaletteUI.Option("World stats", false, () => { infoMode = 1; ShowStats(); }));
-            o.Add(new PaletteUI.Option("Performance", false, ShowPerformance));
-            o.Add(new PaletteUI.Option(resetArmed && Time.time < resetUntil ? "Sure? Again" : "New world", resetArmed && Time.time < resetUntil, () => { RequestReset(); ShowSettings(); }));
+            }) { Kind = OptionKind.Toggle, Tip = "On: roads and railway come out straight and square with standard curves; buildings line up along roads. Off: freehand." });
+            o.Add(new PaletteUI.Option("World stats", false, () => { infoMode = 1; ShowStats(); }) { Kind = OptionKind.Open, Tip = "The world in numbers: people, homes, buildings, trains, vehicles." });
+            o.Add(new PaletteUI.Option("Performance", false, ShowPerformance) { Kind = OptionKind.Open, Tip = "How the headset is keeping up, and switches that make the world lighter to draw." });
             Palette.SetInfoButtons(o);
         }
     }

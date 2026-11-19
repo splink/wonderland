@@ -13,6 +13,8 @@ namespace Wonderland
         public bool MenuDown;                        // Y on the left controller: hide / show the palette
         public Vector2 Stick;                        // right: scrolls the world (Move: turns and lifts it)
         public Vector2 LeftStick;                    // left: adjusts - brush size and strength, turning what is placed, a train's speed
+        public bool LeftGrip;                        // the left grip (both grips together: grab the world and twist it round)
+        public Vector3 RightHand, LeftHand;          // where the hands are (world space; zero when not known)
     }
 
     /// <summary>
@@ -21,10 +23,10 @@ namespace Wonderland
     /// </summary>
     public sealed class QuestInput
     {
-        private bool trigger, grip;
+        private bool trigger, grip, leftGrip;
         private float hapticUntil;
 
-        public PointerInput Read(Transform rightAnchor)
+        public PointerInput Read(Transform rightAnchor, Transform leftAnchor = null)
         {
             var input = new PointerInput();
             if (rightAnchor == null) return input;
@@ -41,6 +43,11 @@ namespace Wonderland
             input.MenuDown = OVRInput.GetDown(OVRInput.Button.Two, OVRInput.Controller.LTouch);
             input.Stick = OVRInput.Get(OVRInput.Axis2D.PrimaryThumbstick, right);
             input.LeftStick = OVRInput.Get(OVRInput.Axis2D.PrimaryThumbstick, OVRInput.Controller.LTouch);
+            float lg = OVRInput.Get(OVRInput.Axis1D.PrimaryHandTrigger, OVRInput.Controller.LTouch);
+            leftGrip = leftGrip ? lg > 0.35f : lg > 0.6f;
+            input.LeftGrip = leftGrip;
+            input.RightHand = rightAnchor.position;
+            if (leftAnchor != null) input.LeftHand = leftAnchor.position;
             // Point slightly downwards from the controller's nose: a relaxed wrist then aims at the floor-level world.
             var dir = rightAnchor.rotation * Quaternion.Euler(12f, 0f, 0f) * Vector3.forward;
             input.Ray = new Ray(rightAnchor.position, dir);

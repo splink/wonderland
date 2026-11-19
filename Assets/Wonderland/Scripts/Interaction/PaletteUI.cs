@@ -18,9 +18,14 @@ namespace Wonderland
         internal MeshRenderer Background;
         internal MeshRenderer Ring;
         internal TextMeshPro Label;
-        public string Text => Label != null ? Label.text : "";
+        public string Text => Name ?? (Label != null ? Label.text : "");
+        public string Name;   // what it is called, plain (its label may carry a description, or ›)
+        public string Shown => Label != null ? Label.text : "";   // all its words, as shown
         internal Transform Icon;
         internal Color Idle, Hover, Active;
+        public OptionKind Kind;
+        public string Tip;
+        internal MeshRenderer Light;   // a switch's light: lit when on
         private float hover;
         private MaterialPropertyBlock block;
         private static readonly int ColorId = Shader.PropertyToID("_Color");
@@ -42,6 +47,7 @@ namespace Wonderland
             block.SetColor(ColorId, c);
             Background.SetPropertyBlock(block);
             if (Ring) Ring.enabled = Selected;
+            if (Light) { block.SetColor(ColorId, Selected ? new Color(0.45f, 0.95f, 0.5f, 1f) : new Color(1f, 1f, 1f, 0.22f)); Light.SetPropertyBlock(block); block.SetColor(ColorId, c); }
             transform.localScale = Vector3.one * (1f + hover * 0.05f);
             if (Icon) Icon.localRotation = Quaternion.Euler(IconPitch, IconYaw + time * (Selected || Hovered ? 50f : 0f), 0f);
             if (Label) Label.alpha = Enabled ? 1f : 0.45f;
@@ -126,7 +132,7 @@ namespace Wonderland
             uiMaterial = ui; litMaterial = lit;
             // Backing panel with a soft lighter border.
             Quad("Border", transform, Width + 0.006f, Height + 0.006f, 0.022f, new Color(1f, 0.93f, 0.8f, 0.35f), new Color(1f, 0.93f, 0.8f, 0.18f), 0.002f, 2990);
-            Quad("Panel", transform, Width, Height, 0.019f, new Color(0.17f, 0.15f, 0.2f, 0.9f), new Color(0.1f, 0.09f, 0.12f, 0.9f), 0f, 2991);
+            Quad("Panel", transform, Width, Height, 0.019f, new Color(0.17f, 0.15f, 0.2f, 0.98f), new Color(0.1f, 0.09f, 0.12f, 0.98f), 0f, 2991);
             title = Text("Title", transform, "Wonderland", new Vector3(-Width / 2 + 0.062f, Height / 2 - 0.011f, -0.002f), new Vector2(0.1f, 0.012f), 0.07f, TextAlignmentOptions.Left);
             title.color = new Color(1f, 0.86f, 0.55f);
             title.fontStyle = FontStyles.Bold;
@@ -153,8 +159,9 @@ namespace Wonderland
             itemRow.SetParent(transform, false);
             itemRow.localPosition = new Vector3(0f, -0.033f, 0f);
 
-            hint = Text("Hint", transform, "", new Vector3(0f, -0.054f, -0.002f), new Vector2(Width - 0.02f, 0.011f), 0.05f, TextAlignmentOptions.Center);
+            hint = Text("Hint", transform, "", new Vector3(0f, -0.054f, -0.002f), new Vector2(Width - 0.02f, 0.018f), 0.05f, TextAlignmentOptions.Center);
             hint.color = new Color(0.86f, 0.84f, 0.8f);
+            hint.textWrappingMode = TextWrappingModes.Normal; hint.fontSizeMin = 0.044f;   // (two lines rather than tiny print)
 
             // Always there: the village clock and a light for how the headset is keeping up.
             clock = Text("Clock", transform, "", new Vector3(-0.022f, Height / 2 - 0.011f, -0.002f), new Vector2(0.04f, 0.012f), 0.06f, TextAlignmentOptions.Right);
@@ -199,20 +206,8 @@ namespace Wonderland
 
         public const float GlobalWidth = 0.04f;    // seven fit along the bottom
 
-        public PaletteButton AddGlobal(string label, Action onClick)
-        {
-            var b = Button(label, transform, Vector3.zero, new Vector2(GlobalWidth, 0.02f), label, false);
-            b.OnClick = onClick;
-            b.ApplyVisuals();
-            globals.Add(b);
-            // Spread the row evenly across the palette, however many there are.
-            float pitch = (Width - 0.008f) / globals.Count;
-            for (int k = 0; k < globals.Count; k++)
-            {
-                globals[k].transform.localPosition = new Vector3(-Width / 2 + 0.004f + pitch * (k + 0.5f), -0.078f, 0f);
-            }
-            return b;
-        }
+        /// <summary>A plain action on the bottom bar, in a cluster of its own (see AddGlobal(Option, int)).</summary>
+        public PaletteButton AddGlobal(string label, Action onClick) => AddGlobal(new Option(label, false, onClick) { Kind = OptionKind.Action }, globals.Count == 0 ? 0 : globalClusters[^1] + 1);
 
         // ------------------------------------------------------------------ side panels: the card (left), help and stats (right)
 
@@ -243,7 +238,7 @@ namespace Wonderland
             p.Root = go.transform;
             float h = PanelHeight, top = h / 2;
             Quad("Border", p.Root, width + 0.006f, h + 0.006f, 0.02f, new Color(1f, 0.93f, 0.8f, 0.3f), new Color(1f, 0.93f, 0.8f, 0.15f), 0.002f, 2990);
-            Quad("Panel", p.Root, width, h, 0.018f, new Color(0.17f, 0.15f, 0.2f, 0.94f), new Color(0.1f, 0.09f, 0.12f, 0.94f), 0f, 2991);
+            Quad("Panel", p.Root, width, h, 0.018f, new Color(0.17f, 0.15f, 0.2f, 0.98f), new Color(0.1f, 0.09f, 0.12f, 0.98f), 0f, 2991);
             // Header band: a slightly lighter strip behind the portrait and the title.
             const float band = 0.046f;
             var header = Quad("Header", p.Root, width - 0.008f, band, 0.012f, new Color(0.26f, 0.22f, 0.3f, 0.95f), new Color(0.2f, 0.17f, 0.24f, 0.95f), -0.001f, 2992);
@@ -261,7 +256,7 @@ namespace Wonderland
             p.Body.lineSpacing = 6f;
             p.Body.color = new Color(0.95f, 0.93f, 0.9f);
             p.Close = Button("Close", p.Root, new Vector3(width / 2 - 0.019f, top - 0.019f, 0f), new Vector2(0.026f, 0.018f), "Close", false);
-            p.Close.ApplyVisuals();
+            Dress(p.Close, new Option("Close", false, null) { Kind = OptionKind.Action });
             if (portrait)
             {
                 p.Portrait = new GameObject("Portrait").transform;
@@ -340,15 +335,16 @@ namespace Wonderland
         public string CardTitle => card != null ? card.Title.text : null;
 
         /// <summary>The panel on the right of the palette (help, the world's statistics); null text hides it.</summary>
-        public const float CardWidth = 0.22f, InfoWidth = 0.23f;
+        public const float CardWidth = 0.22f, InfoWidth = 0.26f;
 
         public void ShowInfo(string title, string body, Action close) => ShowInfo(title, null, body, close);
 
         public void ShowInfo(string title, string subtitle, string body, Action close)
         {
-            if (body == null) { if (info != null) info.Root.gameObject.SetActive(false); SetInfoButtons(null); return; }
+            if (body == null) { if (info != null) info.Root.gameObject.SetActive(false); SetInfoButtons(null); SetInfoTabs(null); return; }
             info ??= MakePanel("Info", Width / 2 + InfoWidth / 2 + 0.006f, InfoWidth, false);
             info.Root.gameObject.SetActive(true);
+            if (info.Title.text != title) SetInfoTabs(null);   // (another panel: its own tabs, if any, are set after)
             info.Title.text = title; info.Subtitle.text = subtitle ?? ""; info.Body.text = body;
             info.Close.OnClick = close;
         }
@@ -364,6 +360,7 @@ namespace Wonderland
         public void SetInfoButtons(IReadOnlyList<Option> list)
         {
             list ??= new List<Option>();
+            lastInfoButtons = new List<Option>(list);
             if (info == null) { if (list.Count == 0) return; info = MakePanel("Info", Width / 2 + InfoWidth / 2 + 0.006f, InfoWidth, false); }
             PanelButtons(info, InfoWidth, infoButtons, list, 2);
         }
@@ -402,22 +399,22 @@ namespace Wonderland
                 int inRow = Mathf.Min(perRow, list.Count - row * perRow);
                 float x = (col - (inRow - 1) / 2f) * (w + gap);
                 b.transform.localPosition = new Vector3(x, bottom + (rows - 1 - row) * (h + gap) + h / 2, 0f);
-                b.Label.text = list[i].Label;
-                b.Selected = list[i].Selected; b.Enabled = list[i].Enabled;
-                b.OnClick = list[i].OnClick;
-                b.ApplyVisuals();
+                Dress(b, list[i]);
             }
-            // The body fills what is left between the header and the buttons.
-            float top = PanelHeight / 2 - 0.004f - 0.046f - 0.008f, low = rows > 0 ? bottom + rows * (h + gap) + 0.002f : -PanelHeight / 2 + 0.008f;
+            // The body fills what is left between the header (and any tabs) and the buttons.
+            float top = PanelHeight / 2 - 0.004f - 0.046f - 0.008f - TabsHeight(panel), low = rows > 0 ? bottom + rows * (h + gap) + 0.002f : -PanelHeight / 2 + 0.008f;
             panel.Body.rectTransform.localPosition = new Vector3(0f, (top + low) / 2, -0.002f);
             panel.Body.rectTransform.sizeDelta = new Vector2(width - 0.022f, top - low);
         }
 
         public IReadOnlyList<PaletteButton> InfoButtons => infoButtons;
+        public string InfoBody => info != null ? info.Body.text : null;
 
         private void Update()
         {
             UpdateLibrary();
+            UpdateLeftSlot();
+            UpdateTooltip(Application.isPlaying ? Time.deltaTime : 0.05f);
             if (card == null || !card.Root.gameObject.activeSelf || card.Portrait == null) return;
             // The little model turns slowly about its own middle.
             float yaw = Time.time * 40f;
@@ -438,7 +435,9 @@ namespace Wonderland
         public struct Option
         {
             public string Label; public bool Selected; public bool Enabled; public Action OnClick;
-            public Option(string label, bool selected, Action onClick, bool enabled = true) { Label = label; Selected = selected; OnClick = onClick; Enabled = enabled; }
+            public OptionKind Kind;   // what pressing it does (it looks the part: see OptionKind)
+            public string Tip;        // a sentence or two shown when it is pointed at for a moment
+            public Option(string label, bool selected, Action onClick, bool enabled = true) { Label = label; Selected = selected; OnClick = onClick; Enabled = enabled; Kind = OptionKind.Choice; Tip = null; }
         }
 
         /// <summary>
@@ -484,6 +483,7 @@ namespace Wonderland
         public void SetItems(IReadOnlyList<Option> list)
         {
             list ??= new List<Option>();
+            if (hint != null) hint.rectTransform.localPosition = new Vector3(0f, list.Count > 0 ? -0.054f : -0.04f, -0.002f);   // (no second row: the hint closes up under the first)
             string key = string.Join("|", System.Linq.Enumerable.Select(list, o => o.Label));
             allItems = new List<Option>(list);
             if (key != itemsKey) { itemsKey = key; itemPage = Mathf.Max(0, allItems.FindIndex(o => o.Selected)) / ItemsPerPage; }
@@ -512,19 +512,18 @@ namespace Wonderland
                 if (Application.isPlaying) Destroy(options[^1].gameObject); else DestroyImmediate(options[^1].gameObject);
                 options.RemoveAt(options.Count - 1);
             }
-            float w = Mathf.Min(0.06f, (Width - 0.02f - (list.Count - 1) * 0.004f) / Mathf.Max(1, list.Count));
+            // (after the row's caption, if it has one)
+            float lead = RowLead(optionRow), room = Width - 0.02f - lead;
+            float w = Mathf.Min(0.062f, (room - (list.Count - 1) * 0.004f) / Mathf.Max(1, list.Count));
             float total = list.Count * w + (list.Count - 1) * 0.004f;
             for (int i = 0; i < list.Count; i++)
             {
                 if (i >= options.Count) options.Add(Button("Option", optionRow, Vector3.zero, new Vector2(w, height), "", false));
                 var b = options[i];
-                b.transform.localPosition = new Vector3(-total / 2 + w / 2 + i * (w + 0.004f), 0f, 0f);
-                b.Label.text = list[i].Label;
-                b.Selected = list[i].Selected; b.Enabled = list[i].Enabled;
-                var action = list[i].OnClick;
-                b.OnClick = action;
+                float start = lead > 0f ? -Width / 2 + 0.01f + lead : -total / 2;   // (after the caption; centred without one)
+                b.transform.localPosition = new Vector3(start + w / 2 + i * (w + 0.004f), 0f, 0f);
                 ResizeButton(b, new Vector2(w, height));
-                b.ApplyVisuals();
+                Dress(b, list[i]);
             }
         }
 
@@ -597,14 +596,33 @@ namespace Wonderland
                 if (hit == null && info.collider.transform == transform) distance = info.distance; // panel back: swallow the ray
                 // From a steep angle the ray can graze the edge of a neighbouring chip first: the chip pressed is the one
                 // whose face the pointer actually lands on.
+                // (none on its face, from a very flat angle: the one whose face it lands nearest)
                 if (hit != null && !OnFace(hit, info.collider, ray, out _))
+                {
+                    float best = FaceMiss(hit, info.collider, ray);
                     foreach (var other in Physics.RaycastAll(ray, 1.5f, 1 << UiLayer, QueryTriggerInteraction.Collide))
-                        if (other.collider.GetComponent<PaletteButton>() is { } b && b != hit && OnFace(b, other.collider, ray, out float d)) { hit = b; distance = d; break; }
+                    {
+                        if (other.collider.GetComponent<PaletteButton>() is not { } b || b == hit) continue;
+                        if (OnFace(b, other.collider, ray, out float d)) { hit = b; distance = d; break; }
+                        float miss = FaceMiss(b, other.collider, ray);
+                        if (miss < best) { best = miss; hit = b; distance = other.distance; }
+                    }
+                }
             }
             if (Hovered && Hovered != hit) Hovered.Hovered = false;
             Hovered = hit;
             if (hit) hit.Hovered = true;
             return hit;
+        }
+
+        /// <summary>How far outside a button's outline the ray crosses its face plane (0: on it).</summary>
+        private static float FaceMiss(PaletteButton b, Collider c, Ray ray)
+        {
+            if (c is not BoxCollider box) return 0f;
+            var t = b.transform;
+            if (!new Plane(t.forward, t.TransformPoint(box.center)).Raycast(ray, out float distance)) return float.MaxValue;
+            var p = t.InverseTransformPoint(ray.GetPoint(distance)) - box.center;
+            return Mathf.Max(0f, Mathf.Abs(p.x) - box.size.x / 2f) + Mathf.Max(0f, Mathf.Abs(p.y) - box.size.y / 2f);
         }
 
         /// <summary>Whether the ray crosses a button's face (its front plane, within its outline); where, along the ray.</summary>
@@ -647,7 +665,8 @@ namespace Wonderland
             b.Active = tile ? new Color(1f, 0.85f, 0.45f, 0.28f) : new Color(1f, 0.8f, 0.4f, 0.55f);
             b.Background = Quad("Background", go.transform, size.x, size.y, Mathf.Min(size.x, size.y) * 0.28f, Color.white, new Color(0.85f, 0.85f, 0.9f), -0.001f, 2992);
             if (tile) b.Ring = Ring("Selected", go.transform, size.x + 0.003f, size.y + 0.003f, 0.0016f, new Color(1f, 0.82f, 0.35f, 1f));
-            b.Label = Text("Label", go.transform, label, new Vector3(0f, 0f, -0.003f), new Vector2(size.x - 0.004f, tile ? 0.009f : size.y - 0.005f), tile ? 0.045f : 0.05f, TextAlignmentOptions.Center);
+            b.Label = Text("Label", go.transform, label, new Vector3(0f, 0f, -0.003f), new Vector2(size.x - 0.004f, tile ? 0.009f : size.y - 0.004f), tile ? 0.05f : 0.054f, TextAlignmentOptions.Center);
+            if (!tile) { b.Label.textWrappingMode = TextWrappingModes.Normal; b.Label.lineSpacing = -18f; }   // (two short lines rather than one tiny one)
             var col = go.AddComponent<BoxCollider>();
             col.size = new Vector3(size.x, size.y, 0.002f);   // thin (oblique rays must not clip a neighbour), just in front of the panel
             col.center = new Vector3(0f, 0f, -0.003f);
@@ -740,7 +759,7 @@ namespace Wonderland
             t.text = text;
             t.fontSize = fontSize;
             t.enableAutoSizing = true;
-            t.fontSizeMin = fontSize * 0.5f; t.fontSizeMax = fontSize;
+            t.fontSizeMin = fontSize * 0.8f; t.fontSizeMax = fontSize;   // (never shrunk past reading)
             t.alignment = align;
             t.textWrappingMode = TextWrappingModes.NoWrap;
             t.overflowMode = TextOverflowModes.Ellipsis;
