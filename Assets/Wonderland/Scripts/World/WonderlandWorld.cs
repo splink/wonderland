@@ -405,6 +405,7 @@ namespace Wonderland
             // Drawn on from a stream's free end it carries that stream on (one stream, widening or narrowing gently).
             var joined = StreamSystem.Carry(Streams.Streams, path, Terrain);
             StreamSystem.Confluence(Streams.Streams, joined);   // (meeting another's side: curving in, its mouth widening)
+            StreamSystem.Mouths(joined, Terrain);                // (into a pond or a lake: opening out)
             StreamSystem.Relevel(joined, Terrain, Streams.Streams);
             Streams.Streams.Add(joined);
             StreamSystem.Join(Streams.Streams);   // (onto another stream it starts or ends at)

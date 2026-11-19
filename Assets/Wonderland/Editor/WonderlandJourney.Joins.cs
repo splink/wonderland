@@ -17,16 +17,6 @@ namespace Wonderland.Editor
         private static void JoinJourney()
         {
             bool gridWas = BuildGrid.Snap;
-            float Sharpest(List<Vector2> pts)
-            {
-                float worst = 0f;
-                for (int i = 1; i + 1 < pts.Count; i++)
-                {
-                    var a = pts[i] - pts[i - 1]; var b = pts[i + 1] - pts[i];
-                    if (a.magnitude > 0.004f && b.magnitude > 0.004f) worst = Mathf.Max(worst, Vector2.Angle(a, b));
-                }
-                return worst;
-            }
             foreach (bool grid in new[] { false, true })
             {
                 BuildGrid.Snap = grid;
@@ -149,6 +139,74 @@ namespace Wonderland.Editor
                 Check(sank < 0.0015f, $"Levelling the streams again and again leaves them where they are (sank at most {sank * 1000f:0.0} mm{(sank > 0f ? ", " + where : "")})");
                 Object.DestroyImmediate(w.gameObject);
             }
+            {
+                var w = Scratch("Hand water", 660f);
+                foreach (var (what, ok) in HandWater(w)) Check(ok, what);
+                Object.DestroyImmediate(w.gameObject);
+            }
+        }
+
+        /// <summary>The sharpest turn between neighbouring stretches of a line (degrees).</summary>
+        private static float Sharpest(List<Vector2> pts)
+        {
+            float worst = 0f;
+            for (int i = 1; i + 1 < pts.Count; i++)
+            {
+                var a = pts[i] - pts[i - 1]; var b = pts[i + 1] - pts[i];
+                if (a.magnitude > 0.004f && b.magnitude > 0.004f) worst = Mathf.Max(worst, Vector2.Angle(a, b));
+            }
+            return worst;
+        }
+
+        /// <summary>
+        /// Streams carried on as a hand draws them, on a world with a lake at its east: a stream carried on by a stroke
+        /// begun beside its end and slanting away; a river carried on as a creek by a stroke begun back over its end; a
+        /// creek carried on into the lake. Each comes out one stream, the old part exactly where it was, curving on
+        /// without a kink, its width changing gently, opening out into the lake. Returns the checks.
+        /// </summary>
+        private static List<(string, bool)> HandWater(WonderlandWorld w)
+        {
+            var t = w.Terrain;
+            var results = new List<(string, bool)>();
+            var lake = new Vector3(0.62f, 0f, -0.45f);
+            float level = w.WaterLevelForStroke(lake);
+            Hold(() => w.WaterStroke(lake, 0.22f, 0.9f, Dt, level, false), 2f);
+            StreamPath Holding(Vector2 p) => w.Streams.Streams.Find(s => StreamSystem.Nearest(s, p, out _, out _) < 0.01f);
+            void Case(string what, float w0, Vector2[] first, float w1, Vector2[] then, bool lakeEnd)
+            {
+                w.BuildStream(Line(t, first), w0);
+                var before = Holding(first[0]);
+                var kept = before != null ? before.points.ConvertAll(q => new Vector2(q.x, q.z)) : new List<Vector2>();
+                int streams = w.Streams.Streams.Count;
+                w.BuildStream(Line(t, then), w1);
+                var after = Holding(first[0]);
+                bool one = after != null && w.Streams.Streams.Count == streams && StreamSystem.Nearest(after, then[^1], out _, out _) < 0.02f;
+                // The old part where it was: every old point is still on the stream, exactly.
+                float moved = 0f;
+                if (after != null) foreach (var q in kept) moved = Mathf.Max(moved, StreamSystem.Nearest(after, q, out _, out _));
+                float bend = after != null ? Sharpest(after.points.ConvertAll(q => new Vector2(q.x, q.z))) : 999f, step = 0f;
+                if (after != null) for (int i = 1; i < after.points.Count; i++) step = Mathf.Max(step, Mathf.Abs(after.WidthAt(i) - after.WidthAt(i - 1)));
+                string extra = "";
+                bool fine = one && moved < 0.0005f && bend < 10f && step < 0.15f;
+                if (lakeEnd && after != null)
+                {
+                    int n = after.points.Count, back = Mathf.Max(0, n - 12);
+                    float flare = after.WidthAt(n - 1) / after.WidthAt(back);
+                    var mouth = after.points[n - 1];
+                    bool inLake = t.WaterAt(mouth.x, mouth.z) > 0.5f;
+                    fine &= inLake && flare > 1.3f;
+                    extra = $", into the lake {inLake}, its mouth x{flare:0.0}";
+                }
+                else if (after != null) extra = $", width {after.WidthAt(0):0.0} to {after.WidthAt(after.points.Count - 1):0.0}";
+                results.Add(($"Carried on as a hand draws it - {what}: one stream {one}, the old part where it was (moved {moved * 1000f:0.0} mm), curving on (sharpest {bend:0.0} deg per 1.5 cm), its width gradual (at most {step:0.00} a step){extra}", fine));
+            }
+            Case("a stroke begun 2.5 cm beside a stream's end, slanting off at 45 degrees", 1f, new[] { new Vector2(-0.75f, 0.55f), new Vector2(-0.35f, 0.55f) },
+                 1f, new[] { new Vector2(-0.33f, 0.575f), new Vector2(-0.08f, 0.8f) }, false);
+            Case("a river carried on as a creek by a stroke begun back over its end", 2.2f, new[] { new Vector2(-0.75f, 0.1f), new Vector2(-0.35f, 0.1f) },
+                 0.6f, new[] { new Vector2(-0.38f, 0.11f), new Vector2(-0.05f, 0.02f), new Vector2(0.15f, -0.1f) }, false);
+            Case("a creek carried on into the lake", 0.6f, new[] { new Vector2(-0.75f, -0.5f), new Vector2(-0.1f, -0.45f) },
+                 1f, new[] { new Vector2(-0.08f, -0.46f), new Vector2(0.25f, -0.44f), new Vector2(0.55f, -0.45f) }, true);
+            return results;
         }
 
         /// <summary>
@@ -253,6 +311,23 @@ namespace Wonderland.Editor
                 // A creek running into a stream's side.
                 Stream(0.6f, new Vector2(-0.25f, -0.8f), new Vector2(-0.25f, -0.37f));
                 w.UpdateStreamsFromTerrain();
+                {
+                    var hw = Scratch("Hand water", 3f);
+                    hw.Sky.Shown = false;
+                    foreach (var (what, ok) in HandWater(hw)) report.AppendLine($"{(ok ? "ok" : "NOT")}: {what}");
+                    hw.UpdateStreamsFromTerrain();
+                    hw.Forest.RebuildDirty(); hw.Cover.RebuildDirty();
+                    var hc = hw.transform.position;
+                    cam.transform.position = hc + new Vector3(0f, 1.9f, -0.15f); cam.transform.LookAt(hc); cam.fieldOfView = 50f;
+                    WonderlandRenders.Capture(cam, "editor-joins-water-hand.png", 1200, 1200);
+                    foreach (var (name, at) in new[] { ("slant", new Vector2(-0.34f, 0.6f)), ("narrowing", new Vector2(-0.33f, 0.08f)), ("into-lake", new Vector2(0.3f, -0.45f)) })
+                    {
+                        var p = hc + new Vector3(at.x, 0f, at.y);
+                        cam.transform.position = p + new Vector3(0.05f, 0.32f, -0.3f); cam.transform.LookAt(p); cam.fieldOfView = 40f;
+                        WonderlandRenders.Capture(cam, $"editor-joins-water-hand-{name}.png", 1280, 900);
+                    }
+                    Object.DestroyImmediate(hw.gameObject);
+                }
                 w.Forest.RebuildDirty(); w.Cover.RebuildDirty();
                 var c = w.transform.position;
                 cam.transform.position = c + new Vector3(0f, 1.9f, -0.15f); cam.transform.LookAt(c); cam.fieldOfView = 50f;
