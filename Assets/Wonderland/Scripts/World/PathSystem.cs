@@ -331,38 +331,69 @@ namespace Wonderland
 
         // ------------------------------------------------------------------ terrain
 
-        /// <summary>Roads and lanes smooth the ground across their width (following the land along it).</summary>
+        /// <summary>
+        /// Grades the land to a way, as the railway's is: a smooth profile along it - the ground averaged over 10 cm
+        /// either way, then no steeper than 10% - with the ground under it cut or filled exactly to that (so nothing pokes
+        /// up through the asphalt and the road never copies the bumps under it), and banks easing back to the land either
+        /// side, wider where the cut or fill is deeper. House pads, the railway's ground and water are left as they are.
+        /// </summary>
         public RectInt Grade(PathLine l)
         {
-            if (!IsCarWay(l.kind)) return new RectInt(0, 0, 0, 0);
+            if (!IsCarWay(l.kind) || l.points.Count < 2) return new RectInt(0, 0, 0, 0);
             int n = l.points.Count;
-            var h = new float[n];
-            for (int i = 0; i < n; i++) h[i] = terrain.SurfaceAt(l.points[i].x, l.points[i].y);
-            var smooth = new float[n];
-            for (int i = 0; i < n; i++)
+            var along = new float[n];
+            for (int i = 1; i < n; i++) along[i] = along[i - 1] + (l.points[i] - l.points[i - 1]).magnitude;
+            var ground = new float[n];
+            for (int i = 0; i < n; i++) ground[i] = terrain.SurfaceAt(l.points[i].x, l.points[i].y);
+            // Averaged over 10 cm either way (weighted, by distance along it).
+            var y = new float[n];
+            for (int i = 0, lo = 0, hi = 0; i < n; i++)
             {
-                float sum = 0f; int c = 0;
-                for (int k = -6; k <= 6; k++) { int j = l.closed ? (i + k + n) % n : Mathf.Clamp(i + k, 0, n - 1); sum += h[j]; c++; }
-                smooth[i] = sum / c;
+                while (along[i] - along[lo] > 0.1f) lo++;
+                while (hi + 1 < n && along[hi + 1] - along[i] <= 0.1f) hi++;
+                float sum = 0f, wsum = 0f;
+                for (int j = lo; j <= hi; j++) { float wj = 1f - Mathf.Abs(along[j] - along[i]) / 0.11f; sum += ground[j] * wj; wsum += wj; }
+                y[i] = sum / wsum;
             }
-            float minX = float.MaxValue, minZ = float.MaxValue, maxX = float.MinValue, maxZ = float.MinValue;
-            foreach (var p in l.points) { minX = Mathf.Min(minX, p.x); maxX = Mathf.Max(maxX, p.x); minZ = Mathf.Min(minZ, p.y); maxZ = Mathf.Max(maxZ, p.y); }
-            float hw = HalfWidth(l.kind), margin = hw + 0.03f;
-            var region = terrain.RegionAround(new Vector2((minX + maxX) / 2f, (minZ + maxZ) / 2f), Mathf.Max(maxX - minX, maxZ - minZ) / 2f + margin + 0.02f);
-            for (int z = region.yMin; z < region.yMax; z++)
-            for (int x = region.xMin; x < region.xMax; x++)
+            // No steeper than 10%: pulled in from both ends until it holds.
+            const float grade = 0.1f;
+            for (int pass = 0; pass < 3; pass++)
             {
-                var c = new Vector2(terrain.LocalX(x), terrain.LocalZ(z));
-                if (c.x < minX - margin || c.x > maxX + margin || c.y < minZ - margin || c.y > maxZ + margin) continue;
-                int g = z * terrain.Nx + x;
+                for (int i = 1; i < n; i++) { float d = (along[i] - along[i - 1]) * grade; y[i] = Mathf.Clamp(y[i], y[i - 1] - d, y[i - 1] + d); }
+                for (int i = n - 2; i >= 0; i--) { float d = (along[i + 1] - along[i]) * grade; y[i] = Mathf.Clamp(y[i], y[i + 1] - d, y[i + 1] + d); }
+            }
+            // Stamp it onto the land: each cell near the way takes the profile of the nearest point, fully under the way
+            // and its pavements, easing out over the banks.
+            float hw = HalfWidth(l.kind) + Pavement(l.kind), reachMax = hw + 0.09f;
+            var nearest = new Dictionary<int, (float d, int i)>();
+            int step = Mathf.Max(1, Mathf.RoundToInt(0.008f / Mathf.Max(1e-4f, along[n - 1] / Mathf.Max(1, n - 1))));
+            for (int i = 0; i < n; i += step)
+            {
+                var r = terrain.RegionAround(l.points[i], reachMax);
+                for (int z = r.yMin; z < r.yMax; z++)
+                for (int x = r.xMin; x < r.xMax; x++)
+                {
+                    float d = (new Vector2(terrain.LocalX(x), terrain.LocalZ(z)) - l.points[i]).magnitude;
+                    if (d > reachMax) continue;
+                    int g = z * terrain.Nx + x;
+                    if (!nearest.TryGetValue(g, out var was) || d < was.d) nearest[g] = (d, i);
+                }
+            }
+            if (nearest.Count == 0) return new RectInt(0, 0, 0, 0);
+            int x0 = int.MaxValue, z0 = int.MaxValue, x1 = int.MinValue, z1 = int.MinValue;
+            foreach (var (g, (d, i)) in nearest)
+            {
                 if (terrain.Pad[g] > 0.05f || terrain.Lock[g] > 0.05f || terrain.Water[g] > 0.05f) continue;
-                float best = float.MaxValue; int bi = 0;
-                for (int i = 0; i < n; i += 2) { float d = (l.points[i] - c).sqrMagnitude; if (d < best) { best = d; bi = i; } }
-                float dist = Mathf.Sqrt(best);
-                if (dist > margin) continue;
-                float w = dist < hw + 0.005f ? 1f : Mathf.SmoothStep(1f, 0f, (dist - hw - 0.005f) / (margin - hw - 0.005f));
-                terrain.Height[g] = Mathf.Lerp(terrain.Height[g], terrain.HeightForSurface(g, smooth[bi]), IsRoad(l.kind) ? w : w * 0.9f);   // (under a road: flat)
+                float target = y[i], diff = Mathf.Abs(terrain.Surface[g] - target);
+                float bank = Mathf.Clamp(diff * 2.5f, 0.02f, 0.09f);   // (a gentle bank: wider for a deeper cut or fill)
+                if (d > hw + 0.004f + bank) continue;
+                float w = d <= hw + 0.004f ? 1f : Mathf.SmoothStep(1f, 0f, (d - hw - 0.004f) / bank);
+                terrain.Height[g] = Mathf.Lerp(terrain.Height[g], terrain.HeightForSurface(g, target), w);
+                int gx = g % terrain.Nx, gz = g / terrain.Nx;
+                x0 = Mathf.Min(x0, gx); z0 = Mathf.Min(z0, gz); x1 = Mathf.Max(x1, gx); z1 = Mathf.Max(z1, gz);
             }
+            if (x0 > x1) return new RectInt(0, 0, 0, 0);
+            var region = new RectInt(x0, z0, x1 - x0 + 1, z1 - z0 + 1);
             terrain.UpdateSurface(region);
             return region;
         }

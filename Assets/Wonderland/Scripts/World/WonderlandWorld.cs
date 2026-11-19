@@ -352,7 +352,31 @@ namespace Wonderland
             Terrain.SetAllowed(null);
             ApplyPads(Terrain.All, reshape: false);
             lastGround.Clear();
+            GradeNewGround();
             return true;
+        }
+
+        // The grid cells each road has been graded within this session (it is graded again only for land new to it).
+        private readonly Dictionary<PathLine, RectInt> gradedIn = new();
+
+        /// <summary>
+        /// Grades the roads to their smooth profile over land that has come into the grid since they were last graded
+        /// (a world saved before roads were graded so - or a long road whose far end was out in storage).
+        /// </summary>
+        private void GradeNewGround()
+        {
+            var grid = Terrain.Cells;
+            bool any = false;
+            foreach (var l in Paths.Lines)
+            {
+                if (!PathSystem.IsCarWay(l.kind) || l.points.Count < 2) continue;
+                bool had = gradedIn.TryGetValue(l, out var r);
+                if (had && r.xMin <= grid.xMin && r.yMin <= grid.yMin && r.xMax >= grid.xMax && r.yMax >= grid.yMax) continue;
+                var region = Paths.Grade(l);
+                if (region.width > 0) { TerrainView.Rebuild(region); any = true; }
+                gradedIn[l] = had ? new RectInt(Mathf.Min(r.xMin, grid.xMin), Mathf.Min(r.yMin, grid.yMin), Mathf.Max(r.xMax, grid.xMax) - Mathf.Min(r.xMin, grid.xMin), Mathf.Max(r.yMax, grid.yMax) - Mathf.Min(r.yMin, grid.yMin)) : grid;
+            }
+            if (any) RefreshBridges();
         }
 
         public void TerrainStroke(TerrainBrush brush, Vector3 local, float radius, float strength, float dt, float flattenTarget)
@@ -744,6 +768,9 @@ namespace Wonderland
             if (mend) Streams.Rebuild();
             int walls = Terrain.RepairWalls();
             if (walls > 0 || mend) Debug.Log($"Wonderland: mended the land - {walls} cells of wall taken down{(mend ? ", streams levelled again" : "")}");
+            // Roads graded the old way copied the bumps under them: grade them again to a smooth profile.
+            gradedIn.Clear();
+            GradeNewGround();
             if (d.hour >= 0f) { Clock.Hour = Mathf.Repeat(d.hour, 24f); Clock.Day = Mathf.Max(0, d.day); Clock.Mode = (ClockMode)Mathf.Clamp(d.clockMode, 0, 2); }
             People.SetSupplies(d.supplies);
             Cctv.Import(d.cameras);

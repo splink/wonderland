@@ -38,8 +38,7 @@ namespace Wonderland.Editor
             highest = 0f;
             for (int z = 0; z < t.Nz; z++) for (int x = 0; x < t.Nx; x++) { float h = t.Surface[z * t.Nx + x]; if (h > highest) { highest = h; top = new Vector2(t.LocalX(x), t.LocalZ(z)); } }
             report.AppendLine($"by the streams (window at 3.7, -1.0): highest ground {highest * 1000f:0} mm at ({top.x:0.00}, {top.y:0.00})");
-            shots.Add(("streams", new Vector2(3.6f, -1.0f)));
-            shots.Add(("highest", top));
+
             {
                 var c = t.RegionAround(top, 0.001f); int ci = (c.y + 1) * t.Nx + c.x + 1;
                 var row = new System.Text.StringBuilder("around the highest (mm):\n");
@@ -57,7 +56,31 @@ namespace Wonderland.Editor
                     float step = Mathf.Abs(t.SurfaceAt(a.x, a.y) - t.SurfaceAt(b.x, b.y)) / Mathf.Max(0.001f, (b - a).magnitude);
                     if (step > worst) { worst = step; at = b; }
                 }
-                if (worst > 0.35f) { report.AppendLine($"road {w.Paths.Lines.IndexOf(l)} ({PathSystem.Names[l.kind]}, {l.points.Count} points): steepest ground under it {worst * 100f:0}% at ({at.x:0.00}, {at.y:0.00})"); if (shots.Count < 4) shots.Add(($"road{w.Paths.Lines.IndexOf(l)}", at)); }
+                if (worst > 9f) { report.AppendLine($"road {w.Paths.Lines.IndexOf(l)} ({PathSystem.Names[l.kind]}, {l.points.Count} points): steepest ground under it {worst * 100f:0}% at ({at.x:0.00}, {at.y:0.00})"); if (shots.Count < 4) shots.Add(($"road{w.Paths.Lines.IndexOf(l)}", at)); }
+            }
+            // The roads' own surfaces: where the ground comes up through them, and where they step.
+            {
+                var samplesOf = typeof(PathSystem).GetMethod("RoadSamples", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                int pokes = 0, steps = 0, shown = 0;
+                foreach (var l in w.Paths.Lines)
+                {
+                    if (!PathSystem.IsRoad(l.kind) || l.points.Count < 2) continue;
+                    var list = (System.Collections.IList)samplesOf.Invoke(w.Paths, new object[] { l });
+                    float hw = PathSystem.HalfWidth(l.kind) - PathSystem.KerbWidth, lastY = float.NaN; Vector2 lastP = default;
+                    foreach (var o in list)
+                    {
+                        var ty = o.GetType();
+                        var P = (Vector2)ty.GetField("P").GetValue(o); var T = (Vector2)ty.GetField("T").GetValue(o); float Y = (float)ty.GetField("Y").GetValue(o);
+                        if ((bool)ty.GetField("Junction").GetValue(o)) { lastY = float.NaN; continue; }
+                        var right = new Vector2(T.y, -T.x);
+                        float over = 0f;
+                        for (int k = -4; k <= 4; k++) { var q = P + right * (hw * k / 4f); over = Mathf.Max(over, t.SurfaceAt(q.x, q.y) - (Y + PathSystem.RoadLift)); }
+                        if (over > 0.0003f) { pokes++; if (shown < 2 && over > 0.001f) { report.AppendLine($"road {w.Paths.Lines.IndexOf(l)}: ground {over * 1000f:0.0} mm up through it at ({P.x:0.00}, {P.y:0.00})"); shots.Add(($"poke{shown}", P)); shown++; } }
+                        if (!float.IsNaN(lastY) && (P - lastP).magnitude > 1e-4f && Mathf.Abs(Y - lastY) / (P - lastP).magnitude > 0.25f) { steps++; if (steps <= 12 && steps % 4 == 1) shots.Add(($"step{steps}", P)); if (steps <= 12) report.AppendLine($"road {w.Paths.Lines.IndexOf(l)}: steps {(Y - lastY) * 1000f:0.0} mm in {(P - lastP).magnitude * 1000f:0} mm at ({P.x:0.00}, {P.y:0.00}); deck here {w.Bridges.Deck(P, out _, out _)}, before {w.Bridges.Deck(lastP, out _, out _)}; ground {t.SurfaceAt(P.x, P.y) * 1000f:0.0} / {t.SurfaceAt(lastP.x, lastP.y) * 1000f:0.0} mm"); }
+                        lastY = Y; lastP = P;
+                    }
+                }
+                report.AppendLine($"roads: {pokes} places the ground comes up through the asphalt, {steps} steep steps");
             }
             // Driveways.
             float edge = PathSystem.HalfWidth((int)PathKind.Road) - PathSystem.KerbWidth;
@@ -77,7 +100,7 @@ namespace Wonderland.Editor
                         float across = Mathf.Abs(Vector2.Dot((new Vector2(h.x, h.z) - p).normalized, o));
                         why += $": street {(way - p).magnitude * 100f:0.0} cm from its way in, depth {depth * 1000f:0} mm, near a junction {w.Paths.NearJunction(p, WonderlandWorld.DrivewayWidth)}, facing the street {Vector2.Dot(Quaternion.Euler(0f, 0f, -h.rotation) * Vector2.down, o) * -1f:0.00}";
                     }
-                    if (shots.Count < 7) shots.Add(($"{Catalog.Get(h.variant).Short.ToLower()}", new Vector2(h.x, h.z)));
+
                 }
                 report.AppendLine($"{Catalog.Get(h.variant).Name} at ({h.x:0.00}, {h.z:0.00}) turned {h.rotation:0}: {why}");
             }

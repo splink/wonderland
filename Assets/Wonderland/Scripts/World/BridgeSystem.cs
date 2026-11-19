@@ -27,7 +27,7 @@ namespace Wonderland
     public sealed class BridgeSystem : MonoBehaviour
     {
         public static readonly string[] Names = { "Stone arch bridge", "Timber trestle", "Steel truss bridge", "Suspension bridge", "Covered bridge", "Footbridge", "Stepping stones" };
-        public const int Bank = 4;   // points of approach on each bank (1 cm apart)
+        public const int Bank = 4, RoadBank = 16;   // points of approach on each bank (1 cm apart): a path's, a road's
 
         public readonly List<BridgeChoice> Choices = new();
         public readonly List<Bridge> Bridges = new();
@@ -102,7 +102,9 @@ namespace Wonderland
                 {
                     var line = paths[li];
                     if (!PathSystem.IsWay(line.kind)) continue;
-                    foreach (var (i0, i1, wet) in WetRuns(line.points.Count, i => waterLevel(line.points[i])))
+                    // (a road's approach is long enough for a gentle ramp up onto the deck: 16 cm, about 15%)
+                    int bank = PathSystem.IsCarWay(line.kind) ? RoadBank : Bank;
+                    foreach (var (i0, i1, wet) in WetRuns(line.points.Count, i => waterLevel(line.points[i]), bank))
                     {
                         var m = new Member { Track = false, Index = li, Kind = line.kind, HalfWidth = PathSystem.HalfWidth(line.kind) + 0.008f, Wet = wet };
                         // Deck: clear of the highest water under it, ramping up from the banks.
@@ -113,7 +115,7 @@ namespace Wonderland
                         for (int k = 0; k < n; k++)
                         {
                             var p = line.points[i0 + k];
-                            float t = Mathf.Clamp01(Mathf.Min(k, n - 1 - k) / (float)Bank);
+                            float t = Mathf.Clamp01(Mathf.Min(k, n - 1 - k) / (float)bank);
                             float ground = terrain.SurfaceAt(p.x, p.y);
                             m.Points.Add(new Vector3(p.x, Mathf.Lerp(ground, Mathf.Max(deck, ground), Mathf.SmoothStep(0f, 1f, t)), p.y));
                         }
@@ -162,13 +164,13 @@ namespace Wonderland
             BuildMesh();
         }
 
-        private static IEnumerable<(int i0, int i1, bool[] wet)> WetRuns(int n, Func<int, float> level)
+        private static IEnumerable<(int i0, int i1, bool[] wet)> WetRuns(int n, Func<int, float> level, int bank = Bank)
         {
             var wet = new bool[n];
             for (int i = 0; i < n; i++) wet[i] = level(i) >= 0f;
             var span = new bool[n];
             for (int i = 0; i < n; i++)
-                if (wet[i]) for (int k = -Bank; k <= Bank; k++) { int j = i + k; if (j >= 0 && j < n) span[j] = true; }
+                if (wet[i]) for (int k = -bank; k <= bank; k++) { int j = i + k; if (j >= 0 && j < n) span[j] = true; }
             int start = -1;
             for (int i = 0; i <= n; i++)
             {

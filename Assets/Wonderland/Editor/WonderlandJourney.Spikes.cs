@@ -29,6 +29,34 @@ namespace Wonderland.Editor
         private static void SpikeJourney()
         {
             {
+                // A road drawn over rough, hilly ground: a smooth surface, nothing poking up through it.
+                var w = new GameObject("Road over hills").AddComponent<WonderlandWorld>();
+                w.Create(2f, Materials(), 7, true, endless: true);
+                var t = w.Terrain;
+                var rng = new Rng(4);
+                for (int k = 0; k < 14; k++)
+                {
+                    var c = new Vector3(rng.Range(-0.6f, 0.6f), 0f, rng.Range(-0.15f, 0.15f));
+                    for (int s = 0; s < 10; s++) w.TerrainStroke(k % 2 == 0 ? TerrainBrush.Peaks : TerrainBrush.Raise, c, rng.Range(0.05f, 0.12f), 1f, 0.05f, 0f);
+                }
+                w.BuildPath(Line(t, new Vector2(-0.7f, 0f), new Vector2(0.7f, 0.02f)), PathKind.Road);
+                var road = w.Paths.Lines.Find(l => l.kind == (int)PathKind.Road);
+                var samplesOf = typeof(PathSystem).GetMethod("RoadSamples", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                float steepest = 0f, poke = 0f; float lastY = float.NaN; Vector2 lastP = default;
+                if (road != null)
+                    foreach (var o in (System.Collections.IList)samplesOf.Invoke(w.Paths, new object[] { road }))
+                    {
+                        var ty = o.GetType();
+                        var P = (Vector2)ty.GetField("P").GetValue(o); var T = (Vector2)ty.GetField("T").GetValue(o); float Y = (float)ty.GetField("Y").GetValue(o);
+                        if (!float.IsNaN(lastY) && (P - lastP).magnitude > 0.002f) steepest = Mathf.Max(steepest, Mathf.Abs(Y - lastY) / (P - lastP).magnitude);
+                        var right = new Vector2(T.y, -T.x); float hw = PathSystem.HalfWidth(road.kind) - PathSystem.KerbWidth;
+                        for (int k = -4; k <= 4; k++) { var q = P + right * (hw * k / 4f); poke = Mathf.Max(poke, t.SurfaceAt(q.x, q.y) - (Y + PathSystem.RoadLift)); }
+                        lastY = Y; lastP = P;
+                    }
+                Check(road != null && steepest < 0.16f && poke < 0.0003f, $"A road over rough hills runs smoothly: steepest {steepest * 100f:0}% (no steps), the ground nowhere up through it ({poke * 1000f:0.0} mm)");
+                Object.DestroyImmediate(w.gameObject);
+            }
+            {
                 // Streams drawn out of a river's side (branches), and into it: no wall of land along them.
                 var w = new GameObject("Branch walls").AddComponent<WonderlandWorld>();
                 w.Create(2f, Materials(), 7, true, endless: true);
