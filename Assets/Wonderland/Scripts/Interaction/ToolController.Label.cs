@@ -38,7 +38,7 @@ namespace Wonderland
         {
             if (!LabelsOn || pointerOnPalette || PlacingWorld) return null;
             string let = heldByTrigger ? "Trigger" : "Let go";
-            if (carrying) return Lines($"Moving the {HouseFactory.Name(HouseVariant).ToLower()}", Act(let, "put it down here"), Act("Stick", "turn it"));
+            if (carrying) return Lines($"Moving the {HouseFactory.Name(HouseVariant).ToLower()}", Act(let, "put it down here"), Act("Left stick", "turn it"));
             if (carriedTrain != null) return Lines("Moving a train", Act(let, "put it on the track here"));
             if (carriedPerson.HasValue) return Lines("Moving a villager", Act(let, "set them down here"));
             if (carriedAnimal.HasValue) return Lines("Moving an animal", Act(let, "set it down here"));
@@ -59,7 +59,7 @@ namespace Wonderland
             if (peekVehicle != null) return Lines(World.Traffic.Describe(peekVehicle), card ?? remove);
             if (peekTrain != null) return Lines(World.Trains.Describe(peekTrain), card ?? remove, Act("Grip", "move it"));
             if (Tool == Tool.Train && hoveredTrain != null)
-                return Lines(World.Trains.Describe(hoveredTrain), Act("Trigger", hoveredTrain.Running ? "stop it" : "set it going"), Act("Stick", "up / down: speed · left / right: carriages"), Act("Grip", "move it"));
+                return Lines(World.Trains.Describe(hoveredTrain), Act("Trigger", hoveredTrain.Running ? "stop it" : "set it going"), Act("Left stick", "up / down: speed · left / right: carriages"), Act("Grip", "move it"));
             if (peekBoat >= 0 && peekBoat < World.Boats.Boats.Count) return Lines(World.Boats.Describe(peekBoat), card ?? remove);
             int house = peekHouse >= 0 ? peekHouse : Tool is Tool.Houses or Tool.Eraser ? rayHouse : -1;
             if (house >= 0 && house < World.Buildings.Houses.Count)

@@ -96,10 +96,10 @@ namespace Wonderland.Editor
             Check(after > before + 0.05f, $"Trigger + aim raises a hill ({before * 100f:0.0} -> {after * 100f:0.0} cm)");
             Check(world.UndoDepth == 1, "One stroke = one undo step");
 
-            // Stick right grows the brush.
+            // The left stick right grows the brush.
             float radius = tools.Radius;
             for (int i = 0; i < 40; i++) Frame(hand, target, false, stick: new Vector2(1f, 0f));
-            Check(tools.Radius > radius * 1.3f, $"Stick right enlarges the brush ({radius * 100f:0} -> {tools.Radius * 100f:0} cm)");
+            Check(tools.Radius > radius * 1.3f, $"The left stick right enlarges the brush ({radius * 100f:0} -> {tools.Radius * 100f:0} cm)");
 
             // A cycles the sculpt mode.
             Frame(hand, target, false, primary: true);
@@ -618,6 +618,39 @@ namespace Wonderland.Editor
             bool undone = world.Buildings.Houses.Count == housesNow;
             ClickButton(hand, "Redo");
             Check(redoBench == null && undone && world.Buildings.Houses.Count == housesNow + 1, "Undo takes a step back and Redo puts it back" + (redoBench ?? ""));
+
+            // The right stick scrolls the world the way the player faces; the left stick still sizes the brush.
+            tools.SelectTool(Tool.Terrain);
+            world.UseWindow(true);
+            var head = new GameObject("Head").transform;
+            head.SetPositionAndRotation(new Vector3(0f, 1.5f, 0f), Quaternion.LookRotation(Vector3.right));
+            tools.Head = head;
+            var aim = world.transform.TransformPoint(new Vector3(0.3f, 0f, -0.3f));
+            var start = world.WindowCenter; var placedAt = world.PlacementPosition;
+            float brush = tools.Radius;
+            for (int i = 0; i < 72; i++) Frame(hand, aim, false, scroll: new Vector2(0f, 1f));
+            var went = world.WindowCenter - start;
+            Check(went.x > 0.3f && Mathf.Abs(went.y) < 0.02f && (world.PlacementPosition - placedAt).magnitude < 1e-3f && tools.Radius == brush,
+                $"The right stick scrolls the world the way the player faces ({went.x * 100f:0} cm east in a second, facing east); the world stays where it is in the room, the brush as it was");
+            for (int i = 0; i < 20; i++) Frame(hand, aim, false, scroll: new Vector2(-1f, 0f));
+            Check(world.WindowCenter.y > start.y + 0.05f, $"...and left and right ({(world.WindowCenter.y - start.y) * 100f:0} cm north for left, facing east)");
+            // Move: Higher / Lower / Table / Floor beside the palette, and either stick up or down.
+            tools.ToggleMoving();
+            Check(tools.PlacingWorld && Find("Higher") != null && Find("Floor") != null, "Move opens a panel with Higher, Lower, Table and Floor");
+            float lift = world.Lift;
+            float floorY = world.PlacementPosition.y - world.Lift;
+            ClickButton(hand, "Higher"); ClickButton(hand, "Higher");
+            Check(Mathf.Abs(world.Lift - lift - 0.1f) < 1e-3f && Mathf.Abs(world.PlacementPosition.y - floorY - world.Lift) < 1e-3f, $"Higher lifts the world 5 cm a tap ({world.Lift * 100f:0} cm)");
+            float higher = world.Lift;
+            for (int i = 0; i < 36; i++) Frame(hand, aim, false, stick: new Vector2(0f, 1f));
+            Check(world.Lift > higher + 0.05f, $"...and so does the stick, up ({world.Lift * 100f:0} cm)");
+            ClickButton(hand, "Table");
+            Check(Mathf.Abs(world.Lift - 0.72f) < 1e-3f, $"Table puts it at table height ({world.Lift * 100f:0} cm)");
+            ClickButton(hand, "Floor");
+            ClickButton(hand, "Done");
+            Check(world.Lift == 0f && !tools.PlacingWorld && Mathf.Abs(world.PlacementPosition.y - floorY) < 1e-3f, "Floor puts it back on the floor, Done puts it down");
+            world.UseWindow(false);
+            UnityEngine.Object.DestroyImmediate(head.gameObject);
         }
 
         private static void ClickButton(Vector3 hand, string label)
@@ -655,14 +688,14 @@ namespace Wonderland.Editor
         }
 
         /// <summary>One simulated frame: the hand aims at <paramref name="target"/> with the given buttons.</summary>
-        private static void Frame(Vector3 hand, Vector3 target, bool trigger, Vector2 stick = default, bool primary = false, bool secondary = false, bool grip = false)
+        private static void Frame(Vector3 hand, Vector3 target, bool trigger, Vector2 stick = default, bool primary = false, bool secondary = false, bool grip = false, Vector2 scroll = default)
         {
             Physics.SyncTransforms();
             var input = new PointerInput
             {
                 Valid = true, Ray = new Ray(hand, (target - hand).normalized),
                 Trigger = trigger, TriggerDown = trigger && !triggerHeld, TriggerUp = !trigger && triggerHeld,
-                Stick = stick, PrimaryDown = primary, SecondaryDown = secondary, Grip = grip, GripDown = grip && !gripHeld, GripUp = !grip && gripHeld,
+                LeftStick = stick, Stick = scroll, PrimaryDown = primary, SecondaryDown = secondary, Grip = grip, GripDown = grip && !gripHeld, GripUp = !grip && gripHeld,
             };
             triggerHeld = trigger; gripHeld = grip;
             tools.Process(input, Dt);

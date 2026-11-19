@@ -18,9 +18,15 @@ namespace Wonderland.Editor
         {
             Report.Clear(); failures = 0;
             bool gridWas = BuildGrid.Snap;
-            try { WindowJourney(); StreamingJourney(); VisibilityJourney(); MapJourney(); }
+            float windowWas = WonderlandWorld.MaxWindow;
+            try
+            {
+                NavigationJourney();
+                WonderlandWorld.MaxWindow = 3f;   // (the journeys below were laid out for a 3 m window, stepped half a window at a time)
+                WindowJourney(); StreamingJourney(); VisibilityJourney(); MapJourney();
+            }
             catch (Exception e) { Fail("Exception: " + e); }
-            finally { BuildGrid.Snap = gridWas; Shader.SetGlobalFloat("_WL_WindowOn", 0f); }
+            finally { BuildGrid.Snap = gridWas; WonderlandWorld.MaxWindow = windowWas; Shader.SetGlobalFloat("_WL_WindowOn", 0f); }
             Report.AppendLine(failures == 0 ? "RESULT: PASS" : $"RESULT: FAIL ({failures})");
             File.WriteAllText("Logs/window-results.txt", Report.ToString());
             Debug.Log("Wonderland window test\n" + Report);
@@ -34,6 +40,37 @@ namespace Wonderland.Editor
             w.Create(2f, Materials(), 7, false, endless: true);
             w.UseWindow(true);
             return w;
+        }
+
+        /// <summary>
+        /// Getting about: the window is 2 x 2 m unless chosen bigger; an arrow steps it a tenth of its size; scrolling
+        /// moves it smoothly - the land always there before it shows, the grid moving on only now and then, not every frame.
+        /// </summary>
+        private static void NavigationJourney()
+        {
+            WonderlandWorld.MaxWindow = 2f;
+            var w = Endless("Navigation", 980f);
+            var t = w.Terrain;
+            Check(w.WindowSize == new Vector2(2f, 2f), $"The window is 2 x 2 m to start with ({w.WindowSize})");
+            w.Navigate(new Vector2Int(1, 0)); w.FinishSlide();
+            Check(w.WindowCenter == new Vector2(0.2f, 0f), $"An arrow steps it a tenth of its size ({w.WindowCenter.x * 100f:0} cm)");
+            int slides = 0; var cells = t.Cells; bool shown = true; float worst = 0f, total = 0f; int frames = 0;
+            var clock = new System.Diagnostics.Stopwatch();
+            for (int i = 0; i < 72 * 4; i++)
+            {
+                clock.Restart();
+                w.Pan(new Vector2(0.8f, 0.3f), Dt);
+                w.Advance(Dt);
+                float ms = (float)clock.Elapsed.TotalMilliseconds;
+                if (t.Cells != cells) { slides++; cells = t.Cells; } else { worst = Mathf.Max(worst, ms); total += ms; frames++; }
+                var r = w.WindowRect;
+                shown &= r.xMin >= t.X0 && r.xMax <= t.XMax && r.yMin >= t.Z0 && r.yMax <= t.ZMax;
+            }
+            Check(w.WindowCenter.x > 3.3f && shown && slides <= 6,
+                $"Scrolling 3.4 m moves the window smoothly, the land always there ({slides} grid moves; other frames {total / Mathf.Max(1, frames):0.00} ms on average, {worst:0.0} ms at most)");
+            WonderlandWorld.MaxWindow = 3f; w.FitToRoom();
+            Check(w.WindowSize == new Vector2(3f, 3f), $"In Settings it can be 3 x 3 m ({w.WindowSize})");
+            UnityEngine.Object.DestroyImmediate(w.gameObject);
         }
 
         private static void WindowJourney()
@@ -64,7 +101,7 @@ namespace Wonderland.Editor
             // 3. Half a window east: the window stays in the room, the land slides under it.
             var placed = w.PlacementPosition;
             var houseWorld = w.transform.TransformPoint(new Vector3(houseAt.x, 0f, houseAt.y));
-            bool went = w.Navigate(new Vector2Int(1, 0));
+            bool went = w.Navigate(new Vector2Int(1, 0), 0.5f);
             bool sliding = w.Sliding;
             for (int i = 0; i < 20; i++) w.SendMessage("LateUpdate");
             w.FinishSlide(); w.SendMessage("LateUpdate");
@@ -95,7 +132,7 @@ namespace Wonderland.Editor
             Check(newHouse == null && w.Buildings.Houses.Count == 2, $"Building in the new land works ({newHouse ?? "ok"})");
 
             // 5. Back home: everything there as it was.
-            w.Navigate(new Vector2Int(-1, 0)); w.FinishSlide(); w.SendMessage("LateUpdate");
+            w.Navigate(new Vector2Int(-1, 0), 0.5f); w.FinishSlide(); w.SendMessage("LateUpdate");
             var startNow = w.Track.Network.Edges[0].Layout.Points[0];
             Check(w.WindowCenter == Vector2.zero && new Vector2(w.Buildings.Houses[0].x, w.Buildings.Houses[0].z) == houseAt && new Vector2(startNow.x, startNow.z) == new Vector2(trackStart.x, trackStart.z)
                 && Mathf.Abs(startNow.y - trackStart.y) < 0.001f && (w.PlacementPosition - placed).magnitude < 1e-4f,
@@ -106,14 +143,14 @@ namespace Wonderland.Editor
             for (int d = 0; d < 8; d++)
             {
                 var dir = WindowNavigator.Directions[d];
-                w.Navigate(dir); w.FinishSlide();
+                w.Navigate(dir, 0.5f); w.FinishSlide();
                 all &= w.WindowCenter == new Vector2(dir.x * 1.5f, dir.y * 1.5f);
-                w.Navigate(-dir); w.FinishSlide();
+                w.Navigate(-dir, 0.5f); w.FinishSlide();
                 all &= w.WindowCenter == Vector2.zero;
             }
             Check(all && (w.PlacementPosition - placed).magnitude < 1e-4f, "The window goes all eight ways and back");
             int steps = 0;
-            while (steps < 20 && w.Navigate(new Vector2Int(1, 1))) { w.FinishSlide(); steps++; }
+            while (steps < 20 && w.Navigate(new Vector2Int(1, 1), 0.5f)) { w.FinishSlide(); steps++; }
             bool covered = t.Inside(w.WindowRect.xMax, w.WindowRect.yMax) && t.Inside(w.WindowRect.xMin, w.WindowRect.yMin);
             Check(steps >= 3 && covered && t.LandAt(w.WindowCenter.x, w.WindowCenter.y), $"Step after step north-east, there is always land under the window ({steps} steps to {w.WindowCenter}; {w.WhereLabel()})");
             w.NavigateHome(); w.FinishSlide(); w.SendMessage("LateUpdate");
@@ -132,13 +169,13 @@ namespace Wonderland.Editor
             // 8. Lifted off the floor: navigating keeps the height.
             w.Lift = 0.4f;
             w.Place(placed + Vector3.up * 0.4f, w.PlacementRotation);
-            w.Navigate(new Vector2Int(0, -1)); w.FinishSlide();
+            w.Navigate(new Vector2Int(0, -1), 0.5f); w.FinishSlide();
             Check(Mathf.Abs(w.PlacementPosition.y - placed.y - 0.4f) < 1e-4f && Mathf.Abs(w.transform.position.y - placed.y - 0.4f) < 1e-4f, "Lifted off the floor, the world stays at its height while it slides");
-            w.Navigate(new Vector2Int(0, 1)); w.FinishSlide();
+            w.Navigate(new Vector2Int(0, 1), 0.5f); w.FinishSlide();
             w.Place(placed, w.PlacementRotation);
 
             // 9. Saved and loaded: the land everywhere, the window where it was, everything built.
-            w.Navigate(new Vector2Int(1, 0)); w.FinishSlide();
+            w.Navigate(new Vector2Int(1, 0), 0.5f); w.FinishSlide();
             string json = w.Serialize();
             var copy = new GameObject("Window copy").AddComponent<WonderlandWorld>();
             copy.transform.position = new Vector3(940f, 0f, 0f);
@@ -202,7 +239,7 @@ namespace Wonderland.Editor
 
             // Far east: the grid follows the window, home leaves it - and is kept.
             int maxCells = 0;
-            for (int i = 0; i < 8; i++) { w.Navigate(new Vector2Int(1, 0)); w.FinishSlide(); maxCells = Mathf.Max(maxCells, t.Nx * t.Nz); }
+            for (int i = 0; i < 8; i++) { w.Navigate(new Vector2Int(1, 0), 0.5f); w.FinishSlide(); maxCells = Mathf.Max(maxCells, t.Nx * t.Nz); }
             float offGrid = t.SurfaceAt(0.6f, 0.6f);
             Check(hill > TerrainField.BaseHeight + 0.02f && house == null && !t.Inside(0.6f, 0.6f) && Mathf.Abs(offGrid - hill) < 1e-5f,
                 $"12 m east, home is off the grid but its hill is still known ({hill * 100f:0.0} cm, off the grid {offGrid * 100f:0.0} cm)");
@@ -220,7 +257,7 @@ namespace Wonderland.Editor
             if (Directory.Exists(dir)) Directory.Delete(dir, true);
             Directory.CreateDirectory(dir);
             string path = Path.Combine(dir, "world.json");
-            w.Navigate(new Vector2Int(1, 1)); w.FinishSlide();
+            w.Navigate(new Vector2Int(1, 1), 0.5f); w.FinishSlide();
             w.Save(path);
             var files = Directory.GetFiles(WonderlandWorld.ChunkFolder(path), "*.chunk");
             long jsonSize = new FileInfo(path).Length;
@@ -254,7 +291,7 @@ namespace Wonderland.Editor
             w.Checkpoint();
             for (int k = 0; k < 30; k++) w.TerrainStroke(TerrainBrush.Raise, new Vector3(-0.6f, 0f, 0.6f), 0.25f, 1f, 0.05f, 0f);
             float second = t.SurfaceAt(-0.6f, 0.6f);
-            w.Navigate(new Vector2Int(1, 0)); w.FinishSlide(); w.Navigate(new Vector2Int(1, 0)); w.FinishSlide();
+            w.Navigate(new Vector2Int(1, 0), 0.5f); w.FinishSlide(); w.Navigate(new Vector2Int(1, 0), 0.5f); w.FinishSlide();
             string east = Put(w, 0, 3.4f, 0.4f);
             bool undid1 = w.Undo();
             int housesAfter1 = w.Buildings.Houses.Count;
@@ -337,7 +374,7 @@ namespace Wonderland.Editor
                 $"A car drives out of the window along its street, unseen but on its way (as far as x = {carFarthest:0.0}; {street ?? placed ?? "placed"})");
 
             // Going after it: the window follows, the train and the far house appear.
-            w.Navigate(new Vector2Int(1, 0)); w.FinishSlide(); w.Navigate(new Vector2Int(1, 0)); w.FinishSlide(); w.Navigate(new Vector2Int(1, 0)); w.FinishSlide();
+            w.Navigate(new Vector2Int(1, 0), 0.5f); w.FinishSlide(); w.Navigate(new Vector2Int(1, 0), 0.5f); w.FinishSlide(); w.Navigate(new Vector2Int(1, 0), 0.5f); w.FinishSlide();
             w.RefreshVisibility();
             activeHouses = 0; foreach (Transform h in houses) if (h.gameObject.activeSelf) activeHouses++;
             var at = train != null ? w.Trains.LocoPosition(train) : Vector3.zero;
@@ -423,7 +460,7 @@ namespace Wonderland.Editor
             w.SendMessage("LateUpdate"); w.Navigator.SendMessage("LateUpdate");
             w.Navigator.Hover(0);
             WonderlandRenders.Capture(cam, "editor-window-home.png", 1280, 800);
-            w.Navigate(new Vector2Int(1, 0)); w.FinishSlide(); w.SendMessage("LateUpdate"); w.Navigator.SendMessage("LateUpdate");
+            w.Navigate(new Vector2Int(1, 0), 0.5f); w.FinishSlide(); w.SendMessage("LateUpdate"); w.Navigator.SendMessage("LateUpdate");
             w.Forest.RebuildDirty(); w.Cover.RebuildDirty();
             WonderlandRenders.Capture(cam, "editor-window-east.png", 1280, 800);
             cam.transform.position = new Vector3(1.9f, 0.35f, -1.9f); cam.transform.LookAt(new Vector3(1.2f, 0.02f, -1.2f));

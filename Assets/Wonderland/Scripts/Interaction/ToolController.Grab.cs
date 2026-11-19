@@ -40,7 +40,7 @@ namespace Wonderland
             var h = World.PickUpHouse(house);
             HouseVariant = h.variant; houseRotation = h.rotation; houseStyle = h.style; carrying = true; pickedHover = -1;
             BuildCategory = Catalog.Get(h.variant).Category;
-            Say($"Moving the {HouseFactory.Name(h.variant).ToLower()} - {(heldByTrigger ? "trigger" : "let go of grip")} to put it down, stick to turn it", 4f);
+            Say($"Moving the {HouseFactory.Name(h.variant).ToLower()} - {(heldByTrigger ? "trigger" : "let go of grip")} to put it down, left stick to turn it", 4f);
             Haptic(0.4f, 0.04f);
             RefreshOptions();
             return true;

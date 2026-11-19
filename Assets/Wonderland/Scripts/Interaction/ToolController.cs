@@ -7,15 +7,17 @@ namespace Wonderland
     /// <summary>
     /// Paint, draw, place. Turns right-controller input into world edits for the selected tool, shows the pointer,
     /// brush ring, track preview and house ghost, and keeps the palette's options and hints in sync.
-    /// Controls: trigger = use tool / press buttons; stick left-right = brush size (houses: rotate); stick up-down =
-    /// strength or density; A = next mode (raise / lower / smooth / flatten, paint / erase, house type); B = undo;
-    /// grip = pick up a house; left Y = hide or show the palette.
+    /// Controls: trigger = use tool / press buttons; right stick = scroll the world; left stick left-right = brush size
+    /// (houses: rotate); left stick up-down = strength or density; A = next mode (raise / lower / smooth / flatten,
+    /// paint / erase, house type); B = undo; grip = pick up a house; left Y = hide or show the palette.
     /// </summary>
     public sealed partial class ToolController : MonoBehaviour
     {
         public WonderlandWorld World;
         public PaletteUI Palette;
         public Transform RightHand;
+        /// <summary>The player's head (scrolling goes the way they face); the main camera when not set.</summary>
+        public Transform Head;
         public System.Func<PointerInput> InputOverride;   // tests / desktop
         public System.Action ResetRequested;
 
@@ -416,18 +418,18 @@ namespace Wonderland
                 TerrainBrush.Grow => "Grow: paint over the floor to extend the land anywhere in the room  ·  A: mode",
                 TerrainBrush.Peaks => "Peaks: raise craggy mountains - high tops get rock and snow  ·  A: mode",
                 TerrainBrush.Trim => "Trim: paint along the shore to take land away  ·  A: mode",
-                _ => $"Hold trigger to {TerrainMode.ToString().ToLower()}  ·  A: mode  ·  stick: size / strength  ·  B: undo",
+                _ => $"Hold trigger to {TerrainMode.ToString().ToLower()}  ·  A: mode  ·  left stick: size / strength  ·  B: undo",
             },
             Tool.Water => StreamMode ? "Hold trigger and draw a stream - it flows downhill and the railway bridges it  ·  A: next mode"
-                : Draining ? "Hold trigger over water to drain it (tap a stream to remove it)  ·  A: next mode" : "Hold trigger to dig a pond; start in a pond to make it bigger  ·  A: next mode  ·  stick: size",
-            Tool.Forest => ForestErase ? "Hold trigger to clear trees  ·  A: paint" : "Hold trigger to paint a forest  ·  A: erase  ·  stick: size / density",
+                : Draining ? "Hold trigger over water to drain it (tap a stream to remove it)  ·  A: next mode" : "Hold trigger to dig a pond; start in a pond to make it bigger  ·  A: next mode  ·  left stick: size",
+            Tool.Forest => ForestErase ? "Hold trigger to clear trees  ·  A: paint" : "Hold trigger to paint a forest  ·  A: erase  ·  left stick: size / density",
             Tool.Track => SignalMode ? "Trigger beside the track: put up a stop signal  ·  tap a signal: red / green  ·  A: draw"
                 : grabbable ? "On the track: trigger and draw to branch off  ·  GRIP and move: bend this piece of track  ·  tap a switch to throw it"
                 : World.Track.HasTrack ? (World.Bridges.Bridges.Count > 0 ? "Tap a bridge to change its style  ·  draw from the track to branch, from an end to extend  ·  tap a switch to throw it  ·  grip: bend track"
                     : "Draw from the track to branch off, from an end to extend, back onto track to join  ·  tap a switch to throw it  ·  grip: bend track  ·  A: signals")
                 : "Hold trigger and draw a railway - come back to the start for a loop (over bare floor is fine)",
             Tool.Train => !World.Track.HasTrack ? "Draw a railway first (Track tool)"
-                : hoveredTrain != null ? $"{World.Trains.Describe(hoveredTrain)}  ·  trigger: stop / go  ·  stick up-down: speed, left-right: carriages  ·  grip: move it"
+                : hoveredTrain != null ? $"{World.Trains.Describe(hoveredTrain)}  ·  trigger: stop / go  ·  left stick up-down: speed, left-right: carriages  ·  grip: move it"
                 : "Trigger on the track: add a train  ·  tap a switch or signal to change it  ·  A: start / stop all",
             Tool.Paths => PlacingVehicle is { } pv ? $"Trigger on a road: a {VehicleName(pv).ToLower()} - it drives about the town, keeps to its lane and stops at red lights  ·  the way you point is the way it faces"
                 : PathSystem.IsRoad((int)PathKind) ? $"Draw a {PathSystem.Names[(int)PathKind].ToLower()}: it comes out straight with rounded corners; draw across another road for a crossroads with traffic lights, end on one for a T-junction  ·  A: next"
@@ -435,8 +437,8 @@ namespace Wonderland
                 : $"Draw a {PathSystem.Names[(int)PathKind].ToLower()} - close it into a loop for a pasture that keeps animals in  ·  A: next",
             Tool.Houses => pickedHover >= 0 && !carrying && pickedHover < World.Buildings.Houses.Count ? World.People.DescribePlace(pickedHover) + "  ·  trigger: move it"
                 : Catalog.IsStation(HouseVariant) ? "Point beside the railway: the station snaps to it and the train will stop there"
-                : !carrying && Catalog.Get(HouseVariant).Hint != null ? $"Trigger: place the {Catalog.Get(HouseVariant).Name.ToLower()} - {Catalog.Get(HouseVariant).Hint}  ·  stick: turn ({houseRotation:0}°, the arrow is its front)  ·  A: next"
-                : carrying ? "Trigger: put the house down  ·  stick: rotate" : "Trigger: place  ·  stick: rotate  ·  A: next house  ·  grip / trigger on a house: move it",
+                : !carrying && Catalog.Get(HouseVariant).Hint != null ? $"Trigger: place the {Catalog.Get(HouseVariant).Name.ToLower()} - {Catalog.Get(HouseVariant).Hint}  ·  left stick: turn ({houseRotation:0}°, the arrow is its front)  ·  A: next"
+                : carrying ? "Trigger: put the house down  ·  left stick: rotate" : "Trigger: place  ·  left stick: rotate  ·  A: next house  ·  grip / trigger on a house: move it",
             Tool.Decor => hoverPerson >= 0 && hoverPerson < World.People.People.Count ? World.People.Describe(hoverPerson) + "  ·  trigger: their card"
                 : hoverAnimal >= 0 && hoverAnimal < World.Animals.Animals.Count ? AnimalLine(hoverAnimal) + "  ·  trigger: its card"
                 : hoverVehicle != null && World.Traffic.Vehicles.Contains(hoverVehicle) ? World.Traffic.Describe(hoverVehicle)
@@ -444,7 +446,7 @@ namespace Wonderland
                 : DecorKind == (int)AnimalKind.Duck ? "Trigger on a pond: ducks paddle about  ·  A: next"
                 : DecorKind == (int)AnimalKind.Deer ? "Trigger near the woods: deer stay among the trees and shy away from people  ·  A: next"
                 : $"Trigger: place a {AnimalFactory.Names[DecorKind].ToLower()} - hold and sweep for a herd; inside a fence they stay in their pasture  ·  A: next",
-            Tool.Select => SelectedCamera() >= 0 ? $"{World.Cctv.NameOf(SelectedCamera())}  ·  turn it with the buttons round its picture or the stick  ·  trigger on the land: point it there  ·  A: next camera"
+            Tool.Select => SelectedCamera() >= 0 ? $"{World.Cctv.NameOf(SelectedCamera())}  ·  turn it with the buttons round its picture or the left stick  ·  trigger on the land: point it there  ·  A: next camera"
                 : "Point at anything - a villager, an animal, a building, a train, a car, a camera - and pull the trigger to select it  ·  A: next camera",
             _ => "Tap a house, an animal, a villager, a train, a signal or a piece of track to erase  ·  hold over trees to clear them",
         };
@@ -466,8 +468,9 @@ namespace Wonderland
         {
             Palette.SetClock(World.Clock.Label, Health(out _));
             UpdateTips(dt);
-            Palette.SetHint(PlacingWorld ? "Point at the floor, stick left/right to turn, up/down to raise or lower, trigger to place the world here" : Peek() ?? Hint());
+            Palette.SetHint(PlacingWorld ? "Point at the floor and pull the trigger to put the world there  ·  stick left/right: turn it, up/down: raise or lower it" : Peek() ?? Hint());
             UpdateInspection(dt);
+            if (!PlacingWorld) Scroll(input.Stick, dt); else TurnAndLift(input.Stick + input.LeftStick, dt);
             var ray = input.Ray;
             float rayLength = 2.5f;
             var colour = new Color(1f, 1f, 1f, 0.7f);
@@ -515,8 +518,15 @@ namespace Wonderland
                 ghost.gameObject.SetActive(false);
                 if (input.TriggerDown)
                 {
-                    if (World.Navigate(WindowNavigator.Directions[arrow])) { Say($"Off {WindowNavigator.Names[arrow]} - now {World.WhereLabel()}"); Haptic(0.4f, 0.04f); }
+                    arrowHeld = 0f;
+                    if (World.Navigate(WindowNavigator.Directions[arrow])) { Say($"Off {WindowNavigator.Names[arrow]} - hold the trigger to keep going, or scroll with the right stick"); Haptic(0.4f, 0.04f); }
                     else Say("The world doesn't go further that way yet");
+                }
+                // Held: on and on that way, smoothly.
+                else if (input.Trigger && (arrowHeld += dt) > 0.35f)
+                {
+                    var d = ((Vector2)WindowNavigator.Directions[arrow]).normalized;
+                    World.Pan(d * WonderlandWorld.PanSpeed * Mathf.Max(World.WindowSize.x, World.WindowSize.y) * Mathf.Clamp01((arrowHeld - 0.35f) * 2f), dt);
                 }
                 var spot = World.Navigator.SpotOf(arrow);
                 DrawPointer(ray, Vector3.Distance(ray.origin, World.transform.TransformPoint(new Vector3(spot.x, 0f, spot.y))), new Color(1f, 0.9f, 0.6f, 0.9f), true);
@@ -535,8 +545,8 @@ namespace Wonderland
             lastHit = hit; lastLocal = local;
             if (PlacingWorld) { PlaceWorld(input, ray, dt); return; }
 
-            // Stick: size on X (rotation for houses), strength / density on Y.
-            var stick = input.Stick;
+            // Left stick: size on X (rotation for houses), strength / density on Y.
+            var stick = input.LeftStick;
             if (Tool == Tool.Houses || carrying)
             {
                 // Turning what is being placed: a flick turns it 15 degrees (on the grid: a quarter turn); holding the stick
@@ -736,7 +746,7 @@ namespace Wonderland
             World.TerrainView.HideBrush();
             colour = new Color(1f, 0.95f, 0.75f, 0.85f);
             int cam = SelectedCamera();
-            if (cam >= 0 && input.Stick.sqrMagnitude > 0.09f) TurnCamera(input.Stick.x * 70f * dt, -input.Stick.y * 40f * dt);
+            if (cam >= 0 && input.LeftStick.sqrMagnitude > 0.09f) TurnCamera(input.LeftStick.x * 70f * dt, -input.LeftStick.y * 40f * dt);
             bool target = peekPerson >= 0 || peekAnimal >= 0 || peekVehicle != null || peekTrain != null || peekHouse >= 0 || peekBoat >= 0;
             if (!input.TriggerDown || target) return;
             if (hit && SelectRail(local)) return;
@@ -1065,24 +1075,24 @@ namespace Wonderland
             if (hoveredTrain != null)
             {
                 World.TerrainView.SetBrush(World.Trains.CentrePosition(hoveredTrain), 0.06f, TrainFactory.LiveryColour(hoveredTrain.Livery), 0.9f);
-                if (Mathf.Abs(input.Stick.y) > 0.4f)
+                if (Mathf.Abs(input.LeftStick.y) > 0.4f)
                 {
-                    hoveredTrain.SpeedFactor = Mathf.Clamp(hoveredTrain.SpeedFactor + input.Stick.y * 0.8f * dt, 0.3f, 1.8f);
+                    hoveredTrain.SpeedFactor = Mathf.Clamp(hoveredTrain.SpeedFactor + input.LeftStick.y * 0.8f * dt, 0.3f, 1.8f);
                     Say($"Speed {hoveredTrain.SpeedFactor * 100f:0} %", 1f);
                 }
                 // Stick left / right: uncouple / couple a carriage (wagon), one per push.
                 carTimer -= dt;
-                if (Mathf.Abs(input.Stick.x) > 0.6f && carTimer <= 0f)
+                if (Mathf.Abs(input.LeftStick.x) > 0.6f && carTimer <= 0f)
                 {
                     carTimer = 0.45f;
-                    int now = TrainSystem.CarsOf(hoveredTrain), want = now + (input.Stick.x > 0f ? 1 : -1);
+                    int now = TrainSystem.CarsOf(hoveredTrain), want = now + (input.LeftStick.x > 0f ? 1 : -1);
                     World.Checkpoint();
                     string why = World.Trains.SetCars(hoveredTrain, want);
                     int cars = TrainSystem.CarsOf(hoveredTrain);
                     Say(why ?? (hoveredTrain.Kind == TrainKind.Railcar ? $"{cars} {TrainSystem.CarWord(hoveredTrain.Kind, cars)} coupled" : $"{cars} {TrainSystem.CarWord(hoveredTrain.Kind, cars)} behind the engine"));
                     Haptic(why == null ? 0.5f : 0.7f, why == null ? 0.04f : 0.1f);
                 }
-                if (Mathf.Abs(input.Stick.x) < 0.3f) carTimer = 0f;
+                if (Mathf.Abs(input.LeftStick.x) < 0.3f) carTimer = 0f;
                 if (input.TriggerDown) { hoveredTrain.Running = !hoveredTrain.Running; Say(hoveredTrain.Running ? "All aboard!" : "Train stopping"); Haptic(0.5f, 0.05f); RefreshOptions(); }
                 if (input.GripDown) { heldByTrigger = false; PickUpTrain(hoveredTrain); }
                 return;
@@ -1235,7 +1245,6 @@ namespace Wonderland
         {
             World.TerrainView.HideBrush();
             float floorY = World.PlacementPosition.y - World.Lift;
-            if (Mathf.Abs(input.Stick.y) > 0.3f) World.Lift = Mathf.Clamp(World.Lift + input.Stick.y * 0.35f * dt, 0f, 1.2f);
             var at = World.PlacementPosition;
             if (Mathf.Abs(ray.direction.y) > 1e-3f)
             {
@@ -1247,10 +1256,101 @@ namespace Wonderland
                     DrawPointer(ray, t, new Color(0.6f, 0.9f, 1f, 0.9f), true);
                 }
             }
-            var turn = Mathf.Abs(input.Stick.x) > 0.25f ? Quaternion.Euler(0f, input.Stick.x * 60f * dt, 0f) : Quaternion.identity;
-            World.Place(new Vector3(at.x, floorY + World.Lift, at.z), turn * World.PlacementRotation);
-            if (input.TriggerDown) { PlacingWorld = false; World.FitToRoom(); WorldPlaced?.Invoke(); Say("World placed - it stays on this spot"); Haptic(0.5f, 0.06f); }
+            World.Place(new Vector3(at.x, floorY + World.Lift, at.z), World.PlacementRotation);
+            if (input.TriggerDown) FinishMoving();
         }
+
+        /// <summary>Move: either stick turns the world (left / right) and lifts it (up / down), wherever the pointer is.</summary>
+        private void TurnAndLift(Vector2 stick, float dt)
+        {
+            var p = World.PlacementPosition;
+            float floorY = p.y - World.Lift;
+            if (Mathf.Abs(stick.y) > 0.3f) World.Lift = Mathf.Clamp(World.Lift + stick.y * 0.35f * dt, 0f, MaxLift);
+            var turn = Mathf.Abs(stick.x) > 0.25f ? Quaternion.Euler(0f, stick.x * 60f * dt, 0f) : Quaternion.identity;
+            if (Mathf.Abs(stick.y) > 0.3f || Mathf.Abs(stick.x) > 0.25f) World.Place(new Vector3(p.x, floorY + World.Lift, p.z), turn * World.PlacementRotation);
+            if (Mathf.Abs(stick.y) > 0.3f && infoMode == 5 && (Time.frameCount & 7) == 0) ShowMovePanel();   // (the height shown)
+        }
+
+        /// <summary>The highest the world may be lifted off the floor (metres).</summary>
+        public const float MaxLift = 1.2f;
+
+        /// <summary>
+        /// Move: the world follows the pointer on the floor until the trigger puts it down; the panel beside the palette
+        /// raises or lowers it (onto a table, say) - so does either stick, up or down - and turns it.
+        /// </summary>
+        public void StartMoving()
+        {
+            PlacingWorld = true;
+            infoMode = 5;
+            ShowMovePanel();
+            Say("Point where the world should lie and pull the trigger - Higher / Lower lift it off the floor", 5f);
+        }
+
+        private void ShowMovePanel()
+        {
+            string height = World.Lift < 0.005f ? "on the floor" : $"{World.Lift * 100f:0} cm above the floor";
+            var body = new CardText(26).Section("Move the world")
+                .Row("Where", "point at the floor - the world follows")
+                .Row("Put it down", "trigger, with the pointer on the floor")
+                .Row("Height", height)
+                .Row("Turn", "either stick left / right")
+                .Row("Raise / lower", "the buttons, or either stick up / down");
+            Palette.ShowInfo("Move", height, body.ToString(), FinishMoving);
+            void Lift(float to)
+            {
+                var p = World.PlacementPosition;
+                float floorY = p.y - World.Lift;
+                World.Lift = Mathf.Clamp(to, 0f, MaxLift);
+                World.Place(new Vector3(p.x, floorY + World.Lift, p.z), World.PlacementRotation);
+                ShowMovePanel();
+            }
+            Palette.SetInfoButtons(new[]
+            {
+                new PaletteUI.Option("Higher", false, () => Lift(World.Lift + 0.05f)),
+                new PaletteUI.Option("Lower", false, () => Lift(World.Lift - 0.05f)),
+                new PaletteUI.Option("Table", false, () => Lift(0.72f)),
+                new PaletteUI.Option("Floor", World.Lift < 0.005f, () => Lift(0f)),
+                new PaletteUI.Option("Done", false, FinishMoving),
+            });
+        }
+
+        /// <summary>The Move button: starts moving the world, or puts it down.</summary>
+        public void ToggleMoving() { if (PlacingWorld) FinishMoving(); else StartMoving(); }
+
+        /// <summary>Puts the world down where it is (Move).</summary>
+        private void FinishMoving()
+        {
+            if (!PlacingWorld) return;
+            PlacingWorld = false;
+            if (infoMode == 5) CloseInfo();
+            World.FitToRoom(); WorldPlaced?.Invoke();
+            Say(World.Lift < 0.005f ? "World placed - it stays on this spot" : $"World placed, {World.Lift * 100f:0} cm above the floor - it stays on this spot");
+            Haptic(0.5f, 0.06f);
+        }
+
+        // ------------------------------------------------------------------ scrolling
+
+        /// <summary>
+        /// The right stick scrolls the world: pushed away, the window travels forward over the land (the way the player
+        /// faces), left and right likewise. Gentle near the middle, quick at full tilt.
+        /// </summary>
+        private void Scroll(Vector2 stick, float dt)
+        {
+            float tilt = Mathf.Clamp01((stick.magnitude - 0.15f) / 0.8f);
+            if (tilt <= 0f || !World.Windowed) return;
+            var head = Head != null ? Head : Camera.main != null ? Camera.main.transform : null;
+            var wt = World.transform;
+            var forward = head != null ? Vector3.ProjectOnPlane(head.forward, wt.up) : wt.forward;
+            if (forward.sqrMagnitude < 1e-4f) forward = Vector3.ProjectOnPlane(head != null ? head.up : wt.forward, wt.up);
+            var f = wt.InverseTransformDirection(forward); var fwd = new Vector2(f.x, f.z).normalized;
+            var right = new Vector2(fwd.y, -fwd.x);
+            var dir = (right * stick.x + fwd * stick.y).normalized;
+            World.Pan(dir * tilt * tilt * WonderlandWorld.PanSpeed * Mathf.Max(World.WindowSize.x, World.WindowSize.y), dt);
+            if (!scrollSaid) { scrollSaid = true; Say("Scrolling the world - the map shows where you are", 3f); }
+        }
+
+        private bool scrollSaid;
+        private float arrowHeld;
 
         // ------------------------------------------------------------------ named worlds
 

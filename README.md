@@ -35,8 +35,9 @@ The palette floats above the **left** controller; the **right** controller point
 | Input | Action |
 |---|---|
 | Right trigger | use the tool / press palette buttons · in Select: open the card of what you point at |
-| Right stick ← → | brush size (Build: flick to turn 15°, hold to turn smoothly - on the grid, a flick is a quarter turn; the arrow shows the front) |
-| Right stick ↑ ↓ | strength (Forest: density) |
+| Right stick | scroll the world: the window travels over the land the way you push it, relative to where you face (gentle near the middle, quick at full tilt) |
+| Left stick ← → | brush size (Build: flick to turn 15°, hold to turn smoothly - on the grid, a flick is a quarter turn; the arrow shows the front) |
+| Left stick ↑ ↓ | strength (Forest: density) · a train pointed at: its speed |
 | A | next mode: Raise → Lower → Smooth → Flatten → Grow → Trim → Peaks · next path kind · next item · Pond → Stream → Drain · Paint ↔ Erase · next house · Sheep → Cows → Villagers · Track: draw ↔ signals · Trains: start/stop (the one pointed at, or all) |
 | B | undo |
 | Right grip | grab and move, in every tool: a building, a train, a villager or an animal follows the pointer until you let go; on the track, grip bends it |
@@ -83,7 +84,7 @@ land when you sculpt under it (up to a 9 % grade), rises onto stone bridges over
 taller than the train.
 
 **Trains (Train tool: play).** Tap the track to add a steam train, a goods train or a railcar; each gets its own
-colours and starts running. Tap a train to stop or start it, push the stick up/down to change its speed, grip to lift it
+colours and starts running. Tap a train to stop or start it, push the left stick up/down to change its speed, grip to lift it
 onto other track. Tap a switch to throw it (it stays set until you tap it again), tap a stop signal to turn it red or
 green. Safety is automatic: trains reserve the track ahead of them and never share a switch or crossing, so they never
 collide; they wait at red signals, stop at stations, reverse at buffers, and back away when they meet head-on. The
@@ -233,7 +234,7 @@ where a trail meets a narrow stream.
 - **CCTV.** Put up cameras (Build ▸ Small ▸ Camera; a camera looks the way its front faces) and select one with
   the **Select** tool.
   - A little monitor above the palette shows it live: the trains, traffic and people as they move.
-  - The **‹ › ^ v** buttons round its picture turn and tilt it, and so does the stick. The trigger on the land points
+  - The **‹ › ^ v** buttons round its picture turn and tilt it, and so does the left stick. The trigger on the land points
     it there.
   - The Cam 1, 2... chips open each camera in turn, and A moves to the next one.
   - A monitoring studio shows four feeds on its front wall, and villagers stop to watch.
@@ -269,7 +270,7 @@ where a trail meets a narrow stream.
   with a smooth curve. The message after each stroke says exactly what was built, or why not.
 - **Signals are automatic:** red while a train is on the line beside them, green when it's clear. Tap one to hold
   trains at red, and tap again for automatic.
-- **Carriages:** point at a train with the Train tool and push the stick left or right to uncouple or couple
+- **Carriages:** point at a train with the Train tool and push the left stick left or right to uncouple or couple
   carriages (wagons, railcar units). The engine stays put and the length is saved.
 - **Status:** pointing at a train says what it is doing and why it waits ("waiting at a red signal", "waiting for the
   train ahead", "at the buffers, reversing") and its next stop. Stations are named after their villages
@@ -339,7 +340,7 @@ Its card's **Camera** button shows it, and in the Select tool its chip (Train 1,
 poles. Turning a camera while placing it shows the edges of what it will see.
 
 **Carriages:** in the Train tool, point at a train, then press **+ Carriage** or **- Carriage** on the palette (or push
-the stick left/right while pointing at it).
+the left stick left/right while pointing at it).
 
 **Where to join the railway.** With the Track tool, a pale blue ring marks every free end of a line and an orange
 ring every switch. Rings near the pointer, or near the end of the line you're drawing, swell, and the label at the
@@ -355,17 +356,18 @@ first:
 
 **The world stays where you put it.** It is pinned to the room with a Meta spatial anchor: next launch it comes back to
 the same spot, and it doesn't drift when the headset re-centres (taken off and put on again). It starts on the room
-scan's floor. **Move** puts it somewhere else: point at the floor, stick left/right to turn it, up/down to raise or
-lower it (to table height, say); trigger re-pins it there.
+scan's floor. **Move** puts it somewhere else: point at the floor and pull the trigger to re-pin it there. A panel beside
+the palette lifts it off the floor - **Higher** / **Lower** (5 cm a tap), **Table** (72 cm), **Floor** - and either
+stick turns it (left/right) or lifts it (up/down). Settings shows the height too (**Height**), and opens the same panel.
 
 **An endless world, seen through a window.** The land goes on in every direction - flat, gently uneven land everywhere,
-ready to be shaped with the usual tools. What you see is a window of up to **3 x 3 m** (smaller when the room is: each
-side shrinks on its own to fit the floor), cut off cleanly at its edges like a piece sawn out of a bigger model
-landscape, with soil showing at the cut.
-- **Going further:** eight arrows lie on the floor just outside the cut edge - one mid-side each way, one at each
-  corner. Point at one and pull the trigger: the window slides half its size that way (1.5 m), so half of what you saw
-  stays in view and new land comes in. Everything keeps its place in the world; only the window moves. **Home**
-  (palette) slides back to where the world started.
+ready to be shaped with the usual tools. What you see is a window of up to **2 x 2 m** (Settings: **Window** 2, 3 or
+1.5 m; smaller when the room is: each side shrinks on its own to fit the floor), cut off cleanly at its edges like a
+piece sawn out of a bigger model landscape, with soil showing at the cut.
+- **Going further:** the **right stick** scrolls the window smoothly over the land. Eight arrows also lie on the floor
+  just outside the cut edge - one mid-side each way, one at each corner: pull the trigger on one to step a tenth of the
+  window that way (20 cm), hold it to keep going. Everything keeps its place in the world; only the window moves.
+  **Home** (palette) slides back to where the world started.
 - **Building across the edge:** roads, track, streams and forests carry on across the old edge as if it had never been
   there - extending a line from one window into the next makes one line. The building grid is the same everywhere.
 - **The map** above the palette shows the whole world built so far from above - land, water, roads, the railway, the

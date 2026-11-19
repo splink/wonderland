@@ -11,7 +11,8 @@ namespace Wonderland
         public bool GripDown, Grip, GripUp;
         public bool PrimaryDown, SecondaryDown;      // A / B on the right controller
         public bool MenuDown;                        // Y on the left controller: hide / show the palette
-        public Vector2 Stick;
+        public Vector2 Stick;                        // right: scrolls the world (Move: turns and lifts it)
+        public Vector2 LeftStick;                    // left: adjusts - brush size and strength, turning what is placed, a train's speed
     }
 
     /// <summary>
@@ -39,6 +40,7 @@ namespace Wonderland
             input.SecondaryDown = OVRInput.GetDown(OVRInput.Button.Two, right);
             input.MenuDown = OVRInput.GetDown(OVRInput.Button.Two, OVRInput.Controller.LTouch);
             input.Stick = OVRInput.Get(OVRInput.Axis2D.PrimaryThumbstick, right);
+            input.LeftStick = OVRInput.Get(OVRInput.Axis2D.PrimaryThumbstick, OVRInput.Controller.LTouch);
             // Point slightly downwards from the controller's nose: a relaxed wrist then aims at the floor-level world.
             var dir = rightAnchor.rotation * Quaternion.Euler(12f, 0f, 0f) * Vector3.forward;
             input.Ray = new Ray(rightAnchor.position, dir);

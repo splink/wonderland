@@ -195,7 +195,7 @@ namespace Wonderland.Editor
                 w.BuildPath(L(-0.4f, x0, x1), PathKind.Road);
                 for (int k = 0; k < 6; k++) if (w.PlaceHouse(new HouseInstance { x = x0 + 0.15f + k * 0.22f, z = -0.85f - (k % 2) * 0.3f, rotation = 0f, variant = k % 3 }) == null) houses++;
                 for (int k = 0; k < 3; k++) w.PaintForest(new Vector3(x0 + 0.7f, 0f, 1.0f), 0.3f, 1f, 0.3f);
-                w.Navigate(new Vector2Int(1, 0)); w.FinishSlide();
+                w.Navigate(new Vector2Int(1, 0), 0.5f); w.FinishSlide();
             }
             for (int i = 0; i < 4; i++) w.PlaceTrain(t.PointAt(2f + i * 5f, 0.3f), TrainKind.Passenger, Vector3.right, out _);
             for (int i = 0; i < 6; i++) w.PlaceVehicle(t.PointAt(1f + i * 3.5f, -0.4f), VehicleKind.Car, 90f, i);
@@ -206,7 +206,7 @@ namespace Wonderland.Editor
             for (int i = 0; i < 32; i++)
             {
                 var c = Stopwatch.StartNew();
-                w.Navigate(new Vector2Int(i < 16 ? -1 : 1, 0));
+                w.Navigate(new Vector2Int(i < 16 ? -1 : 1, 0), 0.5f);
                 double start = c.Elapsed.TotalMilliseconds;
                 // The slide's frames (a real 0.45 s at 72 Hz): each frame's cost; the worst is the hitch a player would see.
                 double worstFrame = start;

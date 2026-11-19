@@ -5,19 +5,33 @@ namespace Wonderland
 {
     /// <summary>
     /// The world window: the world is far larger than the floor it lies on, and the part shown is a rectangle of up to
-    /// 3 x 3 m (less in a smaller room) cut off cleanly at its edges. Two things move it, and they never mix:
+    /// 2 x 2 m (3 x 3 m in Settings; less in a smaller room) cut off cleanly at its edges. Two things move it, and they
+    /// never mix:
     /// <list type="bullet">
     /// <item>Placement (Move, Lift) puts the window somewhere else in the real room; the same land stays in it.</item>
-    /// <item>Navigation slides the window across the world, half its width at a time: the land under it slides along, and
-    /// new land comes into view on one side while half the old stays on the other.</item>
+    /// <item>Navigation moves the window across the world: scrolled smoothly (the right stick), or stepped a tenth of its
+    /// size at a time (the arrows round it): the land under it slides along, and new land comes into view.</item>
     /// </list>
     /// The world root's own transform is the world's frame (local coordinates are world coordinates, so nothing built
     /// ever moves in them); the placement is the point of it at the window's centre, which stays put in the room.
     /// </summary>
     public sealed partial class WonderlandWorld
     {
-        public const float MaxWindow = 3f;
         public const float SlideTime = 0.45f;
+        /// <summary>How far an arrow steps the window: a tenth of its size.</summary>
+        public const float StepFraction = 0.1f;
+        /// <summary>How fast the stick scrolls at full tilt: this much of the window's size a second.</summary>
+        public const float PanSpeed = 0.4f;
+        private const string WindowKey = "wonderland.window";
+        /// <summary>The window sizes Settings offers (metres a side).</summary>
+        public static readonly float[] WindowSizes = { 2f, 3f, 1.5f };
+
+        /// <summary>The largest the window may be (metres a side, a room permitting): 2 m unless chosen otherwise in Settings.</summary>
+        public static float MaxWindow
+        {
+            get => PlayerPrefs.GetFloat(WindowKey, 2f);
+            set { PlayerPrefs.SetFloat(WindowKey, value); PlayerPrefs.Save(); }
+        }
 
         /// <summary>The arrows round the window.</summary>
         public WindowNavigator Navigator { get; private set; }
@@ -29,7 +43,7 @@ namespace Wonderland
         /// <summary>Where the window's centre is in the world (local XZ, metres).</summary>
         public Vector2 WindowCenter { get; private set; }
         /// <summary>The window's size (metres): up to <see cref="MaxWindow"/> each way, smaller where the room is.</summary>
-        public Vector2 WindowSize { get; private set; } = new(MaxWindow, MaxWindow);
+        public Vector2 WindowSize { get; private set; } = new(2f, 2f);
         public Rect WindowRect => new(WindowCenter - WindowSize * 0.5f, WindowSize);
         /// <summary>Where navigation is heading (the centre once the slide is over).</summary>
         public Vector2 WindowTarget { get; private set; }
@@ -81,14 +95,45 @@ namespace Wonderland
         // ------------------------------------------------------------------ navigation
 
         /// <summary>
-        /// Slides the window half its size in a direction (x east, y north; diagonals too). False (and nothing moves) at
-        /// the edge of the world there is room for.
+        /// Slides the window a step in a direction (x east, y north; diagonals too): <paramref name="fraction"/> of its size
+        /// (a tenth, unless asked otherwise). False (and nothing moves) at the edge of the world there is room for.
         /// </summary>
-        public bool Navigate(Vector2Int direction)
+        public bool Navigate(Vector2Int direction, float fraction = StepFraction)
         {
-            var step = new Vector2(Snap(WindowSize.x * 0.5f), Snap(WindowSize.y * 0.5f));
+            var step = new Vector2(Mathf.Max(BuildGrid.Size, Snap(WindowSize.x * fraction)), Mathf.Max(BuildGrid.Size, Snap(WindowSize.y * fraction)));
             return NavigateTo(WindowTarget + new Vector2(direction.x * step.x, direction.y * step.y));
         }
+
+        /// <summary>
+        /// Scrolls the window across the world (the right stick): <paramref name="velocity"/> metres a second, in the
+        /// world's own frame. The land is there before it shows: the grid moves on ahead only when the window's leading
+        /// edge comes near its end (not every frame), carrying half a second's travel with it.
+        /// </summary>
+        public void Pan(Vector2 velocity, float dt)
+        {
+            if (!Windowed || dt <= 0f || velocity.sqrMagnitude < 1e-10f) return;
+            if (Sliding) { slideT = 1f; WindowTarget = WindowCenter; }
+            float reach = Terrain.Store != null ? 5000f : TerrainField.MaxReach - 0.5f;
+            var next = WindowCenter + velocity * dt;
+            next = new Vector2(Mathf.Clamp(next.x, -reach + WindowSize.x * 0.5f, reach - WindowSize.x * 0.5f), Mathf.Clamp(next.y, -reach + WindowSize.y * 0.5f, reach - WindowSize.y * 0.5f));
+            var shown = new Rect(next - WindowSize * 0.5f, WindowSize);
+            var t = Terrain;
+            const float margin = 0.15f;
+            bool covered = shown.xMin - margin >= t.X0 && shown.xMax + margin <= t.XMax && shown.yMin - margin >= t.Z0 && shown.yMax + margin <= t.ZMax;
+            if (!covered)
+            {
+                var ahead = velocity * 0.5f;
+                EnsureGridCovers(Rect.MinMaxRect(shown.xMin + Mathf.Min(0f, ahead.x), shown.yMin + Mathf.Min(0f, ahead.y), shown.xMax + Mathf.Max(0f, ahead.x), shown.yMax + Mathf.Max(0f, ahead.y)));
+            }
+            var placed = PlacementPosition;
+            WindowCenter = WindowTarget = next;
+            Place(placed, PlacementRotation);
+            pannedFrame = Time.frameCount;
+        }
+
+        private int pannedFrame = -10;
+        /// <summary>The window is moving across the world (sliding, or being scrolled).</summary>
+        public bool Moving => Sliding || Time.frameCount - pannedFrame <= 1;
 
         /// <summary>Back to where the world started.</summary>
         public bool NavigateHome() => NavigateTo(Vector2.zero);
@@ -167,12 +212,13 @@ namespace Wonderland
         // ------------------------------------------------------------------ size from the room
 
         /// <summary>
-        /// The window's size in this room: 3 x 3 m, or the largest rectangle up to that which fits the room's floor
-        /// around the placement (each side shrunk on its own: a long narrow room gets a long narrow window).
+        /// The window's size in this room: <see cref="MaxWindow"/> square, or the largest rectangle up to that which fits
+        /// the room's floor around the placement (each side shrunk on its own: a long narrow room gets a long narrow window).
         /// </summary>
         private void FitWindowToRoom()
         {
-            var size = new Vector2(MaxWindow, MaxWindow);
+            float most = MaxWindow;
+            var size = new Vector2(most, most);
             if (roomLocal != null)
             {
                 var c = WindowCenter;
@@ -191,9 +237,9 @@ namespace Wonderland
                 while (k > 0.2f && !Fits(size * k)) k -= 0.05f;
                 size *= k;
                 for (int axis = 0; axis < 2; axis++)
-                    while (size[axis] < MaxWindow)
+                    while (size[axis] < most)
                     {
-                        var bigger = size; bigger[axis] = Mathf.Min(MaxWindow, size[axis] + 0.05f);
+                        var bigger = size; bigger[axis] = Mathf.Min(most, size[axis] + 0.05f);
                         if (!Fits(bigger)) break;
                         size = bigger;
                     }
@@ -230,7 +276,7 @@ namespace Wonderland
         private void UpdateWindow(float dt)
         {
             if (!Windowed) return;
-            bool slid = Sliding;
+            bool slid = Moving;
             StepSlide(dt);
             ApplyWindow();
             if (slid || windowMovedSinceCull || ++cullFrame % 3 == 0) CullToWindow();   // (things move in and out of the window slowly: every third frame is enough)
@@ -261,7 +307,7 @@ namespace Wonderland
             FigureBatch.Window = Windowed ? figureInWindow : null;
             windowMovedSinceCull = false;
             Forest.Cull(shown, Windowed ? keptNear : null); Cover.Cull(shown, Windowed ? keptNear : null); Buildings.Cull(shown); Trains.Cull(shown); Traffic.Cull(shown); Boats.Cull(shown);
-            if (Sliding) { Forest.RebuildDirty(6); Cover.RebuildDirty(6); }
+            if (Moving) { Forest.RebuildDirty(6); Cover.RebuildDirty(6); }
         }
     }
 }

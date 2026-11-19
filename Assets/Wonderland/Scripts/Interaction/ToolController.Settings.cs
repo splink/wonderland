@@ -31,6 +31,8 @@ namespace Wonderland
             body.Row("Tips", "a word now and then about what you can do")
                 .Row("Labels", "beside the pointer: what each button does to what you point at")
                 .Row("Grid", "roads come out straight and square, buildings line up along them")
+                .Row("Window", "how much of the world shows at once (smaller is lighter for the headset)")
+                .Row("Height", "lift the world off the floor - onto a table, say")
                 .Section("More")
                 .Row("World stats", "how many people, buildings, trains...")
                 .Row("Performance", "what the headset is doing, and switches to make it lighter")
@@ -51,6 +53,16 @@ namespace Wonderland
                 Say(BuildGrid.Snap ? GridOnSaid : "Grid off: draw and place freely");
                 RefreshOptions(); ShowSettings();
             }));
+            o.Add(new PaletteUI.Option($"Window: {WonderlandWorld.MaxWindow:0.#} m", false, () =>
+            {
+                var sizes = WonderlandWorld.WindowSizes;
+                int at = System.Array.FindIndex(sizes, x => Mathf.Abs(x - WonderlandWorld.MaxWindow) < 0.01f);
+                WonderlandWorld.MaxWindow = sizes[(at + 1) % sizes.Length];
+                World.FitToRoom();
+                Say($"The window: up to {WonderlandWorld.MaxWindow:0.#} x {WonderlandWorld.MaxWindow:0.#} m (smaller if the room is)");
+                ShowSettings();
+            }));
+            o.Add(new PaletteUI.Option(World.Lift < 0.005f ? "Height: floor" : $"Height: {World.Lift * 100f:0} cm", false, StartMoving));
             o.Add(new PaletteUI.Option("World stats", false, () => { infoMode = 1; ShowStats(); }));
             o.Add(new PaletteUI.Option("Performance", false, ShowPerformance));
             o.Add(new PaletteUI.Option(resetArmed && Time.time < resetUntil ? "Sure? Again" : "New world", resetArmed && Time.time < resetUntil, () => { RequestReset(); ShowSettings(); }));

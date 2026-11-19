@@ -2,7 +2,7 @@ PASS  A tip appears above the palette ("Welcome! Point at the palette and pull t
 PASS  Starts with the Terrain tool
 PASS  Trigger + aim raises a hill (6.4 -> 17.4 cm)
 PASS  One stroke = one undo step
-PASS  Stick right enlarges the brush (16 -> 31 cm)
+PASS  The left stick right enlarges the brush (16 -> 31 cm)
 PASS  A switches Raise -> Lower
 PASS  Grow chip selects the land brush
 PASS  Aiming at the floor beyond the shore grows land (2.73 -> 3.00 m2)
@@ -64,4 +64,11 @@ PASS  ...which rides along on the monitor
 PASS  Close puts the camera away
 PASS  The village clock is always shown (15:00)
 PASS  Undo takes a step back and Redo puts it back
+PASS  The right stick scrolls the world the way the player faces (80 cm east in a second, facing east); the world stays where it is in the room, the brush as it was
+PASS  ...and left and right (22 cm north for left, facing east)
+PASS  Move opens a panel with Higher, Lower, Table and Floor
+PASS  Higher lifts the world 5 cm a tap (10 cm)
+PASS  ...and so does the stick, up (28 cm)
+PASS  Table puts it at table height (72 cm)
+PASS  Floor puts it back on the floor, Done puts it down
 RESULT: PASS

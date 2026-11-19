@@ -66,7 +66,7 @@ namespace Wonderland
                 new() { Id = "stations", When = () => World.Trains.Trains.Count > 0 && World.Trains.Stations.Count == 0,
                     Text = "Put a station beside the track (Build > Travel): trains stop there and villagers ride them to other villages." },
                 new() { Id = "build", When = () => Tool == Tool.Houses,
-                    Text = "Pick a category, then a building, and point where it should go. A flick of the stick turns it; the arrow shows its front." },
+                    Text = "Pick a category, then a building, and point where it should go. A flick of the left stick turns it; the arrow shows its front." },
                 new() { Id = "cards", When = () => peekPerson >= 0, Times = 2,
                     Text = "That's one of your villagers - the gold ring shows who. Pick Select and pull the trigger on them: their card says what they're up to, and their camera follows their day." },
                 new() { Id = "follow", When = () => World.Cctv.FollowSeed != 0, Times = 1,

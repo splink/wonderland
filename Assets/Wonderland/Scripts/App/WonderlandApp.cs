@@ -82,6 +82,7 @@ namespace Wonderland
 
             Tools = new GameObject("Tools").AddComponent<ToolController>();
             Tools.Init(World, Palette, Rig != null ? Rig.rightControllerAnchor : null);
+            Tools.Head = Rig != null ? Rig.centerEyeAnchor : null;
             // The map above the palette: the whole world from above, the trains and cars moving on it.
             var map = new GameObject("Mini map") { layer = PaletteUI.UiLayer }.AddComponent<MiniMap>();
             map.transform.SetParent(Palette.transform, false);
@@ -104,7 +105,7 @@ namespace Wonderland
             };
             Palette.AddGlobal("Save", () => Tools.ShowWorlds(true));
             Palette.AddGlobal("Load", () => Tools.ShowWorlds(false));
-            Palette.AddGlobal("Move", () => { Tools.PlacingWorld = true; Tools.Say("Point where the world should lie - stick up or down to raise or lower it"); });
+            Palette.AddGlobal("Move", Tools.ToggleMoving);
             Palette.AddGlobal("Home", () => Tools.Say(World.WindowTarget == Vector2.zero ? "Already home, where the world started" : World.NavigateHome() ? "Back home, where the world started" : "Can't get home from here"));
             // Sound, tips, labels, the grid, stats, performance and New world: all under Settings.
             Tools.SoundState = () => SoundSystem.Setting switch { SoundSetting.On => "On", SoundSetting.Quiet => "Quiet", _ => "Off" };
