@@ -18,11 +18,11 @@ namespace Wonderland.Editor
             w.BuildPath(Line(t, new Vector2(-1.1f, -0.62f), new Vector2(1.1f, -0.62f)), PathKind.Road);
             foreach (var (id, px, pz, rot) in new[]
             {
-                (Catalog.ZooGate, 0f, -0.48f, 0f), (Catalog.ZooPlaza, 0f, -0.3f, 0f),
+                (Catalog.ZooGate, 0f, -0.505f, 0f), (Catalog.ZooPlaza, 0f, -0.3f, 0f),
                 (Catalog.Savanna, -0.28f, -0.2f, 90f), (Catalog.LionRock, 0.26f, -0.22f, -90f), (Catalog.PenguinPool, -0.22f, 0.12f, 120f),
                 (Catalog.ElephantHouse, 0.02f, 0.2f, 0f), (Catalog.MonkeyIsland, 0.27f, 0.12f, -120f), (Catalog.Aviary, -0.47f, 0.06f, 90f),
-                (Catalog.TropicalHouse, 0.5f, -0.05f, -90f), (Catalog.PettingZoo, -0.46f, -0.3f, 90f), (Catalog.ZooKiosk, 0.14f, -0.38f, 0f),
-                (Catalog.SafariCafe, -0.16f, -0.42f, 0f), (Catalog.ZooGarden, 0.09f, -0.2f, 0f), (Catalog.ZooGarden, -0.09f, -0.18f, 0f),
+                (Catalog.TropicalHouse, 0.5f, -0.05f, -90f), (Catalog.PettingZoo, -0.46f, -0.3f, 90f), (Catalog.ZooKiosk, 0.21f, -0.36f, 0f),
+                (Catalog.SafariCafe, -0.25f, -0.4f, 0f), (Catalog.ZooGarden, 0.09f, -0.2f, 0f), (Catalog.ZooGarden, -0.09f, -0.18f, 0f),
             })
             {
                 string e = w.PlaceHouse(new HouseInstance { x = px, z = pz, rotation = rot, variant = id });

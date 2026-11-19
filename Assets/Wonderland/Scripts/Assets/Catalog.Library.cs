@@ -86,7 +86,7 @@ namespace Wonderland
             // Zoo: the old all-in-one zoo is the neighbourhood zoo.
             D(Zoo, "Small zoo", "A whole little zoo in one: giraffes, elephants, lions, zebras and penguins behind a gate");
             list[Zoo].Category = PlaceCategory.Zoo;
-            D(ZooGate, "Entrance & paths", "The zoo's entrance: a great ZOO over the gate, ticket booths either side", "at the front of the zoo, enclosures behind it within a few metres");
+            D(ZooGate, "Entrance & paths", "The zoo's grand entrance: rocky towers, a golden ZOO sign with a lion on top, a giraffe and an elephant on striped plinths, ticket booths either side", "at the front of the zoo, enclosures behind it within a few metres");
             D(ZooPlaza, "Entrance & paths", "A paved plaza with an elephant fountain, benches and a signpost to the animals");
             D(Savanna, "Enclosures", "An open plain: giraffes and zebras roam, flamingos stand in the waterhole", "its open front facing the visitors' path");
             D(LionRock, "Enclosures", "A towering rock where the lions sun themselves, a moat and glass in front", "its glass front facing the visitors' path");

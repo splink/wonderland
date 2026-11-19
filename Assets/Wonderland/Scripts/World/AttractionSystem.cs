@@ -359,13 +359,13 @@ namespace Wonderland
             return b.ToMesh("Crowd");
         }
 
-        private static Mesh Giraffe()
+        internal static Mesh Giraffe()
         {
             var b = new MeshBuilder();
             var coat = Pal.Hex("#E8B85A"); var spot = Pal.Hex("#9A6A32");
             foreach (var (x, z) in new[] { (-0.0025f, 0.004f), (0.0025f, 0.004f), (-0.0025f, -0.004f), (0.0025f, -0.004f) }) b.AddBox(new Vector3(x, 0.006f, z), new Vector3(0.0012f, 0.012f, 0.0012f), coat);
             b.AddBlob(new Vector3(0f, 0.013f, 0f), new Vector3(0.0045f, 0.0035f, 0.0065f), 1, 0f, 1, (d, _) => (Mathf.Sin(d.x * 9f) * Mathf.Cos(d.z * 7f)) > 0.4f ? spot : coat);
-            b.Push(new Vector3(0f, 0.016f, 0.005f), Quaternion.Euler(-25f, 0f, 0f));
+            b.Push(new Vector3(0f, 0.016f, 0.005f), Quaternion.Euler(25f, 0f, 0f));   // (leaning forward, up to the head)
             b.AddCylinder(Vector3.zero, 0.0016f, 0.0011f, 0.016f, 6, coat, coat, false);
             b.Pop();
             b.AddBlob(new Vector3(0f, 0.0305f, 0.0122f), new Vector3(0.0017f, 0.0018f, 0.0032f), 1, 0f, 2, (_, __) => coat);
@@ -373,7 +373,7 @@ namespace Wonderland
             return b.ToMesh("Giraffe");
         }
 
-        private static Mesh Elephant()
+        internal static Mesh Elephant()
         {
             var b = new MeshBuilder();
             var grey = Pal.Hex("#8E8E96");
@@ -388,7 +388,7 @@ namespace Wonderland
             return b.ToMesh("Elephant");
         }
 
-        private static Mesh Lion()
+        internal static Mesh Lion()
         {
             var b = new MeshBuilder();
             var coat = Pal.Hex("#D9A55A"); var mane = Pal.Hex("#8A5A2A");
@@ -400,7 +400,7 @@ namespace Wonderland
             return b.ToMesh("Lion");
         }
 
-        private static Mesh Zebra()
+        internal static Mesh Zebra()
         {
             var b = new MeshBuilder();
             var white = Pal.FlowerWhite; var black = Pal.TrainBlack;

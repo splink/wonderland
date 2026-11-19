@@ -98,52 +98,82 @@ namespace Wonderland
         // ---------------------------------------------------------------- the pieces
 
         /// <summary>
-        /// The entrance: a great arch of sandstone pillars and a timber lintel carrying ZOO in big green letters (a giraffe
-        /// and an elephant cut-out either side), the gates folded open, turnstiles, a thatched ticket booth on each side,
-        /// flags and planters.
+        /// The entrance, unmistakably a zoo from across the world: two rocky towers overgrown with jungle and capped with
+        /// thatch, a great golden sign between them with ZOO in big green letters and a lion standing on top, zebra-striped
+        /// and leopard-spotted banners hanging from the towers, a giraffe and an elephant twice life size (for the
+        /// miniature) on striped plinths either side, the gates folded open, turnstiles, ticket booths and flags.
         /// </summary>
         private static float ZooGateway(MeshBuilder b, ref Rng rng)
         {
-            b.AddBox(new Vector3(0f, 0.0006f, 0f), new Vector3(0.2f, 0.0012f, 0.07f), ZooPath);
+            var gold = Pal.Hex("#F2C12E"); var red = Pal.Hex("#C8402E"); var green = Pal.Hex("#1E6B2A");
+            var rock = Pal.Hex("#C9A77A"); var black = Pal.TrainBlack; var white = Pal.FlowerWhite;
+            b.AddBox(new Vector3(0f, 0.0006f, 0f), new Vector3(0.27f, 0.0012f, 0.09f), ZooPath);
+            // The way in, paved in a darker band through the gate.
+            b.AddBox(new Vector3(0f, 0.0013f, -0.01f), new Vector3(0.05f, 0.0003f, 0.07f), Pal.Shade(ZooPath, 0.9f));
             foreach (int sx in new[] { -1, 1 })
             {
-                // Pillars.
-                b.AddBox(new Vector3(sx * 0.03f, 0.03f, 0f), new Vector3(0.012f, 0.06f, 0.012f), ZooStone, Pal.Shade(ZooStone, 1.08f), ZooStone);
-                b.AddBox(new Vector3(sx * 0.03f, 0.061f, 0f), new Vector3(0.015f, 0.003f, 0.015f), ZooTimber);
-                b.AddBox(new Vector3(sx * 0.03f, 0.002f, 0f), new Vector3(0.015f, 0.004f, 0.015f), Pal.Shade(ZooStone, 0.85f));
+                // A rocky tower: stacked boulders round a core, jungle tufts in the cracks, a thatched cap.
+                var tower = new Vector3(sx * 0.05f, 0f, 0f);
+                b.AddBox(tower + Vector3.up * 0.055f, new Vector3(0.022f, 0.11f, 0.022f), Pal.Shade(rock, 0.9f));
+                for (int k = 0; k < (b.TooSmall(0.004f) ? 3 : 9); k++)
+                {
+                    float y = 0.008f + k * 0.0115f;
+                    var off = new Vector3(rng.Range(-0.004f, 0.004f), 0f, rng.Range(-0.004f, 0.004f));
+                    b.AddBlob(tower + off + Vector3.up * y, new Vector3(0.0155f, 0.009f, 0.0155f) * rng.Range(0.92f, 1.08f), 1, 0.25f, k * 7 + sx + 20, (d, _) => Pal.Shade(rock, 0.82f + 0.25f * Mathf.Abs(d.y)));
+                    if (k % 3 == 1 && !b.TooSmall(0.004f)) b.AddBlob(tower + new Vector3(sx * 0.012f, y + 0.004f, -0.008f), new Vector3(0.006f, 0.004f, 0.005f), 1, 0.3f, k + 40, (_, __) => ZooLeaf);
+                }
+                b.AddCylinder(tower + Vector3.up * 0.108f, 0.021f, 0.002f, 0.026f, 12, ZooThatch, Pal.Shade(ZooThatch, 1.15f), true, false, true, 0.3f);
+                b.AddCylinder(tower + Vector3.up * 0.13f, 0.0006f, 0.0006f, 0.025f, 5, Pal.Hex("#E8E2D6"), Pal.Hex("#E8E2D6"), false);   // a flag on top
+                b.AddBox(tower + new Vector3(sx * 0.006f, 0.151f, 0f), new Vector3(0.012f, 0.008f, 0.0005f), sx < 0 ? red : gold);
+                // Banners hanging down the tower's front: zebra stripes on one side, leopard spots on the other.
+                var banner = tower + new Vector3(0f, 0.052f, -0.0175f);
+                b.AddBox(banner + Vector3.up * 0.025f, new Vector3(0.016f, 0.0015f, 0.0015f), ZooTimber);
+                int bands = b.TooSmall(0.003f) ? 1 : 8;
+                for (int k = 0; k < bands; k++)
+                {
+                    float h = 0.046f / bands, y = 0.023f - (k + 0.5f) * h;
+                    var c = sx < 0 ? (k % 2 == 0 ? white : black) : Pal.Hex("#E3A94A");
+                    b.AddBox(banner + Vector3.up * y, new Vector3(0.013f, h, 0.0008f), c);
+                    if (sx > 0 && bands > 1) b.AddBox(banner + new Vector3(((k * 5) % 3 - 1) * 0.0035f, y, -0.0005f), new Vector3(0.0028f, 0.0024f, 0.0003f), Pal.Hex("#5A3A1E"));
+                }
+                b.AddBox(banner + Vector3.down * 0.025f, new Vector3(0.013f, 0.003f, 0.0008f), red);   // (a red fringe)
                 // The gate leaves, folded open.
-                b.Push(new Vector3(sx * 0.024f, 0.012f, -0.006f), Quaternion.Euler(0f, sx * 70f, 0f));
-                b.AddBox(new Vector3(sx * 0.0005f, 0f, -0.009f), new Vector3(0.0012f, 0.022f, 0.018f), Pal.Hex("#2E5A3A"));
+                b.Push(new Vector3(sx * 0.037f, 0.016f, -0.008f), Quaternion.Euler(0f, sx * 70f, 0f));
+                b.AddBox(new Vector3(sx * 0.0005f, 0f, -0.011f), new Vector3(0.0014f, 0.03f, 0.022f), Pal.Hex("#2E5A3A"));
+                if (!b.TooSmall(0.003f)) b.AddBox(new Vector3(sx * 0.0005f, 0.0155f, -0.011f), new Vector3(0.0018f, 0.002f, 0.023f), gold);
                 b.Pop();
                 // The ticket booth: a timber hut under a thatched roof, its window to the front.
-                var booth = new Vector3(sx * 0.07f, 0f, 0.002f);
+                var booth = new Vector3(sx * 0.092f, 0f, 0.008f);
                 b.AddBox(booth + Vector3.up * 0.014f, new Vector3(0.034f, 0.028f, 0.03f), ZooTimberLight, ZooTimberLight, ZooTimberLight);
                 b.AddFace(booth + new Vector3(0f, 0.017f, -0.0152f), Vector3.back, Vector3.up, 0.01f, 0.006f, Pal.Hex("#2C4A6A"));
                 b.AddBox(booth + new Vector3(0f, 0.0105f, -0.017f), new Vector3(0.022f, 0.0012f, 0.004f), ZooTimber);   // the counter
-                Lettering.Board(b, "TICKETS", booth + new Vector3(0f, 0.026f, -0.0153f), Vector3.back, 0.003f, ZooGreen, Pal.Hex("#F2E3A8"), ZooTimber);
+                Lettering.Board(b, "TICKETS", booth + new Vector3(0f, 0.026f, -0.0153f), Vector3.back, 0.003f, green, gold, ZooTimber);
                 b.AddCylinder(booth + Vector3.up * 0.028f, 0.027f, 0.002f, 0.022f, 10, ZooThatch, Pal.Shade(ZooThatch, 1.15f), true, false, true, 0.3f);
                 // Turnstiles between the booth and the gate.
-                if (!b.TooSmall(0.003f)) b.AddCylinder(new Vector3(sx * 0.045f, 0f, -0.02f), 0.0015f, 0.0015f, 0.009f, 6, Pal.Hex("#8A8F96"), Pal.Hex("#8A8F96"), true);
-                // Flags.
-                b.AddCylinder(new Vector3(sx * 0.095f, 0f, -0.025f), 0.0007f, 0.0007f, 0.07f, 6, Pal.Hex("#E8E2D6"), Pal.Hex("#E8E2D6"), false);
-                b.AddBox(new Vector3(sx * 0.095f + 0.006f, 0.064f, -0.025f), new Vector3(0.012f, 0.008f, 0.0005f), sx < 0 ? Pal.Hex("#E25B4F") : Pal.Hex("#F2C12E"));
-                // Planters with palms.
-                b.AddBox(new Vector3(sx * 0.045f, 0.004f, -0.03f), new Vector3(0.012f, 0.008f, 0.012f), ZooStone);
-                Palm(b, new Vector3(sx * 0.045f, 0.008f, -0.03f), 0.03f, sx + 3);
+                if (!b.TooSmall(0.003f)) b.AddCylinder(new Vector3(sx * 0.068f, 0f, -0.02f), 0.0015f, 0.0015f, 0.009f, 6, Pal.Hex("#8A8F96"), Pal.Hex("#8A8F96"), true);
+                // A statue on a zebra-striped plinth: the giraffe on the left, the elephant (trunk raised) on the right.
+                var plinth = new Vector3(sx * 0.122f, 0f, -0.012f);
+                for (int k = 0; k < 4; k++) b.AddBox(plinth + Vector3.up * (0.0025f + k * 0.005f), new Vector3(0.026f, 0.005f, 0.03f), k % 2 == 0 ? white : black);
+                var statue = sx < 0 ? AttractionSystem.Giraffe() : AttractionSystem.Elephant();
+                float size = sx < 0 ? 3.1f : 3.4f;
+                b.AddMesh(statue, Matrix4x4.TRS(plinth + Vector3.up * 0.02f, Quaternion.Euler(0f, sx < 0 ? 200f : 160f, 0f), Vector3.one * size));
+                // Planters with palms in front of the towers.
+                b.AddBox(new Vector3(sx * 0.068f, 0.004f, -0.034f), new Vector3(0.012f, 0.008f, 0.012f), ZooStone);
+                Palm(b, new Vector3(sx * 0.068f, 0.008f, -0.034f), 0.034f, sx + 3);
             }
-            // The lintel and the great ZOO over the gate, a giraffe and an elephant cut-out either side.
-            b.AddBox(new Vector3(0f, 0.069f, 0f), new Vector3(0.082f, 0.014f, 0.01f), ZooTimber, ZooTimberLight, ZooTimber);
-            Lettering.Add(b, "ZOO", new Vector3(0f, 0.069f + 0.0005f, -0.0052f), Vector3.back, 0.011f, 0.003f, Pal.Hex("#2F7A34"));
-            Lettering.Add(b, "ZOO", new Vector3(0f, 0.069f + 0.0005f, 0.0052f), Vector3.forward, 0.011f, 0.003f, Pal.Hex("#2F7A34"));
-            var giraffe = Pal.Hex("#E8B04A");
-            b.AddBox(new Vector3(-0.034f, 0.084f, 0f), new Vector3(0.012f, 0.007f, 0.002f), giraffe);       // giraffe body
-            b.AddBox(new Vector3(-0.03f, 0.096f, 0f), new Vector3(0.003f, 0.018f, 0.002f), giraffe);        // neck
-            b.AddBox(new Vector3(-0.027f, 0.105f, 0f), new Vector3(0.006f, 0.003f, 0.002f), giraffe);       // head
-            foreach (float x in new[] { -0.038f, -0.03f }) b.AddBox(new Vector3(x, 0.078f, 0f), new Vector3(0.0015f, 0.006f, 0.002f), giraffe);
-            var grey = Pal.Hex("#8E949C");
-            b.AddBlob(new Vector3(0.034f, 0.085f, 0f), new Vector3(0.009f, 0.007f, 0.0015f), 1, 0f, 5, (_, __) => grey);   // elephant
-            b.AddBox(new Vector3(0.044f, 0.08f, 0f), new Vector3(0.002f, 0.01f, 0.0015f), grey);                           // trunk
-            return 0.11f;
+            // The arch: a timber beam between the towers, and the great sign hung from it - gold, edged in red, ZOO in big
+            // raised green letters front and back - with a lion standing on top.
+            b.AddBox(new Vector3(0f, 0.104f, 0f), new Vector3(0.1f, 0.008f, 0.012f), ZooTimber, ZooTimberLight, ZooTimber);
+            b.AddBox(new Vector3(0f, 0.083f, 0f), new Vector3(0.092f, 0.034f, 0.006f), red);
+            b.AddBox(new Vector3(0f, 0.083f, 0f), new Vector3(0.086f, 0.028f, 0.0072f), gold);
+            foreach (var f in new[] { Vector3.back, Vector3.forward })
+                Lettering.Add(b, "ZOO", new Vector3(0f, 0.083f, 0f) + f * 0.0037f, f, 0.02f, 0.003f, green);
+            b.AddMesh(AttractionSystem.Lion(), Matrix4x4.TRS(new Vector3(0f, 0.108f, 0f), Quaternion.Euler(0f, 180f, 0f), Vector3.one * 2.6f));
+            // Zebra-striped posts along the front, carrying the eye out to the statues.
+            if (!b.TooSmall(0.003f))
+                foreach (float x in new[] { -0.105f, -0.03f, 0.03f, 0.105f })
+                    for (int k = 0; k < 3; k++) b.AddBox(new Vector3(x, 0.002f + k * 0.004f, -0.042f), new Vector3(0.003f, 0.004f, 0.003f), k % 2 == 0 ? white : black);
+            return 0.16f;
         }
 
         /// <summary>The plaza: a paved circle with a little elephant fountain, benches round it, lamps, planters and a signpost.</summary>

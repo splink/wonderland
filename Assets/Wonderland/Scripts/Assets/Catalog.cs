@@ -272,7 +272,7 @@ namespace Wonderland
             }
             Blueprint Z(string name, string shortName, float hx, float hz, float height, ActivitySpot[] spots, string hint, bool walkable = false, bool kids = true, bool small = false) =>
                 new() { Name = name, Short = shortName, Category = PlaceCategory.Zoo, Half = new Vector2(hx, hz), Height = height, Styles = 1, Spots = spots, Hint = hint, Walkable = walkable, Kids = kids, Small = small, Pad = !small };
-            list.Add(Z("Zoo entrance", "Entrance", 0.1f, 0.035f, 0.11f, new[] { new ActivitySpot(-0.07f, -0.032f, SpotKind.Browse), new ActivitySpot(0.07f, -0.032f, SpotKind.Browse), new ActivitySpot(-0.012f, -0.05f, SpotKind.Gather), new ActivitySpot(0.012f, -0.052f, SpotKind.Gather) },
+            list.Add(Z("Zoo entrance", "Entrance", 0.135f, 0.045f, 0.16f, new[] { new ActivitySpot(-0.092f, -0.024f, SpotKind.Browse), new ActivitySpot(0.092f, -0.024f, SpotKind.Browse), new ActivitySpot(-0.012f, -0.058f, SpotKind.Gather), new ActivitySpot(0.012f, -0.06f, SpotKind.Gather), new ActivitySpot(-0.122f, -0.048f, SpotKind.Watch, 0f), new ActivitySpot(0.122f, -0.048f, SpotKind.Watch, 0f) },
                 "the gate to the zoo: put enclosures behind it and visitors come", true));
             list.Add(Z("Zoo plaza", "Plaza", 0.075f, 0.075f, 0.04f, new[] { new ActivitySpot(0f, -0.05f, SpotKind.Sit, 180f), new ActivitySpot(0.043f, 0.025f, SpotKind.Sit, -60f), new ActivitySpot(-0.043f, 0.025f, SpotKind.Sit, 60f), new ActivitySpot(0.02f, -0.022f, SpotKind.Watch, 160f), new ActivitySpot(-0.022f, 0.02f, SpotKind.Gather) },
                 "a meeting place with an elephant fountain", true));
