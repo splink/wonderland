@@ -54,6 +54,36 @@ namespace Wonderland.Editor
                 Check(js.Count == 2 && apart && roomy, $"{on}: junctions are one piece with room for rounded kerbs, and two T-junctions side by side are one ({js.Count} junctions: {string.Join(", ", js.ConvertAll(j => $"{j.Arms.Count} arms, {j.Radius * 100f:0.0} cm"))})");
                 Object.DestroyImmediate(w.gameObject);
             }
+            // A highway's junction sweeps round wider than a street's; buses call at bus stops.
+            {
+                BuildGrid.Snap = false;
+                var w = Scratch("Highway and bus", 600f);
+                var t = w.Terrain;
+                w.BuildPath(Line(t, new Vector2(-0.7f, 0.5f), new Vector2(0.7f, 0.5f)), PathKind.Highway);
+                w.BuildPath(Line(t, new Vector2(0f, 0.75f), new Vector2(0f, 0.25f)), PathKind.Road);
+                w.BuildPath(Line(t, new Vector2(-0.7f, 0f), new Vector2(0.7f, 0f)), PathKind.Road);
+                w.BuildPath(Line(t, new Vector2(0.3f, 0.2f), new Vector2(0.3f, -0.2f)), PathKind.Road);
+                float highway = 0f, street = 0f;
+                foreach (var j in w.Paths.Junctions) { if (j.ArmKind.Contains((int)PathKind.Highway)) highway = Mathf.Max(highway, j.Radius); else street = Mathf.Max(street, j.Radius); }
+                Check(highway > street * 1.3f && street > 0f, $"A highway's junction sweeps round wider than a street's ({highway * 100f:0.0} cm against {street * 100f:0.0} cm), with no pavement at its corners");
+                // A ring of streets with a bus stop on each side, and a bus going round.
+                var w2 = Scratch("Bus stops", 640f);
+                var t2 = w2.Terrain;
+                w2.BuildPath(Line(t2, new Vector2(-0.5f, -0.4f), new Vector2(0.5f, -0.4f), new Vector2(0.5f, 0.4f), new Vector2(-0.5f, 0.4f), new Vector2(-0.5f, -0.4f)), PathKind.Road);
+                int stops = 0;
+                foreach (var at in new[] { new Vector2(0f, -0.35f), new Vector2(0.1f, -0.45f), new Vector2(0f, 0.35f), new Vector2(0.1f, 0.45f) })
+                    if (w2.Paths.AlongRoad(at, Catalog.Get(Catalog.BusStop).Half.y, out var p, out float yaw) && w2.PlaceHouse(new HouseInstance { x = p.x, z = p.y, rotation = yaw, variant = Catalog.BusStop }) == null) stops++;
+                w2.Traffic.Refresh(true);
+                string e = w2.PlaceVehicle(new Vector3(-0.3f, 0f, -0.4f), VehicleKind.Bus, 90f, 1);
+                float stood = 0f;
+                for (float sec = 0f; sec < 150f; sec += Dt)
+                {
+                    w2.Clock.Tick(Dt); w2.Traffic.Step(Dt);
+                    foreach (var v in w2.Traffic.Vehicles) if (v.Kind == VehicleKind.Bus && v.Dwell > 0f) stood += Dt;
+                }
+                Check(stops == 4 && e == null && w2.Traffic.BusCalls >= 2 && stood > 4f, $"Buses call at the bus stops by the road and stand while people get on ({w2.Traffic.BusCalls} calls at {stops} stops, {stood:0} s standing{(e != null ? ", " + e : "")})");
+                Object.DestroyImmediate(w.gameObject); Object.DestroyImmediate(w2.gameObject);
+            }
             BuildGrid.Snap = gridWas;
             {
                 var w = Scratch("Water joins", 620f);

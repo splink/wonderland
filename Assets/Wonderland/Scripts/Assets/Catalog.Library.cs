@@ -106,6 +106,7 @@ namespace Wonderland
             D(Fuel, "Road", "Pumps and a little shop for drivers", "by a road");
             D(TaxiRank, "Road", "Two taxis wait here for fares", "by a road");
             D(CarPark, "Road", "Visitors park here while they shop", "by a road, near the shops");
+            D(BusStop, "Road", "A shelter and a bench: buses call here and the people waiting get on", "beside a road, facing it");
             D(Jetty, "Water", "Boat trips from its end", "at a pond's edge, its end over the water");
             D(RowingBoat, "Water", "Rows about the pond", "on the water");
             D(SailingBoat, "Water", "Sails with the wind", "on the water");

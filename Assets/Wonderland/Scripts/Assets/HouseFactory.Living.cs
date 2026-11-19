@@ -16,6 +16,7 @@ namespace Wonderland
             switch (id)
             {
                 case Catalog.TaxiRank: return TaxiShelter(b);
+                case Catalog.BusStop: return BusShelter(b);
                 case Catalog.Sawmill: return SawmillShed(b, ref rng);
                 case Catalog.Letterbox: return PillarBox(b);
                 case Catalog.CarPark: return CarParkBays(b);
@@ -327,6 +328,30 @@ namespace Wonderland
             (new Vector2(-0.07f, -0.045f), new Vector2(0.04f, 0.025f)), (new Vector2(0.075f, -0.025f), new Vector2(0.035f, 0.035f)),
             (new Vector2(-0.005f, -0.035f), new Vector2(0.022f, 0.018f)),
         };
+
+        /// <summary>A bus stop: a glass-backed shelter with a bench under its roof, the round BUS sign on its pole, a timetable.</summary>
+        private static float BusShelter(MeshBuilder b)
+        {
+            var frame = Pal.Hex("#3A4250"); var glass = new Color(0.78f, 0.9f, 0.95f, 1f);
+            b.AddBox(new Vector3(0f, 0.0006f, 0f), new Vector3(0.048f, 0.0012f, 0.022f), Pal.Hex("#C8C2B4"));
+            b.AddBox(new Vector3(0f, 0.014f, 0.008f), new Vector3(0.034f, 0.024f, 0.0008f), glass);
+            foreach (int sx in new[] { -1, 1 })
+            {
+                b.AddBox(new Vector3(sx * 0.017f, 0.014f, 0.002f), new Vector3(0.0008f, 0.024f, 0.012f), glass);
+                b.AddBox(new Vector3(sx * 0.017f, 0.0135f, 0.008f), new Vector3(0.0014f, 0.027f, 0.0014f), frame);
+            }
+            b.AddBox(new Vector3(0f, 0.0275f, 0.002f), new Vector3(0.038f, 0.0015f, 0.016f), frame);
+            b.AddBox(new Vector3(0f, 0.0055f, 0.004f), new Vector3(0.026f, 0.0012f, 0.006f), Pal.Hex("#8A5A34"));   // the bench
+            b.AddBox(new Vector3(0f, 0.003f, 0.006f), new Vector3(0.024f, 0.005f, 0.0012f), frame);
+            b.AddBox(new Vector3(0.012f, 0.016f, 0.0086f), new Vector3(0.006f, 0.008f, 0.0005f), Pal.Hex("#F7F1E6"));   // the timetable
+            // The sign on its pole, by the kerb.
+            b.AddCylinder(new Vector3(0.022f, 0f, -0.009f), 0.0007f, 0.0007f, 0.038f, 6, Pal.Hex("#8A8F96"), Pal.Hex("#8A8F96"), false);
+            b.Push(new Vector3(0.022f, 0.036f, -0.009f), Quaternion.FromToRotation(Vector3.up, Vector3.back));
+            b.AddCylinder(Vector3.zero, 0.0055f, 0.0055f, 0.0008f, 16, Pal.Hex("#F2C12E"), Pal.Hex("#F2C12E"), true, true);
+            b.Pop();
+            Lettering.Add(b, "BUS", new Vector3(0.022f, 0.0355f, -0.0099f), Vector3.back, 0.0028f, 0.0004f, Pal.Hex("#1F3E7A"));
+            return 0.045f;
+        }
 
         /// <summary>
         /// The zoo: a gate with its name over it at the front, gravel paths between fenced enclosures (grass, a sandy lion

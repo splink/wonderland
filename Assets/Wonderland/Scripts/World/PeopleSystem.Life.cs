@@ -475,7 +475,24 @@ namespace Wonderland
         public bool AtPlace(int i) => agents[i].SpotHouse >= 0 && agents[i].State != Activity.Walking && agents[i].State != Activity.Idle && agents[i].State != Activity.Waving && agents[i].State != Activity.Waiting && agents[i].State != Activity.Riding;
 
         /// <summary>People at (or in) a building right now.</summary>
-        public int VisitorsAt(int house) { int n = 0; for (int i = 0; i < agents.Count; i++) if (agents[i].SpotHouse == house && AtPlace(i) && agents[i].State != Activity.Working) n++; return n; }
+        /// <summary>Villagers who have got on a bus at a stop (tests).</summary>
+        public int BusRiders { get; private set; }
+
+        /// <summary>A bus has drawn up at the stop at <paramref name="stop"/>: everyone waiting there gets on (and goes on their way).</summary>
+        public void BoardBus(Vector2 stop, float within)
+        {
+            int house = world.Buildings.Houses.FindIndex(h => h.variant == Catalog.BusStop && (new Vector2(h.x, h.z) - stop).magnitude < within);
+            if (house < 0) return;
+            for (int i = 0; i < agents.Count; i++)
+            {
+                var a = agents[i];
+                if (a.SpotHouse != house || !AtPlace(i) || a.State == Activity.Working) continue;
+                BusRiders++;
+                Stop(a);
+            }
+        }
+
+                public int VisitorsAt(int house) { int n = 0; for (int i = 0; i < agents.Count; i++) if (agents[i].SpotHouse == house && AtPlace(i) && agents[i].State != Activity.Working) n++; return n; }
 
         /// <summary>People heading for a building right now.</summary>
         public int HeadingTo(int house) { int n = 0; foreach (var a in agents) if (a.SpotHouse == house && (a.State == Activity.Walking || a.State == Activity.Waiting || a.State == Activity.Riding)) n++; return n; }

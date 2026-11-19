@@ -46,6 +46,8 @@ namespace Wonderland
             public readonly List<bool> Fast = new();   // per path point: on a highway (faster)
             public int Depot = -1;             // lorries: the place they belong to (building index)
             public Cargo Cargo;                // ...and what they carry
+            public float Dwell;                // buses: seconds left standing at a bus stop
+            public Vector2 LastStop = new(float.MaxValue, 0f);   // ...the stop it last called at (not again straight away)
             public Delivery Job;               // the delivery under way, or null
             public MeshFilter Load;            // what shows on the bed
             public int Rank = -1;              // taxis: the place they wait at (building index)
@@ -99,8 +101,11 @@ namespace Wonderland
         }
 
         /// <summary>Advances the traffic (also driven by the scripted tests).</summary>
+        private float stepDt;
+
         public void Step(float dt)
         {
+            stepDt = dt;
             checkTimer -= dt;
             if (checkTimer <= 0f)
             {
@@ -524,10 +529,46 @@ namespace Wonderland
             // Traffic lights ahead (always obeyed: no edging on through a red).
             float light = LightAhead(v, fwd, half);
             v.AtLight = light < 0.002f;
+            limit = Mathf.Min(limit, BusStopAhead(v, fwd, half));
             v.Queue = queue > 10 ? 0 : queue;   // (a ring of vehicles queuing behind each other is no queue: let it sort itself out)
             limit = Mathf.Min(limit, light);
             return limit;
         }
+
+        /// <summary>Times a bus called at a stop (tests).</summary>
+        public int BusCalls { get; private set; }
+
+        /// <summary>
+        /// Buses call at bus stops: one by the kerb just ahead on its side of the road draws the bus in to a halt there,
+        /// it stands a few seconds while people get on and off (those waiting at the stop board it and are gone), then
+        /// pulls away - and doesn't stop at the same one again until it has called somewhere else.
+        /// </summary>
+        private float BusStopAhead(Vehicle v, Vector2 fwd, float half)
+        {
+            if (v.Kind != VehicleKind.Bus || v.Siren) return float.MaxValue;
+            if (v.Dwell > 0f) { v.Dwell -= stepDt; return 0f; }
+            var houses = world.Buildings.Houses;
+            for (int i = 0; i < houses.Count; i++)
+            {
+                if (houses[i].variant != Catalog.BusStop) continue;
+                var stop = new Vector2(houses[i].x, houses[i].z);
+                if ((stop - v.LastStop).sqrMagnitude < 1e-6f) continue;
+                var to = stop - v.Position;
+                float ahead = Vector2.Dot(to, fwd), side = Vector2.Dot(to, new Vector2(fwd.y, -fwd.x));
+                if (ahead < -0.004f || ahead > 0.12f || side < 0f || side > 0.07f) continue;   // (on its own, right-hand side, just ahead)
+                float stopAt = ahead - half * 0.2f;
+                if (stopAt <= 0.003f)
+                {
+                    v.Dwell = BusDwell; v.LastStop = stop; BusCalls++;
+                    world.People.BoardBus(stop, 0.05f);
+                    return 0f;
+                }
+                return Mathf.Sqrt(2f * 0.12f * stopAt) * 0.85f;
+            }
+            return float.MaxValue;
+        }
+
+        public const float BusDwell = 3f;
 
         /// <summary>
         /// The gap from <paramref name="v"/>'s nose to <paramref name="o"/>'s body when that is in its way just ahead

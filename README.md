@@ -493,6 +493,11 @@ it. Nothing needs connecting by hand, and nothing is invented that the world doe
   - A harbour alone on its pond stays quiet.
 - **Shops, pubs and attractions.** The ice cream parlour is busiest on afternoons, and the pub in the evenings.
   - The hotel houses guests.
+  - **Bus stops** (Build > Travel > Road): put one beside a road and the buses call there - they draw in, stand a
+    few seconds while the people waiting get on, and pull away.
+  - **Junctions** are drawn as one piece where roads meet: each road stops at the junction's mouth, the kerbs and
+    pavements turn the corners on curves, edge lines follow them; a highway's junctions sweep round wider, with no
+    pavement.
   - **The zoo** is a family of pieces (Build > Zoo): the entrance with a great ZOO over the gate and ticket booths, a
     plaza with an elephant fountain, the savanna (giraffes, zebras, flamingos), the lion rock, the penguin pool, the
     monkey island, the elephant house, the aviary and the tropical house (parrots flying), the petting zoo (goats),

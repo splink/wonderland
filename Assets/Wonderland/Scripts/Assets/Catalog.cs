@@ -117,7 +117,7 @@ namespace Wonderland
             Camera = 50, Balloon = 51, Jetty = 52, RowingBoat = 53, SailingBoat = 54, Steamer = 55, Halt = 56, TaxiRank = 57,
             Sawmill = 58, FurnitureShop = 59, IceCream = 60, Pub = 61, Hotel = 62, PostOffice = 63, Letterbox = 64, CarPark = 65, FreightYard = 66, Harbour = 67, Zoo = 68, FairyCastle = 69, Stadium = 70, Zebra = 71,
             ZooGate = 72, ZooPlaza = 73, Savanna = 74, ElephantHouse = 75, LionRock = 76, PenguinPool = 77, MonkeyIsland = 78, Aviary = 79, TropicalHouse = 80,
-            PettingZoo = 81, ZooKiosk = 82, SafariCafe = 83, ZooGarden = 84;
+            PettingZoo = 81, ZooKiosk = 82, SafariCafe = 83, ZooGarden = 84, BusStop = 85;
 
         /// <summary>A station of any size (the big one, or a country halt): trains stop beside it.</summary>
         public static bool IsStation(int variant) => variant == Station || variant == Halt || variant == FreightYard;
@@ -289,6 +289,9 @@ namespace Wonderland
                 "snacks and drinks for the visitors"));
             list.Add(Z("Safari café", "Safari", 0.06f, 0.06f, 0.08f, Ring(0.03f, 6, SpotKind.Sit), "lunch under the thatch", true));
             list.Add(Z("Palms and rocks", "Palms", 0.028f, 0.028f, 0.045f, System.Array.Empty<ActivitySpot>(), "planting for the zoo's paths", false, false, true));
+            list.Add(new() { Name = "Bus stop", Short = "Bus stop", Category = PlaceCategory.Travel, Half = new Vector2(0.024f, 0.012f), Height = 0.045f, Pad = false, Small = true, Styles = 1,
+                Hint = "buses call here - put it beside a road",
+                Spots = new[] { new ActivitySpot(-0.007f, -0.004f, SpotKind.Sit, 180f), new ActivitySpot(0.007f, -0.004f, SpotKind.Sit, 180f), new ActivitySpot(0.018f, -0.018f, SpotKind.Gather, 90f) } });
             for (int i = 0; i < list.Count; i++) list[i].Id = i;
             // What each place is for: the needs it satisfies decide who comes and when (see Needs).
             foreach (var b in list)
@@ -302,6 +305,7 @@ namespace Wonderland
                         or ZooGate or Savanna or ElephantHouse or LionRock or PenguinPool or MonkeyIsland or Aviary or TropicalHouse or PettingZoo => Need.Sights,
                     ZooKiosk or SafariCafe => Need.Food,
                     ZooPlaza => Need.Rest,
+                    BusStop => Need.Social,
                     Bench or LogPile or HayBales => Need.Rest,
                     _ => b.Category == PlaceCategory.Homes ? Need.Rest : Need.None,
                 };

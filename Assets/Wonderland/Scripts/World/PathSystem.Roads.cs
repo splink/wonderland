@@ -342,6 +342,10 @@ namespace Wonderland
 
         /// <summary>How round a junction's kerb corners are (the asphalt's edge, from one road to the next).</summary>
         public const float CornerRadius = 0.02f;
+        /// <summary>Where a highway meets another road the corners sweep round wide, for its long, fast vehicles.</summary>
+        public const float HighwayCornerRadius = 0.05f;
+
+        private static float CornerOf(RoadJunction j) => j.ArmKind.Contains((int)PathKind.Highway) ? HighwayCornerRadius : CornerRadius;
 
         /// <summary>Where a road enters a junction: the junction, the middle of the road there, the way out of the junction along it, and its kind.</summary>
         private readonly List<(int junction, Vector2 p, Vector2 o, int kind)> mouths = new();
@@ -475,7 +479,7 @@ namespace Wonderland
                     float phi = CcwAngle(j.Arms[a], j.Arms[b]);
                     if (phi < 3f || phi > 175f) continue;
                     float r = phi * Mathf.Deg2Rad, wa = AsphaltHalf(j.ArmKind[a]), wb = AsphaltHalf(j.ArmKind[b]);
-                    float round = CornerRadius / Mathf.Tan(r / 2f);
+                    float round = CornerOf(j) / Mathf.Tan(r / 2f);
                     need = Mathf.Max(need, (wb + wa * Mathf.Cos(r)) / Mathf.Sin(r) + round, (wa + wb * Mathf.Cos(r)) / Mathf.Sin(r) + round);
                 }
                 float least = 0f;
@@ -798,12 +802,13 @@ namespace Wonderland
                     var a = m.p - Left(m.o) * AsphaltHalf(m.kind);
                     var bm = m.p + Left(m.o) * AsphaltHalf(m.kind);
                     var an = n.p - Left(n.o) * AsphaltHalf(n.kind);
-                    var edge = Corner(j.At, bm, m.o, an, n.o);
+                    var edge = Corner(j.At, bm, m.o, an, n.o, CornerOf(j));
                     outline.Add(a);
                     for (int e = 0; e < edge.Count - 1; e++) outline.Add(edge[e]);
                     // Kerb, pavement and edge line round to the next road (a lane has none of its own: they taper away).
                     bool lane = !IsRoad(m.kind) || !IsRoad(n.kind);
-                    float pw = Mathf.Max(Pavement(m.kind), Pavement(n.kind));
+                    // (no pavement round a highway's corner: nobody walks there)
+                    float pw = m.kind == (int)PathKind.Highway || n.kind == (int)PathKind.Highway ? 0f : Mathf.Max(Pavement(m.kind), Pavement(n.kind));
                     var frames = new List<RoadSample>(edge.Count);
                     for (int e = 0; e < edge.Count; e++)
                     {
@@ -863,7 +868,7 @@ namespace Wonderland
         /// carrying straight on keep a straight kerb; round the back of a junction whose roads all leave one way, the edge
         /// passes behind its middle.
         /// </summary>
-        private static List<Vector2> Corner(Vector2 at, Vector2 from, Vector2 fromOut, Vector2 to, Vector2 toOut)
+        private static List<Vector2> Corner(Vector2 at, Vector2 from, Vector2 fromOut, Vector2 to, Vector2 toOut, float cornerRadius)
         {
             var edge = new List<Vector2> { from };
             float phi = CcwAngle(fromOut, toOut);
@@ -877,7 +882,7 @@ namespace Wonderland
                 {
                     var x = from - fromOut * t;
                     float half = phi * 0.5f * Mathf.Deg2Rad;
-                    float tangent = Mathf.Min(CornerRadius / Mathf.Tan(half), t, s);
+                    float tangent = Mathf.Min(cornerRadius / Mathf.Tan(half), t, s);
                     float r = tangent * Mathf.Tan(half);
                     var ta = x + fromOut * tangent; var tb = x + toOut * tangent;
                     var c = x + (fromOut + toOut).normalized * (r / Mathf.Sin(half));
