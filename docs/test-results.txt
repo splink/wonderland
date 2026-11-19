@@ -117,7 +117,7 @@ PASS  The village clock runs a day in 7.6 minutes (360 s of daylight, 97 s of ni
 PASS  The daily rhythm: shops in the morning, lunch at midday, the fair in the afternoon, the square in the evening
 PASS  A railway loop divides the land
 PASS  A village goes up around the railway (13/13 places, 8 residents moved in)
-PASS  The walk grid sees the railway as a divide (2 regions over 6972 cells, built in 22 ms)
+PASS  The walk grid sees the railway as a divide (2 regions over 6972 cells, built in 33 ms)
 PASS  Every resident knows their home (8/8; 2 live inside the loop)
 PASS  The baker lives over the bakery
 PASS  At two in the morning everyone is asleep at home (8/8)
@@ -140,8 +140,8 @@ PASS  ...get off at the far station and walk on to where they were going
 PASS  A lane with a level crossing joins the two sides (1 regions)
 PASS  ...and people from inside the loop walk over it to the village
 PASS  Save/load keeps the time (10:00), the clock speed, needs and homes (8/8)
-PASS  40 villagers: 0.29 ms per frame on average, worst 5.3 ms, 1.4 decisions/s, slowest decision 2.2 ms, places directory 0.4 ms (editor timing)
-PASS  After an edit the walk grid rebuilds over 35 frames (72 ms of work, worst frame 7.5 ms)
+PASS  40 villagers: 0.29 ms per frame on average, worst 6.6 ms, 1.4 decisions/s, slowest decision 2.3 ms, places directory 0.4 ms (editor timing)
+PASS  After an edit the walk grid rebuilds over 31 frames (60 ms of work, worst frame 3.2 ms)
 PASS  With no places at all, villagers wander by day and sleep under the stars at night
 PASS  A working village goes up (15/15 places, 10 villagers)
 PASS  Opening hours: the bakery opens at half six and shuts at six, the carousel stops in the evening, the fountain never closes
@@ -181,10 +181,10 @@ PASS  A town goes up along two crossing roads and a lane (23/23 places, 11 villa
 PASS  The roads make one network, joined where they cross (124 nodes)
 PASS  Homes by the road have vehicles (3 cars, 0 motorbikes, 2 bicycles), and the stations theirs
 PASS  A dog and a cat move in
-PASS  Vehicles drive the roads all day and never leave them (worst 2.4 cm from a road's centre line; 15 trips, 32 stops for traffic or people)
+PASS  Vehicles drive the roads all day and never leave them (worst 2.3 cm from a road's centre line; 15 trips, 31 stops for traffic or people)
 PASS  Households drive to the shops, the restaurant and the park and come home (15 round trips)
-PASS  Supper fills the restaurant terrace (238 in the evening vs 33 in the afternoon)
-PASS  The disco comes alive after dark (57 dancing, 2 night owls; heard 187 times; nobody there by day)
+PASS  Supper fills the restaurant terrace (205 in the evening vs 33 in the afternoon)
+PASS  The disco comes alive after dark (65 dancing, 2 night owls; heard 187 times; nobody there by day)
 PASS  Visitors come to the museum (332) and the park (39)
 PASS  Children go to school and play football: a match with a ball (1.7 m of passes, 10 goals)
 PASS  The factory chimney smokes while it works (Dora works there; next door: Dora (child False, works at 15))
@@ -192,18 +192,18 @@ PASS  The dog goes out with its owner, in their footsteps, and never strays from
 PASS  The cat keeps to its territory and sits up on the wall
 PASS  The balloon flies by day and stays down at night
 PASS  The disco's DISCO sign lights up letter by letter, blinks and shines (6 different states)
-PASS  Clouds drift on the breeze
+FAIL  Clouds drift on the breeze
 PASS  Unwell: "Lotte feels faint - the ambulance is on its way" - answered with lights and siren, dealt with, and back at the station (5 resolved, 0 given up)
 PASS  Fire: "Smoke from the cottage! The fire engine is coming" - answered with lights and siren, dealt with, and back at the station (6 resolved, 0 given up)
 PASS  Police: "A bicycle has gone missing at the townhouse - the police are coming" - answered with lights and siren, dealt with, and back at the station (7 resolved, 0 given up)
-PASS  CCTV: 2 cameras; the watched feed is filmed 15 times a second, the studio's screens 3.3 a second between them
+PASS  CCTV: 2 cameras; the watched feed is filmed 15 times a second, the studio's screens 3.0 a second between them
 PASS  Save and load keep where the cameras look (71 / 15 degrees; loaded 71 / 15, 2 cameras), the pets (2), and the vehicles come back with their homes (8 of 8)
 PASS  Erasing a camera leaves the other selected, still aimed where it was
-PASS  Sound: 4 sources near the crossroads (at most 8); off means silent; five barks in a row play once; a meow out of earshot isn't played
+PASS  Sound: 3 sources near the crossroads (at most 8); off means silent; five barks in a row play once; a meow out of earshot isn't played
 PASS  Taking a road away re-routes or parks the traffic (worst 1.4 cm off the remaining roads)
-PASS  A busy town (40 villagers, 8 vehicles, 2 animals, sound and a camera feed): 0.29 ms per frame on average, worst 6.6 ms (editor timing, simulation only)
+PASS  A busy town (40 villagers, 8 vehicles, 2 animals, sound and a camera feed): 0.26 ms per frame on average, worst 3.2 ms (editor timing, simulation only)
 PASS  A road crosses the railway at a level crossing; homes on both sides have vehicles (4 places, 3 vehicles)
-PASS  Vehicles wait at the level crossing while a train goes by (413 waits, 6 trips), and are never on it with the train
+PASS  Vehicles wait at the level crossing while a train goes by (388 waits, 6 trips), and are never on it with the train
 PASS  A loop drawn in two halves closes (1 pieces, 0 dead ends)
 PASS  Branches drawn off a loop at any angle from 20 to 90 degrees are built (44/44; refused: )
 PASS  Two loops are joined by a line drawn from one to the other (2 switches, 0 dead ends)
@@ -239,7 +239,7 @@ PASS  Every train runs one way round the network, never backing up or meeting an
 PASS  Trains share both loops rather than piling into one (49% of train-time in the quieter loop)
 PASS  Trains call at the country halt (121 calls)
 PASS  A hand-drawn round loop comes out as standard track: closed, straights on the grid and curves of 20 cm, 30 cm, 40 cm ()
-PASS  ...and stays close to what was drawn (on average 1.7 cm off, at most 4.6 cm; planned in 4.9 ms, 2.8 ms drawn freely)
+PASS  ...and stays close to what was drawn (on average 1.7 cm off, at most 4.6 cm; planned in 5.1 ms, 2.8 ms drawn freely)
 PASS  A train runs round it on the rails (worst 0.0 mm off, 3.8 m)
 PASS  A line drawn 4 degrees off comes out dead straight along the grid, its ends on grid points (0.00 mm off straight; ends (-0.600, 0.150) and (0.600, 0.150))
 PASS  An L drawn with a rounded corner: two straights and one standard curve of 30 cm ()
@@ -247,7 +247,7 @@ PASS  Branches drawn off a straight at 25 to 135 degrees get a switch exactly on
 PASS  A line drawn about 8 cm beside a straight runs exactly 10 cm from it (0.0 mm off)
 PASS  A loop drawn round a loop keeps 10 cm from it all the way round, on concentric curves (10.0 to 10.0 cm; curves 20 cm, 30 cm, 40 cm)
 PASS  Crossovers drawn from one loop to the other, one each way, each get a switch at both ends (4 switches, 0 one-way traps)
-PASS  Two loops linked both ways on the grid: 4 switches, no dead ends, no one-way traps, all standard track (4 switches, 0 dead ends, 0 traps; ; a link planned in 4.0 ms, 3.3 ms drawn freely)
+PASS  Two loops linked both ways on the grid: 4 switches, no dead ends, no one-way traps, all standard track (4 switches, 0 dead ends, 0 traps; ; a link planned in 4.1 ms, 3.3 ms drawn freely)
 PASS  A line carried on from its dead end continues it smoothly, as one piece (8 pieces, sharpest bend 2.9 deg per cm; )
 PASS  Drawn on from 15 cm back along the line, it still carries the line on from its end - one piece, no new switch (5 -> 5 switches)
 PASS  Two separate railways joined by a line from one to the other become one (2 -> 1; )
@@ -286,8 +286,8 @@ PASS  14 clouds drift on the wind
 PASS  The rain stops when the shower passes
 PASS  Rain can be heard
 PASS  A stream joins two ponds
-PASS  It flows from the higher pond down to the lower, whichever way it was drawn (8.1 -> 1.7 cm)
-PASS  It leaves and enters at the ponds' own surfaces (high 8.2/8.1 cm, low 1.9/1.7 cm), not their beds
+PASS  It flows from the higher pond down to the lower, whichever way it was drawn (8.1 -> 1.9 cm)
+PASS  It leaves and enters at the ponds' own surfaces (high 8.2/8.1 cm, low 1.9/1.9 cm), not their beds
 PASS  The ponds are left as they were (no dam, no ditch across them)
 PASS  Every train carries a camera to watch (1 feeds)
 PASS  Watched from the front of the engine: "Train 1 - from the front of the engine (Steam train, 2 carriages)"
@@ -308,8 +308,8 @@ PASS  Roads crossing make a crossroads, a road ending on another a T-junction (2
 PASS  Traffic lights on every arm of both junctions (7)
 PASS  A highway can be drawn
 PASS  Cars, a taxi, a van, a bus, a lorry and a tanker go on the roads (7)
-PASS  Every one of them drives about the town (the least went 762 cm in 3 minutes)
-PASS  They stop at red lights and never cross on red (186 stops at lights, 0 red crossings)
+PASS  Every one of them drives about the town (the least went 761 cm in 3 minutes)
+PASS  They stop at red lights and never cross on red (184 stops at lights, 0 red crossings)
 PASS  They keep to the roads (at most 1.9 cm from a road's centre line)
 PASS  They keep their distance (closest 2.3 cm between two)
 PASS  The vehicles are saved with the world (7)
@@ -321,7 +321,7 @@ PASS  Streets drawn by hand, wobbling and drifting a little, come out dead strai
 PASS  Drawn on from a street's end (or from a little way back along it) it carries on as one street, still straight (3 -> 3 streets, 0 bends)
 PASS  A street carried on round a corner from its end is one street with a smooth curve, no kink at the join (sharpest 11.3 deg per cm)
 PASS  A side street drawn up to a street ends exactly on it, straight (0.0 mm)
-PASS  A stroke that doubles back onto a street's end plans in a moment, a sensible road or none (grid: 0 ms, 0.53 m; free: 0 ms, 0.50 m; )
+PASS  A stroke that doubles back onto a street's end plans in a moment, a sensible road or none (grid: 0 ms, 0.53 m; free: 0 ms, 0.53 m; )
 PASS  A railway under a big hill becomes a tunnel (hill 29 cm, 30 cm of tunnel, hill kept above it)
 PASS  The train runs into the tunnel (steam off underground)
 PASS  Railway across a pond rises onto a bridge and the water stays
@@ -353,7 +353,7 @@ PASS  Animals wander and graze (up to 21 cm from home in a minute)
 PASS  Animals stay on free grass near home
 PASS  Eraser removes an animal ("Sheep removed")
 PASS  Stream drawn
-PASS  Stream level only falls downstream (3.3 -> 1.4 cm)
+PASS  Stream level only falls downstream (3.3 -> 0.7 cm)
 PASS  Stream carves a channel below its water
 PASS  No trees standing in the stream
 PASS  The railway bridges the stream (clearance 32 mm)
@@ -390,6 +390,6 @@ PASS  Bad room data does not block growth ("room (room scan) sizes the start; la
 PASS  Land still grows with bad room data
 PASS  Trimmed land grows back (1.19 -> 1.04 -> 1.16 m2)
 INFO  terrain: 6 chunk meshes, 17 k triangles, land 3.49 m2 of a 4.8 x 4.8 m grid
-INFO  static budget of this world: 346 mesh renderers (~draw calls per eye pass before batching, excl. shadows/UI), 1166 k triangles, ground cover 5538 tufts
-INFO  trees 131, forest chunks 30, houses 3, track 3.43 m, undo depth 9, journey simulated in 86.8 s wall time
-RESULT: PASS
+INFO  static budget of this world: 332 mesh renderers (~draw calls per eye pass before batching, excl. shadows/UI), 1159 k triangles, ground cover 5538 tufts
+INFO  trees 131, forest chunks 30, houses 3, track 3.43 m, undo depth 9, journey simulated in 86.9 s wall time
+RESULT: FAIL (1)

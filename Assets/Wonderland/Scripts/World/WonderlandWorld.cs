@@ -292,8 +292,8 @@ namespace Wonderland
             var region = new RectInt(0, 0, 0, 0);
             foreach (var st in Streams.Streams)
             {
-                StreamSystem.Relevel(st, Terrain);
-                var r = StreamSystem.Carve(Terrain, st);
+                StreamSystem.Relevel(st, Terrain, Streams.Streams);
+                var r = StreamSystem.Carve(Terrain, st, Streams.Streams);
                 TerrainView.Rebuild(r);
             }
             Streams.Rebuild();
@@ -370,9 +370,12 @@ namespace Wonderland
             foreach (var p in path.points)
                 if (Buildings.Contains(new Vector2(p.x, p.z), StreamSystem.HalfWidth * width)) return "Streams flow around houses";
             Checkpoint();
-            Streams.Streams.Add(path);
+            // Drawn on from a stream's free end it carries that stream on (one stream, widening or narrowing gently).
+            var joined = StreamSystem.Carry(Streams.Streams, path, Terrain);
+            if (joined != path) StreamSystem.Relevel(joined, Terrain, Streams.Streams);
+            Streams.Streams.Add(joined);
             StreamSystem.Join(Streams.Streams);   // (onto another stream it starts or ends at)
-            AfterStreamsChanged(StreamSystem.Carve(Terrain, path));
+            AfterStreamsChanged(StreamSystem.Carve(Terrain, joined, Streams.Streams));
             return null;
         }
 

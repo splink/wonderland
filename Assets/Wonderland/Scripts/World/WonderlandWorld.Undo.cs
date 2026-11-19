@@ -104,7 +104,7 @@ namespace Wonderland
         private static List<StreamPath> CopyStreams(List<StreamPath> streams)
         {
             var copy = new List<StreamPath>(streams.Count);
-            foreach (var st in streams) copy.Add(new StreamPath { points = new List<Vector3>(st.points), width = st.width });
+            foreach (var st in streams) copy.Add(st.Copy());
             return copy;
         }
 
@@ -158,7 +158,7 @@ namespace Wonderland
         private static bool SameStreams(List<StreamPath> a, List<StreamPath> b)
         {
             if (b == null || a.Count != b.Count) return false;
-            for (int i = 0; i < a.Count; i++) if (a[i].width != b[i].width || !a[i].points.SequenceEqual(b[i].points)) return false;
+            for (int i = 0; i < a.Count; i++) if (a[i].width != b[i].width || !a[i].points.SequenceEqual(b[i].points) || !(a[i].widths ?? new List<float>()).SequenceEqual(b[i].widths ?? new List<float>())) return false;
             return true;
         }
 

@@ -69,7 +69,7 @@ namespace Wonderland.Editor
         public static void TestRoads()
         {
             Report.Clear(); failures = 0; BuildGrid.Snap = false;   // (journeys drawn by hand; the road journey checks the grid)
-            try { RoadJourney(); }
+            try { RoadJourney(); JoinJourney(); }
             catch (Exception e) { Fail("Exception: " + e); }
             BuildGrid.Snap = true;
             Report.AppendLine(failures == 0 ? "RESULT: PASS" : $"RESULT: FAIL ({failures})");
