@@ -11,6 +11,8 @@ namespace Wonderland
         private static float Living(MeshBuilder b, ref Rng rng, Style s, int id, int style, out bool warp)
         {
             warp = false;
+            float zoo = ZooPiece(b, ref rng, id);
+            if (zoo >= 0f) return zoo;
             switch (id)
             {
                 case Catalog.TaxiRank: return TaxiShelter(b);

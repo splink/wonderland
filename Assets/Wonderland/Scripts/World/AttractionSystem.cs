@@ -5,8 +5,11 @@ using UnityEngine.Rendering;
 namespace Wonderland
 {
     /// <summary>
-    /// What makes the attractions worth visiting. At the zoo, giraffes, elephants, lions, zebras and penguins wander
-    /// about their enclosures (now and then stopping to graze or look about). At the football stadium matches kick off at
+    /// What makes the attractions worth visiting. In every zoo piece the animals live in their pens (see
+    /// HouseFactory.PensOf), sized to the villagers - a giraffe three times their height, an elephant twice - wandering,
+    /// grazing, looking about; parrots fly under their nets, monkeys climb. A zoo entrance with at least two enclosures
+    /// behind it makes a zoo: it opens (word goes round the village) and on its open days visitors come through the
+    /// gate, buy their tickets, go round the animals one after another and end with a snack (see <see cref="ZooDay"/>). At the football stadium matches kick off at
     /// three and at half past seven: word goes round and villagers come to watch, the stands fill with a crowd (one mesh
     /// of seated fans, cheap however many), two teams chase the ball about the pitch, goals are news, and when the final
     /// whistle goes everybody heads home. Nothing here is saved: it follows the buildings.
@@ -15,11 +18,17 @@ namespace Wonderland
     {
         public static readonly float[] KickOffs = { 15f, 19.5f };
         public const float MatchHours = 1.5f;
-        private static readonly string[] Species = { "giraffes", "elephants", "lions", "zebras", "penguins" };
-        private static readonly int[] PerPen = { 2, 2, 2, 3, 4 };
+        private static readonly string[] Species = { "giraffes", "elephants", "lions", "zebras", "penguins", "monkeys", "flamingos", "goats", "parrots" };
+        /// <summary>Each species' size against the 3 cm villagers (their models are made small; a giraffe stands some 8 cm tall).</summary>
+        private static readonly float[] Size = { 2.6f, 2.5f, 1.9f, 2f, 1.4f, 1f, 1f, 1f, 1f };
+        private static readonly float[] Pace = { 0.012f, 0.009f, 0.012f, 0.014f, 0.006f, 0.014f, 0.008f, 0.01f, 0.03f };
+        /// <summary>A zoo entrance this close to enclosures makes a zoo with them.</summary>
+        public const float ZooReach = 0.8f;
 
-        private sealed class Beast { public Transform Root; public Vector2 Pos, Target; public float Heading, Pause; public int Pen; }
-        private sealed class ZooPlace { public Vector2 House; public Transform Root; public readonly List<Beast> Animals = new(); }
+        private sealed class Beast { public Transform Root; public Vector2 Pos, Target; public float Heading, Pause, Y, TargetY; public int Pen; }
+        private sealed class ZooPlace { public Vector2 House; public int Variant; public Transform Root; public HouseFactory.Pen[] Pens; public readonly List<Beast> Animals = new(); }
+        private sealed class ZooPark { public Vector2 Gate; public ZooDay Day; public bool Open; }
+        private readonly List<ZooPark> parks = new();
         private sealed class Ground
         {
             public Vector2 House; public Transform Root, Crowd, Ball;
@@ -82,21 +91,24 @@ namespace Wonderland
 
         private void Sync()
         {
-            for (int k = zoos.Count - 1; k >= 0; k--) if (HouseOf(zoos[k].House, Catalog.Zoo) < 0) { Gone(zoos[k].Root.gameObject); zoos.RemoveAt(k); }
+            for (int k = zoos.Count - 1; k >= 0; k--) if (HouseOf(zoos[k].House, zoos[k].Variant) < 0) { Gone(zoos[k].Root.gameObject); zoos.RemoveAt(k); }
             for (int k = grounds.Count - 1; k >= 0; k--) if (HouseOf(grounds[k].House, Catalog.Stadium) < 0) { Gone(grounds[k].Root.gameObject); grounds.RemoveAt(k); }
             var houses = world.Buildings.Houses;
             for (int i = 0; i < houses.Count; i++)
             {
                 var at = new Vector2(houses[i].x, houses[i].z);
-                if (houses[i].variant == Catalog.Zoo && !zoos.Exists(z => z.House == at))
+                var pens = HouseFactory.PensOf(houses[i].variant);
+                if (pens.Length > 0 && !zoos.Exists(z => z.House == at && z.Variant == houses[i].variant))
                 {
-                    var z = new ZooPlace { House = at, Root = Anchor(i, "Zoo animals") };
-                    beasts ??= new[] { Giraffe(), Elephant(), Lion(), Zebra(), Penguin() };
-                    for (int pen = 0; pen < HouseFactory.ZooPens.Length; pen++)
-                        for (int n = 0; n < PerPen[pen]; n++)
+                    var z = new ZooPlace { House = at, Variant = houses[i].variant, Pens = pens, Root = Anchor(i, "Zoo animals") };
+                    beasts ??= new[] { Giraffe(), Elephant(), Lion(), Zebra(), Penguin(), Monkey(), Flamingo(), Goat(), Parrot() };
+                    for (int pen = 0; pen < pens.Length; pen++)
+                        for (int n = 0; n < pens[pen].Count; n++)
                         {
-                            var a = new Beast { Pen = pen, Root = Part(Species[pen], z.Root, beasts[pen]) };
-                            a.Pos = a.Target = InPen(pen); a.Heading = rng.Range(0f, 360f); a.Pause = rng.Range(0f, 4f);
+                            int sp = pens[pen].Species;
+                            var a = new Beast { Pen = pen, Root = Part(Species[sp], z.Root, beasts[sp]) };
+                            a.Root.localScale = Vector3.one * Size[sp];
+                            a.Pos = a.Target = InPen(pens[pen]); a.Y = a.TargetY = pens[pen].Y; a.Heading = rng.Range(0f, 360f); a.Pause = rng.Range(0f, 4f);
                             z.Animals.Add(a);
                         }
                     zoos.Add(z);
@@ -117,46 +129,120 @@ namespace Wonderland
                     grounds.Add(g);
                 }
             }
+            SyncParks();
         }
+
+        /// <summary>
+        /// Zoos: every entrance with at least two animal pieces (with animals) within <see cref="ZooReach"/> is a zoo.
+        /// A new one opens with the news, and its visitors' day begins (see <see cref="ZooDay"/>).
+        /// </summary>
+        private void SyncParks()
+        {
+            var houses = world.Buildings.Houses;
+            for (int k = parks.Count - 1; k >= 0; k--) if (HouseOf(parks[k].Gate, Catalog.ZooGate) < 0) { parks[k].Open = false; parks.RemoveAt(k); }
+            for (int i = 0; i < houses.Count; i++)
+            {
+                if (houses[i].variant != Catalog.ZooGate) continue;
+                var at = new Vector2(houses[i].x, houses[i].z);
+                var park = parks.Find(p => p.Gate == at);
+                if (park == null) parks.Add(park = new ZooPark { Gate = at });
+                int exhibits = ZooPieces(at, true).Count;
+                bool open = exhibits >= 2;
+                if (open && !park.Open)
+                {
+                    park.Day = new ZooDay(world, this, at);
+                    world.People.Deciders.Add(park.Day);
+                    world.People.Tell($"The zoo opens its gates - {exhibits} enclosures to see. Families are on their way!");
+                    ZoosOpened++;
+                    if (park.Day.Active) park.Day.Invite();
+                }
+                park.Open = open;
+            }
+        }
+
+        /// <summary>The zoo pieces round an entrance (within <see cref="ZooReach"/>): just those with animals, or every one.</summary>
+        public List<int> ZooPieces(Vector2 gate, bool animals)
+        {
+            var list = new List<int>();
+            var houses = world.Buildings.Houses;
+            for (int i = 0; i < houses.Count; i++)
+            {
+                var bp = Catalog.Get(houses[i].variant);
+                if (bp.Category != PlaceCategory.Zoo || houses[i].variant == Catalog.ZooGate) continue;
+                if ((new Vector2(houses[i].x, houses[i].z) - gate).magnitude > ZooReach) continue;
+                if (animals && HouseFactory.PensOf(houses[i].variant).Length == 0) continue;
+                list.Add(i);
+            }
+            return list;
+        }
+
+        /// <summary>Zoos that have opened, and whether the entrance at a house is a zoo now (tests, its card).</summary>
+        public int ZoosOpened { get; private set; }
+        public bool ZooOpen(int house)
+        {
+            if (house < 0 || house >= world.Buildings.Houses.Count) return false;
+            var h = world.Buildings.Houses[house];
+            return parks.Exists(p => p.Open && p.Gate == new Vector2(h.x, h.z));
+        }
+
+        /// <summary>Villagers on a zoo day now (tests).</summary>
+        public int ZooVisitors { get { int n = 0; foreach (var p in parks) if (p.Day != null) n += p.Day.Touring; return n; } }
 
         // ------------------------------------------------------------------ the zoo
 
-        private Vector2 InPen(int pen)
-        {
-            var (c, h) = HouseFactory.ZooPens[pen];
-            return c + new Vector2(rng.Range(-h.x, h.x) * 0.75f, rng.Range(-h.y, h.y) * 0.75f);
-        }
+        private Vector2 InPen(HouseFactory.Pen pen) => pen.Centre + new Vector2(rng.Range(-pen.Half.x, pen.Half.x) * 0.75f, rng.Range(-pen.Half.y, pen.Half.y) * 0.75f);
 
         private void StepBeast(ZooPlace z, Beast a, float dt)
         {
+            var pen = z.Pens[a.Pen];
+            int sp = pen.Species;
             var to = a.Target - a.Pos;
-            if (a.Pause > 0f) a.Pause -= dt;
-            else if (to.magnitude < 0.003f) { a.Pause = rng.Range(2f, 8f); a.Target = InPen(a.Pen); }
+            if (a.Pause > 0f && !pen.Fly) a.Pause -= dt;
+            else if (to.magnitude < 0.003f)
+            {
+                a.Pause = pen.Fly ? 0f : rng.Range(2f, 8f);
+                a.Target = InPen(pen);
+                a.TargetY = pen.Fly ? pen.Y + rng.Range(-0.02f, 0.02f) : pen.Climb ? pen.Y + (rng.Chance(0.5f) ? rng.Range(0.015f, 0.035f) : 0f) : pen.Y;
+            }
             else
             {
                 float want = Mathf.Atan2(to.x, to.y) * Mathf.Rad2Deg;
-                a.Heading = Mathf.MoveTowardsAngle(a.Heading, want, 90f * dt);
-                float speed = a.Pen == 4 ? 0.006f : a.Pen == 2 ? 0.01f : 0.008f;
-                if (Mathf.Abs(Mathf.DeltaAngle(a.Heading, want)) < 40f) a.Pos += to.normalized * Mathf.Min(speed * dt, to.magnitude);
+                a.Heading = Mathf.MoveTowardsAngle(a.Heading, want, (pen.Fly ? 160f : 90f) * dt);
+                if (Mathf.Abs(Mathf.DeltaAngle(a.Heading, want)) < (pen.Fly ? 70f : 40f)) a.Pos += to.normalized * Mathf.Min(Pace[sp] * dt, to.magnitude);
             }
-            float bob = a.Pause > 0f ? 0f : Mathf.Abs(Mathf.Sin(Time.time * 8f + a.Pos.x * 60f)) * 0.0006f;
-            a.Root.localPosition = new Vector3(a.Pos.x, 0.002f + bob, a.Pos.y);
-            a.Root.localRotation = Quaternion.Euler(0f, a.Heading, 0f);
+            a.Y = Mathf.MoveTowards(a.Y, a.TargetY, (pen.Fly ? 0.02f : 0.01f) * dt);
+            float bob = pen.Fly ? Mathf.Sin(Time.time * 14f + a.Pos.x * 90f) * 0.0012f : a.Pause > 0f ? 0f : Mathf.Abs(Mathf.Sin(Time.time * 8f + a.Pos.x * 60f)) * 0.0006f * Size[sp];
+            a.Root.localPosition = new Vector3(a.Pos.x, a.Y + bob, a.Pos.y);
+            a.Root.localRotation = Quaternion.Euler(0f, a.Heading, pen.Fly ? Mathf.Sin(Time.time * 3f + a.Pos.y * 40f) * 15f : 0f);
         }
 
-        /// <summary>How many animals a zoo has (for its card and the tests).</summary>
+        /// <summary>What lives in a zoo piece (for its card and the tests), or null.</summary>
         public string ZooFor(int house)
         {
-            if (house < 0 || house >= world.Buildings.Houses.Count || world.Buildings.Houses[house].variant != Catalog.Zoo) return null;
+            if (house < 0 || house >= world.Buildings.Houses.Count) return null;
             var h = world.Buildings.Houses[house];
-            var z = zoos.Find(x => x.House == new Vector2(h.x, h.z));
-            return z == null ? null : $"{z.Animals.Count} animals: giraffes, elephants, lions, zebras and penguins";
+            var z = zoos.Find(x => x.House == new Vector2(h.x, h.z) && x.Variant == h.variant);
+            if (z == null) return null;
+            var kinds = new List<string>();
+            foreach (var pen in z.Pens) if (!kinds.Contains(Species[pen.Species])) kinds.Add(Species[pen.Species]);
+            return $"{z.Animals.Count} animals: {string.Join(", ", kinds)}" + (h.variant != Catalog.Zoo && !InPark(new Vector2(h.x, h.z)) ? " - put a zoo entrance nearby to open a zoo" : "");
         }
+
+        private bool InPark(Vector2 at) => parks.Exists(p => p.Open && (p.Gate - at).magnitude <= ZooReach);
 
         public int AnimalsAt(int house)
         {
             var h = world.Buildings.Houses[house];
-            return zoos.Find(x => x.House == new Vector2(h.x, h.z))?.Animals.Count ?? 0;
+            return zoos.Find(x => x.House == new Vector2(h.x, h.z) && x.Variant == h.variant)?.Animals.Count ?? 0;
+        }
+
+        /// <summary>Where an animal is now (world-local), for tests: the first of a species in a piece.</summary>
+        public Vector3? AnimalPosition(int house, int index)
+        {
+            var h = world.Buildings.Houses[house];
+            var z = zoos.Find(x => x.House == new Vector2(h.x, h.z) && x.Variant == h.variant);
+            if (z == null || index >= z.Animals.Count) return null;
+            return transform.InverseTransformPoint(z.Animals[index].Root.position);
         }
 
         // ------------------------------------------------------------------ the stadium
@@ -332,6 +418,69 @@ namespace Wonderland
             b.AddBox(new Vector3(0f, 0.0062f, 0.0014f), new Vector3(0.0006f, 0.0004f, 0.0008f), Pal.Hex("#F2A030"));
             return b.ToMesh("Penguin");
         }
+
+        private static Mesh Monkey()
+        {
+            var b = new MeshBuilder();
+            var fur = Pal.Hex("#7A5232"); var face = Pal.Hex("#E2B48A");
+            b.AddBlob(new Vector3(0f, 0.0075f, 0f), new Vector3(0.0028f, 0.0036f, 0.0024f), 1, 0f, 14, (_, __) => fur);
+            b.AddBlob(new Vector3(0f, 0.0125f, 0.0006f), Vector3.one * 0.0022f, 1, 0f, 15, (_, __) => fur);
+            b.AddBlob(new Vector3(0f, 0.0122f, 0.0022f), new Vector3(0.0015f, 0.0013f, 0.0008f), 1, 0f, 16, (_, __) => face);
+            foreach (int s in new[] { -1, 1 })
+            {
+                b.AddBox(new Vector3(s * 0.0026f, 0.0075f, 0.001f), new Vector3(0.0009f, 0.0055f, 0.0009f), fur);   // arms
+                b.AddBox(new Vector3(s * 0.0013f, 0.0025f, 0f), new Vector3(0.001f, 0.005f, 0.001f), fur);           // legs
+                b.AddBlob(new Vector3(s * 0.0022f, 0.0135f, 0f), Vector3.one * 0.0007f, 0, 0f, 17, (_, __) => face);
+            }
+            b.Push(new Vector3(0f, 0.005f, -0.002f), Quaternion.Euler(-130f, 0f, 0f));
+            b.AddCylinder(Vector3.zero, 0.0005f, 0.0003f, 0.008f, 5, fur, fur, true);   // the tail
+            b.Pop();
+            return b.ToMesh("Monkey");
+        }
+
+        private static Mesh Flamingo()
+        {
+            var b = new MeshBuilder();
+            var pink = Pal.Hex("#F28AA8");
+            b.AddBox(new Vector3(0f, 0.008f, 0f), new Vector3(0.0005f, 0.016f, 0.0005f), pink);   // one leg (the other tucked up)
+            b.AddBlob(new Vector3(0f, 0.017f, 0f), new Vector3(0.0022f, 0.002f, 0.0036f), 1, 0f, 18, (_, __) => pink);
+            b.Push(new Vector3(0f, 0.018f, 0.003f), Quaternion.Euler(-15f, 0f, 0f));
+            b.AddCylinder(Vector3.zero, 0.0005f, 0.0004f, 0.009f, 5, pink, pink, false);
+            b.Pop();
+            b.AddBlob(new Vector3(0f, 0.027f, 0.0052f), new Vector3(0.0009f, 0.0009f, 0.0012f), 1, 0f, 19, (_, __) => pink);
+            b.AddBox(new Vector3(0f, 0.0265f, 0.0068f), new Vector3(0.0005f, 0.0006f, 0.0014f), Pal.TrainBlack);
+            return b.ToMesh("Flamingo");
+        }
+
+        private static Mesh Goat()
+        {
+            var b = new MeshBuilder();
+            var coat = Pal.Hex("#EDE6DA"); var horn = Pal.Hex("#8A7A62");
+            foreach (var (x, z) in new[] { (-0.0014f, 0.0026f), (0.0014f, 0.0026f), (-0.0014f, -0.0026f), (0.0014f, -0.0026f) }) b.AddBox(new Vector3(x, 0.0025f, z), new Vector3(0.0008f, 0.005f, 0.0008f), Pal.Shade(coat, 0.85f));
+            b.AddBlob(new Vector3(0f, 0.0062f, 0f), new Vector3(0.0022f, 0.0022f, 0.0042f), 1, 0f, 20, (_, __) => coat);
+            b.AddBlob(new Vector3(0f, 0.0088f, 0.0045f), new Vector3(0.0013f, 0.0014f, 0.002f), 1, 0f, 21, (_, __) => coat);
+            foreach (int s in new[] { -1, 1 }) b.AddBox(new Vector3(s * 0.0007f, 0.0105f, 0.0038f), new Vector3(0.0004f, 0.0018f, 0.0004f), horn);
+            b.AddBox(new Vector3(0f, 0.0072f, 0.0058f), new Vector3(0.0005f, 0.0015f, 0.0005f), Pal.Shade(coat, 0.8f));   // the beard
+            return b.ToMesh("Goat");
+        }
+
+        private static Mesh Parrot()
+        {
+            var b = new MeshBuilder();
+            var red = Pal.Hex("#E2383E"); var blue = Pal.Hex("#2E6ED8"); var yellow = Pal.Hex("#F2C12E");
+            b.AddBlob(Vector3.zero, new Vector3(0.0014f, 0.0014f, 0.0028f), 1, 0f, 22, (_, __) => red);
+            b.AddBlob(new Vector3(0f, 0.0008f, 0.0024f), Vector3.one * 0.001f, 1, 0f, 23, (_, __) => red);
+            b.AddBox(new Vector3(0f, 0.0005f, 0.0036f), new Vector3(0.0005f, 0.0006f, 0.0008f), Pal.Hex("#F2E3C2"));
+            foreach (int s in new[] { -1, 1 })
+            {
+                b.Push(new Vector3(s * 0.0012f, 0.0004f, 0f), Quaternion.Euler(0f, 0f, s * 20f));
+                b.AddBox(new Vector3(s * 0.0025f, 0f, 0f), new Vector3(0.005f, 0.0004f, 0.0026f), blue);
+                b.AddBox(new Vector3(s * 0.0012f, 0.0001f, 0f), new Vector3(0.0022f, 0.0004f, 0.002f), yellow);
+                b.Pop();
+            }
+            b.AddBox(new Vector3(0f, 0f, -0.0034f), new Vector3(0.0012f, 0.0003f, 0.0032f), blue);
+            return b.ToMesh("Parrot");
+        }
     }
 
     /// <summary>A football match: whoever is free (not at work, not asleep) goes along to watch, until the final whistle.</summary>
@@ -365,6 +514,78 @@ namespace Wonderland
             plan = Intent.Nothing;
             if ((villager * 7919 + Mathf.FloorToInt(world.Clock.Total * 4f)) % 3 == 0) return false;   // not everyone is a football fan
             return people.PlanGather(villager, House, Need.Fun, out plan);
+        }
+    }
+
+    /// <summary>
+    /// A day at the zoo: during opening hours, some of the villagers who are free (more of the children) set off for the
+    /// zoo. They go in through the gate and buy a ticket at a booth, then go round the enclosures one after another -
+    /// the nearest they haven't seen yet - and finish with a snack at the kiosk or the café, if the zoo has one. Each
+    /// stop is an ordinary visit (a free spot, on foot), so they keep to the paths and the crowds round the animals are
+    /// real; when a spot is taken they stand nearby instead.
+    /// </summary>
+    public sealed class ZooDay : IVillageDecider
+    {
+        private readonly WonderlandWorld world;
+        private readonly AttractionSystem zoo;
+        private readonly Vector2 gate;
+        private sealed class Visit { public int Day, Stage; public readonly List<int> Seen = new(); }
+        private readonly Dictionary<int, Visit> visits = new();
+
+        public ZooDay(WonderlandWorld world, AttractionSystem zoo, Vector2 gate) { this.world = world; this.zoo = zoo; this.gate = gate; }
+
+        private int Gate => world.Buildings.Houses.FindIndex(h => h.variant == Catalog.ZooGate && h.x == gate.x && h.z == gate.y);
+        public bool Active => Gate >= 0 && zoo.ZooOpen(Gate) && Catalog.Get(Catalog.ZooGate).OpenAt(world.Clock.Hour) && world.Clock.Hour < 17.5f;
+
+        /// <summary>Villagers somewhere on their round of the zoo today.</summary>
+        public int Touring { get { int n = 0, day = world.Clock.Day; foreach (var v in visits.Values) if (v.Day == day && v.Stage > 0 && v.Stage < 99) n++; return n; } }
+
+        /// <summary>When it opens: the free villagers who fancy a zoo day set off now.</summary>
+        public void Invite()
+        {
+            var people = world.People;
+            for (int i = 0; i < people.People.Count; i++)
+                if (people.IsFree(i) && people.StateOf(i) != PeopleSystem.Activity.Working && Decide(people, i, out var plan)) people.Direct(i, plan);
+        }
+
+        public bool Decide(PeopleSystem people, int villager, out Intent plan)
+        {
+            plan = Intent.Nothing;
+            int day = world.Clock.Day;
+            if (!visits.TryGetValue(villager, out var v) || v.Day != day)
+            {
+                // Who goes today: about two in five (the children more often).
+                bool child = people.IsChild(villager);
+                if ((villager * 7919 + day * 104729) % 10 >= (child ? 6 : 4)) { visits[villager] = new Visit { Day = day, Stage = 99 }; return false; }
+                visits[villager] = v = new Visit { Day = day };
+            }
+            if (v.Stage >= 99) return false;
+            if (people.StateOf(villager) == PeopleSystem.Activity.Working) return false;
+            int gateHouse = Gate;
+            if (v.Stage == 0)
+            {
+                // In through the gate: a ticket at a booth.
+                if (people.PlanVisit(villager, gateHouse, Need.Sights, out plan) || people.PlanGather(villager, gateHouse, Need.Sights, out plan)) { v.Stage = 1; return true; }
+                return false;
+            }
+            var pieces = zoo.ZooPieces(gate, true);
+            pieces.RemoveAll(i => v.Seen.Contains(i));
+            if (v.Stage <= 3 && pieces.Count > 0)
+            {
+                // The nearest enclosure not seen yet.
+                var at = people.PositionOf(villager);
+                pieces.Sort((x, y) => (new Vector2(world.Buildings.Houses[x].x, world.Buildings.Houses[x].z) - at).sqrMagnitude.CompareTo((new Vector2(world.Buildings.Houses[y].x, world.Buildings.Houses[y].z) - at).sqrMagnitude));
+                foreach (int house in pieces)
+                    if (people.PlanVisit(villager, house, Need.Sights, out plan) || people.PlanGather(villager, house, Need.Sights, out plan)) { v.Seen.Add(house); v.Stage++; return true; }
+            }
+            // A snack to finish with, then home (their own choosing again).
+            v.Stage = 99;
+            foreach (int house in zoo.ZooPieces(gate, false))
+            {
+                int id = world.Buildings.Houses[house].variant;
+                if ((id == Catalog.ZooKiosk || id == Catalog.SafariCafe) && people.PlanVisit(villager, house, Need.Food, out plan)) return true;
+            }
+            return false;
         }
     }
 }

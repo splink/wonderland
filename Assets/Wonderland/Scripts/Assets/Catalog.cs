@@ -115,7 +115,9 @@ namespace Wonderland
             LogPile = 32, Lamp = 33, Bench = 34, FlowerBed = 35, Well = 36, Statue = 37, Signpost = 38, Picnic = 39, HayBales = 40,
             Park = 41, Museum = 42, Restaurant = 43, Disco = 44, Hospital = 45, Police = 46, Factory = 47, Football = 48, Studio = 49,
             Camera = 50, Balloon = 51, Jetty = 52, RowingBoat = 53, SailingBoat = 54, Steamer = 55, Halt = 56, TaxiRank = 57,
-            Sawmill = 58, FurnitureShop = 59, IceCream = 60, Pub = 61, Hotel = 62, PostOffice = 63, Letterbox = 64, CarPark = 65, FreightYard = 66, Harbour = 67, Zoo = 68, FairyCastle = 69, Stadium = 70, Zebra = 71;
+            Sawmill = 58, FurnitureShop = 59, IceCream = 60, Pub = 61, Hotel = 62, PostOffice = 63, Letterbox = 64, CarPark = 65, FreightYard = 66, Harbour = 67, Zoo = 68, FairyCastle = 69, Stadium = 70, Zebra = 71,
+            ZooGate = 72, ZooPlaza = 73, Savanna = 74, ElephantHouse = 75, LionRock = 76, PenguinPool = 77, MonkeyIsland = 78, Aviary = 79, TropicalHouse = 80,
+            PettingZoo = 81, ZooKiosk = 82, SafariCafe = 83, ZooGarden = 84;
 
         /// <summary>A station of any size (the big one, or a country halt): trains stop beside it.</summary>
         public static bool IsStation(int variant) => variant == Station || variant == Halt || variant == FreightYard;
@@ -261,6 +263,32 @@ namespace Wonderland
             };
             list.Add(new() { Name = "Zebra crossing", Short = "Zebra", Category = PlaceCategory.Small, Half = new Vector2(0.034f, 0.011f), Height = 0.04f, Pad = false, Small = true, Styles = 1,
                 Hint = "point at a street: it goes across it - people cross here, cars stop for them" });
+            // The zoo, piece by piece (see HouseFactory.Zoo.cs): watchers line each enclosure's front (-Z).
+            ActivitySpot[] Front(float hx, float hz, int n)
+            {
+                var spots = new ActivitySpot[n];
+                for (int k = 0; k < n; k++) spots[k] = new ActivitySpot(-hx * 0.8f + hx * 1.6f * k / Mathf.Max(1, n - 1), -hz - 0.014f, SpotKind.Watch, 0f);
+                return spots;
+            }
+            Blueprint Z(string name, string shortName, float hx, float hz, float height, ActivitySpot[] spots, string hint, bool walkable = false, bool kids = true, bool small = false) =>
+                new() { Name = name, Short = shortName, Category = PlaceCategory.Zoo, Half = new Vector2(hx, hz), Height = height, Styles = 1, Spots = spots, Hint = hint, Walkable = walkable, Kids = kids, Small = small, Pad = !small };
+            list.Add(Z("Zoo entrance", "Entrance", 0.1f, 0.035f, 0.11f, new[] { new ActivitySpot(-0.07f, -0.032f, SpotKind.Browse), new ActivitySpot(0.07f, -0.032f, SpotKind.Browse), new ActivitySpot(-0.012f, -0.05f, SpotKind.Gather), new ActivitySpot(0.012f, -0.052f, SpotKind.Gather) },
+                "the gate to the zoo: put enclosures behind it and visitors come", true));
+            list.Add(Z("Zoo plaza", "Plaza", 0.075f, 0.075f, 0.04f, new[] { new ActivitySpot(0f, -0.05f, SpotKind.Sit, 180f), new ActivitySpot(0.043f, 0.025f, SpotKind.Sit, -60f), new ActivitySpot(-0.043f, 0.025f, SpotKind.Sit, 60f), new ActivitySpot(0.02f, -0.022f, SpotKind.Watch, 160f), new ActivitySpot(-0.022f, 0.02f, SpotKind.Gather) },
+                "a meeting place with an elephant fountain", true));
+            list.Add(Z("Savanna", "Savanna", 0.125f, 0.095f, 0.06f, Front(0.125f, 0.095f, 5), "giraffes, zebras and flamingos on the open plain"));
+            list.Add(Z("Elephant house", "Elephants", 0.115f, 0.095f, 0.11f, Front(0.115f, 0.095f, 4), "elephants bathe in the pool and the mud"));
+            list.Add(Z("Lion rock", "Lions", 0.095f, 0.08f, 0.07f, Front(0.095f, 0.08f, 4), "the lions lie on their rock in the sun"));
+            list.Add(Z("Penguin pool", "Penguins", 0.085f, 0.065f, 0.045f, Front(0.085f, 0.065f, 4), "penguins waddle and dive - children love them"));
+            list.Add(Z("Monkey island", "Monkeys", 0.095f, 0.085f, 0.07f, Front(0.095f, 0.085f, 4), "monkeys climb and swing on their island"));
+            list.Add(Z("Aviary", "Aviary", 0.066f, 0.066f, 0.1f, Ring(0.08f, 4, SpotKind.Watch), "parrots fly under the great net dome"));
+            list.Add(Z("Tropical house", "Tropics", 0.088f, 0.054f, 0.07f, new[] { new ActivitySpot(0f, -0.068f, SpotKind.Browse), new ActivitySpot(-0.04f, -0.066f, SpotKind.Watch), new ActivitySpot(0.04f, -0.066f, SpotKind.Watch) },
+                "palms and parrots under glass"));
+            list.Add(Z("Petting zoo", "Petting", 0.066f, 0.056f, 0.05f, Front(0.066f, 0.056f, 4), "goats for the children to stroke"));
+            list.Add(Z("Zoo kiosk", "Kiosk", 0.04f, 0.035f, 0.05f, new[] { new ActivitySpot(0f, -0.012f, SpotKind.Browse), new ActivitySpot(-0.025f, -0.028f, SpotKind.Sit, 90f), new ActivitySpot(0.025f, -0.03f, SpotKind.Sit, -90f) },
+                "snacks and drinks for the visitors"));
+            list.Add(Z("Safari café", "Safari", 0.06f, 0.06f, 0.08f, Ring(0.03f, 6, SpotKind.Sit), "lunch under the thatch", true));
+            list.Add(Z("Palms and rocks", "Palms", 0.028f, 0.028f, 0.045f, System.Array.Empty<ActivitySpot>(), "planting for the zoo's paths", false, false, true));
             for (int i = 0; i < list.Count; i++) list[i].Id = i;
             // What each place is for: the needs it satisfies decide who comes and when (see Needs).
             foreach (var b in list)
@@ -270,7 +298,10 @@ namespace Wonderland
                     Cafe or Picnic or Restaurant or IceCream => Need.Food,
                     Church or TownHall or Fountain or Well or Bandstand or Campsite or Pub => Need.Social,
                     Carousel or FerrisWheel or Playground or School or Disco or Football or Jetty or Stadium => Need.Fun,
-                    CastleRuin or Lookout or Crag or Windmill or FireStation or Statue or SignalBox or Park or Museum or Factory or Balloon or Studio or Sawmill or Zoo or FairyCastle => Need.Sights,
+                    CastleRuin or Lookout or Crag or Windmill or FireStation or Statue or SignalBox or Park or Museum or Factory or Balloon or Studio or Sawmill or Zoo or FairyCastle
+                        or ZooGate or Savanna or ElephantHouse or LionRock or PenguinPool or MonkeyIsland or Aviary or TropicalHouse or PettingZoo => Need.Sights,
+                    ZooKiosk or SafariCafe => Need.Food,
+                    ZooPlaza => Need.Rest,
                     Bench or LogPile or HayBales => Need.Rest,
                     _ => b.Category == PlaceCategory.Homes ? Need.Rest : Need.None,
                 };
@@ -310,6 +341,10 @@ namespace Wonderland
             Work(Hotel, "hotel keeper", 7f, 21f);
             Hours(PostOffice, 9f, 17.5f); Work(PostOffice, "postmaster", 8f, 17.5f);
             Hours(Zoo, 9f, 18f); Work(Zoo, "zookeeper", 8f, 18f);
+            foreach (int id in new[] { ZooGate, Savanna, ElephantHouse, LionRock, PenguinPool, MonkeyIsland, Aviary, TropicalHouse, PettingZoo, ZooKiosk, SafariCafe }) Hours(id, 9f, 18f);
+            Work(ZooGate, "ticket seller", 8.5f, 18f); Work(ElephantHouse, "elephant keeper", 7.5f, 17.5f); Work(Savanna, "zookeeper", 8f, 18f);
+            Work(ZooKiosk, "kiosk keeper", 9f, 18f, false, Goods.Sells); Work(SafariCafe, "cook", 9f, 18f, false, Goods.Sells);
+            list[ZooKiosk].Takes = list[SafariCafe].Takes = Cargo.Produce;
             Hours(Stadium, 10f, 21.5f); Work(Stadium, "groundsman", 9f, 18f);
             // Their own rhythms: supper in the evening, dancing after dark.
             list[Restaurant].Rhythm = new[] { 0f, 0f, 0f, 0.05f, 0.85f, 0.35f, 1f, 0.8f, 0f };

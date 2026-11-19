@@ -493,7 +493,13 @@ it. Nothing needs connecting by hand, and nothing is invented that the world doe
   - A harbour alone on its pond stays quiet.
 - **Shops, pubs and attractions.** The ice cream parlour is busiest on afternoons, and the pub in the evenings.
   - The hotel houses guests.
-  - At the zoo, giraffes, elephants, lions, zebras and penguins roam their enclosures and villagers come to see them.
+  - **The zoo** is a family of pieces (Build > Zoo): the entrance with a great ZOO over the gate and ticket booths, a
+    plaza with an elephant fountain, the savanna (giraffes, zebras, flamingos), the lion rock, the penguin pool, the
+    monkey island, the elephant house, the aviary and the tropical house (parrots flying), the petting zoo (goats),
+    the kiosk, the safari café, and palms and rocks for the paths. The animals are sized to the villagers - a giraffe
+    stands nearly three times their height. An entrance with at least two enclosures within 80 cm of it is a zoo: it
+    opens with the news, and from 9 to 17:30 visitors come through the gate, buy tickets at the booths, go round the
+    enclosures one after another and end with a snack. The old all-in-one zoo stays as the Small zoo.
   - Visitors gaze at the fairy-tale castle.
   - The stadium holds matches at 15:00 and 19:30: the village comes to watch, the stands fill and the teams play.
     Goals are news.

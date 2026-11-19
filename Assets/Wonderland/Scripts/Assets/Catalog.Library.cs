@@ -84,6 +84,19 @@ namespace Wonderland
             // Zoo: the old all-in-one zoo is the neighbourhood zoo.
             D(Zoo, "Small zoo", "A whole little zoo in one: giraffes, elephants, lions, zebras and penguins behind a gate");
             list[Zoo].Category = PlaceCategory.Zoo;
+            D(ZooGate, "Entrance & paths", "The zoo's entrance: a great ZOO over the gate, ticket booths either side", "at the front of the zoo, enclosures behind it within a few metres");
+            D(ZooPlaza, "Entrance & paths", "A paved plaza with an elephant fountain, benches and a signpost to the animals");
+            D(Savanna, "Enclosures", "An open plain: giraffes and zebras roam, flamingos stand in the waterhole", "its open front facing the visitors' path");
+            D(LionRock, "Enclosures", "A towering rock where the lions sun themselves, a moat and glass in front", "its glass front facing the visitors' path");
+            D(PenguinPool, "Enclosures", "A pool with an iceberg and a slide - the penguins waddle and dive", "its glass front facing the visitors' path");
+            D(MonkeyIsland, "Enclosures", "An island of palms and a climbing frame, ringed by a moat", "its open front facing the visitors' path");
+            D(ElephantHouse, "Animal houses", "A great domed hall with tall doors; the elephants bathe in the pool and the mud in front");
+            D(Aviary, "Animal houses", "A tall net dome over trees and a pond: parrots fly inside");
+            D(TropicalHouse, "Animal houses", "A long glasshouse full of palms, parrots flitting under the glass");
+            D(PettingZoo, "Animal houses", "A little barn and a paddock of goats the children can stroke");
+            D(ZooKiosk, "Visitors", "Snacks and drinks under a thatched cone roof, parasols and tables");
+            D(SafariCafe, "Visitors", "A big thatched roundhouse: lunch and a rest for the visitors");
+            D(ZooGarden, "Visitors", "Palms, rocks and flowers to dress the paths");
             // Travel.
             D(Station, "Railway", "A station on the platform's edge: trains stop and passengers get on and off", "beside the railway line");
             D(Halt, "Railway", "A little halt beside the line - trains call here too", "beside the railway line");
