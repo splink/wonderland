@@ -96,7 +96,6 @@ namespace Wonderland.Editor
             int restaurantEvening = 0, restaurantAfternoon = 0, discoNight = 0, discoDay = 0, museum = 0, park = 0, kidsPlaying = 0, smoke = 0, fairHeard = 0, discoHeard = 0;
             int restaurant = Find(Catalog.Restaurant), disco = Find(Catalog.Disco), museumAt = Find(Catalog.Museum), parkAt = Find(Catalog.Park), pitch = Find(Catalog.Football), school = Find(Catalog.School), factory = Find(Catalog.Factory), balloon = Find(Catalog.Balloon);
             int startDay = w.Clock.Day;
-            var cloud0 = w.Sky.PositionOf(0);
             while (w.Clock.Day == startDay || w.Clock.Hour < 2f)
             {
                 Town(w, 0.5f, false);
@@ -151,7 +150,10 @@ namespace Wonderland.Editor
             var litCounts = new HashSet<int>();
             for (float tt = 0f; tt < 7f; tt += 0.05f) { w.Buildings.Animate(tt, 0f, disco); litCounts.Add(w.Buildings.NeonLit(disco)); }
             Check(litCounts.Contains(0) && litCounts.Contains(5) && litCounts.Count >= 4, $"The disco's DISCO sign lights up letter by letter, blinks and shines ({litCounts.Count} different states)");
-            Check((w.Sky.PositionOf(0) - cloud0).magnitude > 0.05f, "Clouds drift on the breeze");
+            // (over a whole day a cloud wraps round the land, perhaps back near where it was: watch it for a few seconds)
+            var drifting = w.Sky.PositionOf(0); float drift = 0f;
+            for (float tt = 0f; tt < 4f; tt += Dt) { w.Sky.Step(Dt); var now = w.Sky.PositionOf(0); var step = new Vector2(now.x - drifting.x, now.z - drifting.z); if (step.magnitude < 0.5f) drift += step.magnitude; drifting = now; }
+            Check(drift > 0.004f, $"Clouds drift on the breeze ({drift * 100f:0.0} cm in 4 s)");
 
             // Emergencies: each service answers, the patient is helped up, the fire goes out; vehicles come home.
             w.Clock.Hour = 10f;
