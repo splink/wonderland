@@ -68,6 +68,17 @@ namespace Wonderland
         private sealed class Node { public Vector2 P; public bool Car; public int Kind; public readonly List<int> Next = new(); }
 
         public readonly List<Vehicle> Vehicles = new();
+
+        /// <summary>Shows just the vehicles in the world window; the rest drive on unseen.</summary>
+        public void Cull(System.Func<Vector2, float, bool> shown)
+        {
+            foreach (var v in Vehicles)
+            {
+                if (v.Root == null) continue;
+                bool show = shown(v.Position, 0.08f);
+                if (v.Root.gameObject.activeSelf != show) v.Root.gameObject.SetActive(show);
+            }
+        }
         private readonly List<Node> graph = new();
         private WonderlandWorld world;
         private Material material;

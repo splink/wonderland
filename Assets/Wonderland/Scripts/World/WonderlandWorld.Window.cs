@@ -49,7 +49,7 @@ namespace Wonderland
         public void UseWindow(bool on)
         {
             Windowed = on;
-            if (!on) { Shader.SetGlobalFloat(WindowOnId, 0f); Terrain.Window = null; TerrainView.SetCut(null); }
+            if (!on) { Shader.SetGlobalFloat(WindowOnId, 0f); Terrain.Window = null; TerrainView.SetCut(null); CullToWindow(); }
             windowDirty = true;
             ApplyWindow();
         }
@@ -141,7 +141,7 @@ namespace Wonderland
             ApplyWindow();
         }
 
-        private void OnDisable() { if (Windowed) Shader.SetGlobalFloat(WindowOnId, 0f); }
+        private void OnDisable() { if (Windowed) { Shader.SetGlobalFloat(WindowOnId, 0f); FigureBatch.Window = null; } }
         private void OnEnable() => windowDirty = true;
 
         private static float Snap(float v) => Mathf.Round(v / BuildGrid.Size) * BuildGrid.Size;
@@ -225,6 +225,31 @@ namespace Wonderland
             if (!Windowed) return;
             StepSlide(dt);
             ApplyWindow();
+            CullToWindow();
+        }
+
+        // ------------------------------------------------------------------ out of sight
+
+        /// <summary>
+        /// What the window doesn't show isn't drawn or animated: trees, grass, buildings, carriages, vehicles, boats and
+        /// figures outside it are switched off (the land, roads and track are cut by the shaders). Everything still
+        /// lives - trains run, people go about their day, cars drive - it just isn't shown. Ground just outside is built in
+        /// advance, so what slides into view is there.
+        /// </summary>
+        private Func<Vector2, float, bool> inWindow, nearWindow, everywhere;
+        private Func<Vector3, bool> figureInWindow;
+
+        private void CullToWindow()
+        {
+            inWindow ??= (p, r) => InWindow(p, r);
+            nearWindow ??= (p, r) => InWindow(p, r + 0.6f);
+            everywhere ??= (p, r) => true;
+            figureInWindow ??= p => InWindow(transform.InverseTransformPoint(p), 0.03f);
+            var shown = Windowed ? inWindow : everywhere;
+            Forest.Shown = Cover.Shown = Windowed ? nearWindow : null;   // (built a little ahead)
+            FigureBatch.Window = Windowed ? figureInWindow : null;
+            Forest.Cull(shown); Cover.Cull(shown); Buildings.Cull(shown); Trains.Cull(shown); Traffic.Cull(shown); Boats.Cull(shown);
+            if (Sliding) { Forest.RebuildDirty(6); Cover.RebuildDirty(6); }
         }
     }
 }

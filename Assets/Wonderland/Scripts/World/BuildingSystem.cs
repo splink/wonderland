@@ -129,11 +129,28 @@ namespace Wonderland
             return n;
         }
 
+        /// <summary>
+        /// Shows just the buildings in the world window (<paramref name="shown"/>: a centre and a reach): the rest are
+        /// neither drawn nor animated - they are all still there, for the people and the traffic.
+        /// </summary>
+        public void Cull(System.Func<Vector2, float, bool> shown)
+        {
+            for (int i = 0; i < renderers.Count && i < Houses.Count; i++)
+            {
+                if (!renderers[i]) continue;
+                var h = Houses[i];
+                var half = Catalog.Get(h.variant).Half;
+                bool show = shown(new Vector2(h.x, h.z), Mathf.Max(half.x, half.y) * 1.5f + 0.05f);
+                if (renderers[i].gameObject.activeSelf != show) renderers[i].gameObject.SetActive(show);
+            }
+        }
+
         /// <summary>Turns the carousels, sails and wheels (cabins stay upright). Rides follow their own clock.</summary>
         public void Animate(float time, float rides, int only = -1)
         {
             for (int i = only < 0 ? 0 : only; i < (only < 0 ? rotors.Count : only + 1); i++)
             {
+                if (i < renderers.Count && renderers[i] && !renderers[i].gameObject.activeSelf) continue;   // (out of the window)
                 var lights = i < neon.Count ? neon[i] : null;
                 if (lights != null)
                     for (int k = 0; k < lights.Length; k++)

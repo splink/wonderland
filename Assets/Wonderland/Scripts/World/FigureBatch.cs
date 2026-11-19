@@ -20,6 +20,9 @@ namespace Wonderland
         private bool cull;
         private System.Func<Vector3, bool> filming;   // (world position: on a camera feed)
 
+        /// <summary>The world window (world positions inside it; null: everywhere): figures outside it aren't drawn.</summary>
+        public static System.Func<Vector3, bool> Window;
+
         /// <summary>Whether figures are drawn together (the Figures setting).</summary>
         public static bool Together => PerfSettings.Figures.Value == 0;
 
@@ -43,6 +46,7 @@ namespace Wonderland
         /// <summary>Whether a figure at <paramref name="position"/> (world) could be seen: in front of the player, within drawing distance.</summary>
         public bool Visible(Vector3 position)
         {
+            if (Window != null && !Window(position)) return false;
             if (!cull || filming != null && filming(position)) return true;
             var d = position - eye;
             float dist = d.magnitude;

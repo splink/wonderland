@@ -27,6 +27,8 @@ namespace Wonderland
 
         // The finished grid (queries) and the one being built.
         private float x0, z0; private int nx, nz;
+        /// <summary>The area the finished grid covers (local XZ).</summary>
+        public Rect Area => new(x0, z0, nx * Cell, nz * Cell);
         private byte[] flags = Array.Empty<byte>();
         private int[] region = Array.Empty<int>();
         private float bx0, bz0; private int bnx, bnz, cursor = -1;

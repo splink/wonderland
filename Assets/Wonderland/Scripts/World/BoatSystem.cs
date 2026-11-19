@@ -41,6 +41,17 @@ namespace Wonderland
         private static readonly string[] BoatNames = { "Bluebell", "Mallard", "Puffin", "Daisy", "Kingfisher", "Moorhen", "Skylark", "Willow", "Pippin", "Swallow", "Heron", "Primrose" };
 
         public readonly List<Boat> Boats = new();
+
+        /// <summary>Shows just the boats in the world window; the rest sail on unseen.</summary>
+        public void Cull(System.Func<Vector2, float, bool> shown)
+        {
+            foreach (var b in Boats)
+            {
+                if (b.Root == null) continue;
+                bool show = shown(b.Pos, 0.08f);
+                if (b.Root.gameObject.activeSelf != show) b.Root.gameObject.SetActive(show);
+            }
+        }
         private WonderlandWorld world;
         private Material lit;
         private Rng rng = new(41);

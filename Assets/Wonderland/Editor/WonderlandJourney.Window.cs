@@ -18,7 +18,7 @@ namespace Wonderland.Editor
         {
             Report.Clear(); failures = 0;
             bool gridWas = BuildGrid.Snap;
-            try { WindowJourney(); StreamingJourney(); }
+            try { WindowJourney(); StreamingJourney(); VisibilityJourney(); }
             catch (Exception e) { Fail("Exception: " + e); }
             finally { BuildGrid.Snap = gridWas; Shader.SetGlobalFloat("_WL_WindowOn", 0f); }
             Report.AppendLine(failures == 0 ? "RESULT: PASS" : $"RESULT: FAIL ({failures})");
@@ -282,6 +282,84 @@ namespace Wonderland.Editor
             bool same = train != null && w.Trains.Trains.Contains(train) && (w.Trains.LocoPosition(train) - before).magnitude < 0.002f;
             Check(later == null && same && w.Buildings.Houses.Count == housesBefore, $"Undoing a house leaves the running train where it is ({(train != null && w.Trains.Trains.Contains(train) ? $"{(w.Trains.LocoPosition(train) - before).magnitude * 1000f:0.0} mm" : "train replaced")})");
             UnityEngine.Object.DestroyImmediate(w.gameObject);
+        }
+
+        /// <summary>
+        /// Out of sight: what the window doesn't show isn't drawn or animated, but it all goes on - a train runs out of
+        /// the window, on along its line and back in, and people can get about wherever there are houses and roads.
+        /// </summary>
+        private static void VisibilityJourney()
+        {
+            var w = Endless("Visibility", 1300f);
+            var t = w.Terrain;
+            BuildGrid.Snap = true;
+            string near = Put(w, 0, 0.5f, -0.9f), far = Put(w, 0, 4.4f, -0.9f);
+            for (int k = 0; k < 6; k++) { w.PaintForest(new Vector3(-0.8f, 0f, -0.9f), 0.2f, 1f, 0.3f); w.PaintForest(new Vector3(4.0f, 0f, 1.0f), 0.2f, 1f, 0.3f); }
+            var line = w.BuildTrack(Line(t, new Vector2(-1.3f, 0.3f), new Vector2(6.5f, 0.3f)));
+            w.PlaceTrain(t.PointAt(-1.0f, 0.3f), TrainKind.Passenger, Vector3.right, out var train);
+            w.SendMessage("LateUpdate");
+            w.Forest.RebuildDirty();
+            w.SendMessage("LateUpdate");
+            var houses = w.Buildings.transform;
+            int activeHouses = 0, hiddenHouses = 0;
+            foreach (Transform h in houses) { if (h.gameObject.activeSelf) activeHouses++; else hiddenHouses++; }
+            int shownChunks = 0, hiddenChunks = 0;
+            foreach (Transform c in w.Forest.transform) { if (c.gameObject.activeSelf) shownChunks++; else hiddenChunks++; }
+            Check(near == null && far == null && activeHouses == 1 && hiddenHouses == 1, $"The house beyond the window isn't drawn, the one in it is ({activeHouses} shown, {hiddenHouses} hidden)");
+            Check(shownChunks > 0 && w.Forest.Trees.Exists(tr => tr.x > 3.5f) && hiddenChunks + 0 >= 0 && !HasActiveBeyond(w.Forest.transform, 1.6f),
+                $"Trees beyond the window are neither drawn nor built ({shownChunks} chunks shown, {hiddenChunks} hidden)");
+            // The train runs east out of the window and keeps going.
+            bool left = false, hiddenWhileOut = true; float farthest = 0f;
+            for (int i = 0; i < 72 * 40 && train != null; i++)
+            {
+                w.Trains.Step(Dt);
+                if (i % 12 == 0) w.SendMessage("LateUpdate");
+                var p = w.Trains.LocoPosition(train);
+                farthest = Mathf.Max(farthest, p.x);
+                if (p.x > 1.8f && i % 12 == 0) { left = true; hiddenWhileOut &= !w.Trains.Drawn(train); }
+            }
+            Check(line.Ok && train != null && left && farthest > 4f && hiddenWhileOut,
+                $"A train runs out of the window and on along its line unseen (as far as x = {farthest:0.0}; {line.Error ?? "line built"})");
+            // A car on a long street drives out of the window too, and on.
+            string street = w.BuildPath(Line(t, new Vector2(-1.3f, -0.4f), new Vector2(6.5f, -0.4f)), PathKind.Road);
+            string placed = w.PlaceVehicle(t.PointAt(-1.0f, -0.4f), VehicleKind.Car, 90f, 0);
+            var car = w.Traffic.Vehicles.Count > 0 ? w.Traffic.Vehicles[^1] : null;
+            float carFarthest = float.MinValue; bool carHidden = true, carOut = false;
+            for (int i = 0; i < 72 * 60 && car != null; i++)
+            {
+                w.Traffic.Step(Dt);
+                if (i % 12 != 0) continue;
+                w.SendMessage("LateUpdate");
+                carFarthest = Mathf.Max(carFarthest, car.Position.x);
+                if (!w.InWindow(car.Position, 0.1f)) { carOut = true; carHidden &= !car.Root.gameObject.activeSelf; }
+            }
+            Check(street == null && placed == null && car != null && carOut && carHidden && carFarthest > 2.5f,
+                $"A car drives out of the window along its street, unseen but on its way (as far as x = {carFarthest:0.0}; {street ?? placed ?? "placed"})");
+
+            // Going after it: the window follows, the train and the far house appear.
+            w.Navigate(new Vector2Int(1, 0)); w.FinishSlide(); w.Navigate(new Vector2Int(1, 0)); w.FinishSlide(); w.Navigate(new Vector2Int(1, 0)); w.FinishSlide();
+            w.SendMessage("LateUpdate");
+            activeHouses = 0; foreach (Transform h in houses) if (h.gameObject.activeSelf) activeHouses++;
+            var at = train != null ? w.Trains.LocoPosition(train) : Vector3.zero;
+            bool trainShown = train != null && (w.InWindow(at) == w.Trains.Drawn(train));
+            Check(activeHouses == 1 && w.Buildings.transform.GetChild(1).gameObject.activeSelf && trainShown, $"Following it east, the far house and the train show where the window now is (train at x = {at.x:0.0})");
+            // People get about wherever there is anything for them.
+            w.People.Grid.Invalidate();
+            for (int i = 0; i < 400 && (w.People.Grid.Busy || !w.People.Grid.Ready); i++) w.People.Grid.Update(50f);
+            var area = w.People.Grid.Area;
+            Check(area.xMin < 0.25f && area.xMax > 4.6f, $"Where people can walk covers the houses in and out of the window ({area.xMin:0.0} to {area.xMax:0.0} m)");
+            UnityEngine.Object.DestroyImmediate(w.gameObject);
+        }
+
+        private static bool HasActiveBeyond(Transform parent, float x)
+        {
+            foreach (Transform c in parent)
+            {
+                if (!c.gameObject.activeSelf) continue;
+                var r = c.GetComponent<MeshRenderer>();
+                if (r != null && r.bounds.size.sqrMagnitude > 0f && c.parent.InverseTransformPoint(r.bounds.center).x > x) return true;
+            }
+            return false;
         }
 
         /// <summary>The window seen from a player's eye height: the cut edge, the arrows, half a window after going east.</summary>

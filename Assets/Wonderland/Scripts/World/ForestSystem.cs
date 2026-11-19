@@ -25,11 +25,11 @@ namespace Wonderland
         private const float ChunkSize = 0.25f;
 
         public readonly List<TreeInstance> Trees = new();
-        private readonly Dictionary<int, (GameObject go, Mesh mesh)> chunks = new();
-        private readonly HashSet<int> dirty = new();
-        private readonly Dictionary<int, MeshData> meshData = new(), proxyData = new();
-        private readonly Dictionary<int, Mesh> proxyMeshes = new();
-        private readonly Dictionary<int, Mesh[]> levelMeshes = new();   // each chunk's simpler levels (detail 1, 2)
+        private readonly Dictionary<long, (GameObject go, Mesh mesh)> chunks = new();
+        private readonly HashSet<long> dirty = new();
+        private readonly Dictionary<long, MeshData> meshData = new(), proxyData = new();
+        private readonly Dictionary<long, Mesh> proxyMeshes = new();
+        private readonly Dictionary<long, Mesh[]> levelMeshes = new();   // each chunk's simpler levels (detail 1, 2)
         private readonly MeshBuilder proxyBuilder = new();
         private TerrainField terrain;
         private Material material;
@@ -41,7 +41,21 @@ namespace Wonderland
             terrain = field; material = lit; biomeSeed = seed;
         }
 
-        private static int ChunkKey(float x, float z) => (Mathf.FloorToInt(x / ChunkSize) + 64) * 1000 + Mathf.FloorToInt(z / ChunkSize) + 64;
+        /// <summary>Whether a chunk (centre, half size) is near enough the world window to be built (null: everywhere).</summary>
+        public System.Func<Vector2, float, bool> Shown;
+
+        /// <summary>Shows just the chunks in the window: the trees outside it are neither drawn nor rebuilt.</summary>
+        public void Cull(System.Func<Vector2, float, bool> shown)
+        {
+            foreach (var (k, c) in chunks)
+            {
+                bool show = shown(ChunkCentre(k), ChunkSize);
+                if (c.go.activeSelf != show) c.go.SetActive(show);
+            }
+        }
+
+        private static long ChunkKey(float x, float z) => ((long)Mathf.FloorToInt(x / ChunkSize) << 32) ^ (uint)Mathf.FloorToInt(z / ChunkSize);
+        private static Vector2 ChunkCentre(long k) => new(((int)(k >> 32) + 0.5f) * ChunkSize, ((int)(uint)k + 0.5f) * ChunkSize);
 
         public void MarkDirty(float x, float z) => dirty.Add(ChunkKey(x, z));
 
@@ -59,8 +73,8 @@ namespace Wonderland
         }
 
         private readonly MeshBuilder builder = new();
-        private readonly Dictionary<int, float> lastBuilt = new();
-        private readonly List<int> ready = new();
+        private readonly Dictionary<long, float> lastBuilt = new();
+        private readonly List<long> ready = new();
 
         // While the player paints or sculpts, the same chunks are dirtied every frame. Rebuild each chunk at most every
         // 0.12 s and at most two chunks per frame, so editing never stalls the main thread; the rest waits a frame.
@@ -72,18 +86,19 @@ namespace Wonderland
             if (dirty.Count == 0) return;
             float now = Time.realtimeSinceStartup;
             ready.Clear();
-            foreach (int k in dirty)
+            foreach (long k in dirty)
             {
                 if (ready.Count >= maxChunks) break;
                 if (minInterval > 0f && lastBuilt.TryGetValue(k, out float t) && now - t < minInterval) continue;
+                if (Shown != null && !Shown(ChunkCentre(k), ChunkSize)) continue;   // (out of the window: built when it comes into view)
                 ready.Add(k);
             }
             if (ready.Count == 0) return;
-            var byChunk = new Dictionary<int, List<TreeInstance>>();
-            foreach (int k in ready) byChunk[k] = new List<TreeInstance>();
+            var byChunk = new Dictionary<long, List<TreeInstance>>();
+            foreach (long k in ready) byChunk[k] = new List<TreeInstance>();
             foreach (var t in Trees)
                 if (byChunk.TryGetValue(ChunkKey(t.x, t.z), out var list)) list.Add(t);
-            foreach (int k in ready)
+            foreach (long k in ready)
             {
                 dirty.Remove(k);
                 lastBuilt[k] = now;

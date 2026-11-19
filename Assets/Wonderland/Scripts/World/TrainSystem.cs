@@ -282,6 +282,8 @@ namespace Wonderland
         }
 
         public Vector3 LocoPosition(Train t) => t.Cars[0].Body.localPosition;
+        /// <summary>Whether a train's locomotive is drawn (it is in the world window).</summary>
+        public bool Drawn(Train t) => t.Cars != null && t.Cars.Length > 0 && t.Cars[0].Body.gameObject.activeSelf;
 
         /// <summary>How far apart two trains' bodies are (between their nearest cars, side by side or end to end; 0: touching).</summary>
         public float Between(Train a, Train b) => Between(a, b, out _, out _);
@@ -1374,6 +1376,25 @@ namespace Wonderland
                 t.Chuff += ds / (TrainFactory.Loco.WheelRadius[0] * Mathf.PI * 0.5f);
                 float pulse = 0.55f + 0.45f * Mathf.Abs(Mathf.Sin(t.Chuff * Mathf.PI));
                 emission.rateOverTime = InTunnel(t) ? 0f : 3f + 30f * (t.Speed / CruiseSpeed) * pulse;
+            }
+        }
+
+        /// <summary>
+        /// Shows just the carriages in the world window: the rest - and their smoke - are neither drawn nor animated, while
+        /// the trains run on wherever they are.
+        /// </summary>
+        public void Cull(System.Func<Vector2, float, bool> shown)
+        {
+            foreach (var t in Trains)
+            {
+                if (t.Cars == null) continue;
+                foreach (var c in t.Cars)
+                {
+                    if (c?.Body == null) continue;
+                    var p = c.Body.localPosition;
+                    bool show = shown(new Vector2(p.x, p.z), 0.08f);
+                    if (c.Body.gameObject.activeSelf != show) c.Body.gameObject.SetActive(show);
+                }
             }
         }
 

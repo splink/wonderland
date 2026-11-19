@@ -430,6 +430,17 @@ namespace Wonderland
         private Rect GridBounds()
         {
             var land = world.Terrain.LandBounds();
+            if (world.Terrain.Endless)
+            {
+                // Land goes on for ever: people get about wherever there is anything for them - the houses, the roads and
+                // paths, and wherever someone is - in sight of the window or not.
+                float x0 = land.xMin, z0 = land.yMin, x1 = land.xMax, z1 = land.yMax;
+                void Add(Vector2 p, float r) { x0 = Mathf.Min(x0, p.x - r); z0 = Mathf.Min(z0, p.y - r); x1 = Mathf.Max(x1, p.x + r); z1 = Mathf.Max(z1, p.y + r); }
+                foreach (var h in world.Buildings.Houses) Add(new Vector2(h.x, h.z), 0.3f);
+                foreach (var l in world.Paths.Lines) for (int i = 0; i < l.points.Count; i += 8) Add(l.points[i], 0.2f);
+                foreach (var a in agents) Add(a.Position, 0.2f);
+                land = Rect.MinMaxRect(x0, z0, x1, z1);
+            }
             return land.width > 0f ? Rect.MinMaxRect(land.xMin - 0.05f, land.yMin - 0.05f, land.xMax + 0.05f, land.yMax + 0.05f) : land;
         }
 
@@ -555,7 +566,7 @@ namespace Wonderland
                 if (smart && eye.HasValue && !(cctv != null && cctv.Filming(new Vector3(a.Position.x, a.Height, a.Position.y))))
                 {
                     var rel = new Vector3(a.Position.x, a.Height, a.Position.y) - eye.Value;
-                    bool coarse = rel.sqrMagnitude > drawn * drawn || Vector3.Dot(rel, viewDir) < -0.05f;
+                    bool coarse = rel.sqrMagnitude > drawn * drawn || Vector3.Dot(rel, viewDir) < -0.05f || !world.InWindow(a.Position, 0.05f);
                     a.Pending += dt;
                     if (coarse && ((tick + a.Index) & 3) != 0) continue;
                     dtA = a.Pending; a.Pending = 0f;

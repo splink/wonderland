@@ -15,10 +15,10 @@ namespace Wonderland
     {
         private const float ChunkSize = 0.25f;
         private struct Tuft { public float x, z, scale, rotation; public byte kind; public float tint; }
-        private readonly Dictionary<int, List<Tuft>> tufts = new();   // per chunk
+        private readonly Dictionary<long, List<Tuft>> tufts = new();   // per chunk
         private int count, seed;
-        private readonly Dictionary<int, (GameObject go, Mesh mesh)> chunks = new();
-        private readonly HashSet<int> dirty = new();
+        private readonly Dictionary<long, (GameObject go, Mesh mesh)> chunks = new();
+        private readonly HashSet<long> dirty = new();
         private MeshData[] meshes;
         private TerrainField terrain;
         private Material material;
@@ -67,7 +67,7 @@ namespace Wonderland
                     : r < 0.8f ? (byte)(drift > 0.5f ? rng.Range(2, 6) : rng.Range(7, 9))
                     : r < 0.92f ? (byte)(drift > 0.62f ? 9 : rng.Range(2, 6))
                     : r < 0.985f ? (byte)6 : (byte)10;
-                int key = ChunkKey(p.x, p.y);
+                long key = ChunkKey(p.x, p.y);
                 if (!tufts.TryGetValue(key, out var list)) tufts[key] = list = new List<Tuft>();
                 list.Add(new Tuft { x = p.x, z = p.y, scale = rng.Range(0.75f, 1.3f), rotation = rng.Range(0f, 360f), kind = kind, tint = rng.Range(0.85f, 1.1f) });
                 count++;
@@ -75,7 +75,21 @@ namespace Wonderland
             MarkAllDirty();
         }
 
-        private static int ChunkKey(float x, float z) => (Mathf.FloorToInt(x / ChunkSize) + 64) * 1000 + Mathf.FloorToInt(z / ChunkSize) + 64;
+        /// <summary>Whether a chunk (centre, half size) is near enough the world window to be built (null: everywhere).</summary>
+        public System.Func<Vector2, float, bool> Shown;
+
+        /// <summary>Shows just the chunks in the window: the grass and flowers outside it are neither drawn nor rebuilt.</summary>
+        public void Cull(System.Func<Vector2, float, bool> shown)
+        {
+            foreach (var (k, c) in chunks)
+            {
+                bool show = shown(ChunkCentre(k), ChunkSize);
+                if (c.go.activeSelf != show) c.go.SetActive(show);
+            }
+        }
+
+        private static long ChunkKey(float x, float z) => ((long)Mathf.FloorToInt(x / ChunkSize) << 32) ^ (uint)Mathf.FloorToInt(z / ChunkSize);
+        private static Vector2 ChunkCentre(long k) => new(((int)(k >> 32) + 0.5f) * ChunkSize, ((int)(uint)k + 0.5f) * ChunkSize);
 
         public void MarkDirtyRegion(Vector2 centre, float radius)
         {
@@ -93,8 +107,8 @@ namespace Wonderland
         }
 
         private readonly MeshBuilder builder = new();
-        private readonly Dictionary<int, float> lastBuilt = new();
-        private readonly List<int> ready = new();
+        private readonly Dictionary<long, float> lastBuilt = new();
+        private readonly List<long> ready = new();
 
         // Same budget as the forest: editing re-dirties chunks every frame; rebuild each at most every 0.15 s, two per frame.
         private void LateUpdate() => RebuildDirty(2, 0.15f);
@@ -104,13 +118,14 @@ namespace Wonderland
             if (dirty.Count == 0 || terrain == null) return;
             float now = Time.realtimeSinceStartup;
             ready.Clear();
-            foreach (int k in dirty)
+            foreach (long k in dirty)
             {
                 if (ready.Count >= maxChunks) break;
                 if (minInterval > 0f && lastBuilt.TryGetValue(k, out float t) && now - t < minInterval) continue;
+                if (Shown != null && !Shown(ChunkCentre(k), ChunkSize)) continue;   // (out of the window: built when it comes into view)
                 ready.Add(k);
             }
-            foreach (int k in ready)
+            foreach (long k in ready)
             {
                 dirty.Remove(k);
                 lastBuilt[k] = now;
