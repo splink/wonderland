@@ -29,6 +29,7 @@ namespace Wonderland
             public string Name;
             public Vector2 A, B;                  // the two harbours (by where they stand)
             public List<Vector2> Route;           // from A's mooring to B's
+            public bool Waiting;                  // for a lift bridge to go up
             public Transform Root; public MeshFilter Deck;
             public Vector2 Pos; public float Heading, Speed;
             public bool ToB, Docked, Unloading, Loading;   // Loading: done unloading at this quay, now loading
@@ -152,7 +153,7 @@ namespace Wonderland
                     for (float d = 0f; d <= len; d += 0.01f)
                     {
                         var p = Vector2.Lerp(p0, p1, d / Mathf.Max(len, 1e-4f));
-                        if (!Wet(p.x, p.y) || world.Bridges.Headroom(p, Clearance) < AirDraft) { ok = false; break; }
+                        if (!Wet(p.x, p.y) || world.Bridges.Headroom(p, BridgeBerth, true) < AirDraft) { ok = false; break; }
                     }
                 }
                 if (ok) continue;
@@ -175,11 +176,13 @@ namespace Wonderland
 
         /// <summary>How high a container ship stands above the water (its radar mast): the room it needs under a bridge.</summary>
         public const float AirDraft = 0.045f;
+        /// <summary>How far round its way a ship keeps clear of a low bridge (its bow and stern swing out when it crosses at an angle).</summary>
+        private const float BridgeBerth = Clearance + 0.03f;
 
         /// <summary>Open water wide enough for a ship here, and no bridge too low for it overhead.</summary>
         private bool Navigable(Vector2 p) =>
             Wet(p.x, p.y) && Wet(p.x + Clearance, p.y) && Wet(p.x - Clearance, p.y) && Wet(p.x, p.y + Clearance) && Wet(p.x, p.y - Clearance)
-            && world.Bridges.Headroom(p, Clearance) >= AirDraft;
+            && world.Bridges.Headroom(p, BridgeBerth, true) >= AirDraft;   // (a lift bridge counts as open: it opens for a ship)
 
         /// <summary>
         /// A way over the water from <paramref name="a"/> to <paramref name="b"/> wide enough for a ship (a search over a
@@ -270,6 +273,11 @@ namespace Wonderland
             float speed = ShipSpeed * Mathf.Clamp(1.1f - Mathf.Abs(turn) / 60f, 0.08f, 1f) * (arriving ? Mathf.Clamp01(to.magnitude / 0.08f) * 0.7f + 0.3f : 1f);
             s.Speed = Mathf.MoveTowards(s.Speed, speed, (speed < s.Speed ? 0.04f : 0.01f) * dt);   // (it slows quickly for a sharp turn: no circling round a point it can't turn into)
             var f = new Vector2(Mathf.Sin(s.Heading * Mathf.Deg2Rad), Mathf.Cos(s.Heading * Mathf.Deg2Rad));
+            // A lift bridge ahead (or overhead): ask it up, and keep short of it until there is room.
+            s.Waiting = false;
+            for (float d = -0.08f; d <= 0.13f; d += 0.01f)
+                if (world.Bridges.Wait(s.Pos + f * d, BridgeBerth, AirDraft) && d > 0f) s.Waiting = true;
+            if (s.Waiting) s.Speed = Mathf.MoveTowards(s.Speed, 0f, 0.06f * dt);
             s.Pos += f * s.Speed * dt;
             Pose(s);
         }
@@ -373,6 +381,7 @@ namespace Wonderland
                     : "no other harbour the water reaches yet - build one across the lake";
             if (s.Docked && At(s) == at) return s.T >= 0f ? (s.Unloading ? $"the crane is unloading the {s.Name}" : $"the crane is loading the {s.Name}") : $"the {s.Name} is alongside";
             if (s.Docked) return $"the {s.Name} is at the other harbour";
+            if (s.Waiting) return $"the {s.Name} is waiting for the lift bridge to go up";
             return (s.ToB ? s.B : s.A) == at ? $"the {s.Name} is on its way here with {s.Cargo} containers" : $"the {s.Name} has sailed with {s.Cargo} containers";
         }
     }

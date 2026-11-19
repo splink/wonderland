@@ -83,6 +83,8 @@ namespace Wonderland
                     t.Section("How to").Row("Roads", "pick Streets, Paths or Fences, hold the trigger and draw. Cross a road: crossroads with lights. End on one: a T-junction")
                         .Row("Railway", "Track > Draw: draw a big circle back to its start for a loop. Start on a track to branch; tap a switch to throw it")
                         .Row("Trains", "Train: pick one, trigger on the track. Point at a train: trigger stop / go, left stick speed")
+                        .Row("Bridges", "where a road or railway crosses water it gets a bridge. Tap one (Roads or Track tool) for another style")
+                        .Row("Ships", "boats and container ships only pass under a bridge high enough for them. A railway's Lift bridge opens for ships: trains wait while it is up")
                         .Row("Grid", "on: straight and square; off: freehand");
                     t.Section("Example").Line("Draw a loop of track, put a Steam train on it, add a station beside it (Buildings).");
                     break;

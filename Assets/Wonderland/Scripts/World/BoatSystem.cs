@@ -330,6 +330,7 @@ namespace Wonderland
                 // (a bridge put up over it: it may still sail out from under)
                 if (Afloat(next, b.Heading, b.Kind) || !Afloat(b.Pos, b.Heading, b.Kind) && Wet(next)) b.Pos = next;
                 else { b.Speed = 0f; if (b.State == State.Cruising || b.State == State.Trip) Wander(b); else b.Heading += 30f * dt; }
+                world.Bridges.Wait(b.Pos, 0.01f, BoatFactory.AirDraft(b.Kind), false);   // (under a lift span that is up: it stays up)
             }
             Pose(b, dt);
         }

@@ -466,6 +466,7 @@ namespace Wonderland
         {
             UpdateBays();
             Bridges.Rebuild(Track.Network, Paths.Lines);
+            Track.SetLifted(Bridges.LiftedTrack(Track.Network));
             Paths.Rebuild();
         }
 

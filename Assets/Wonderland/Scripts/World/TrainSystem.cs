@@ -75,7 +75,7 @@ namespace Wonderland
         }
     }
 
-    public enum BlockReason { None, Train, Signal, Buffers }
+    public enum BlockReason { None, Train, Signal, Buffers, Bridge }
 
     /// <summary>
     /// All trains on the railway network. Each train stands on a path of track spans and moves by growing it at the
@@ -101,6 +101,8 @@ namespace Wonderland
         public bool SwitchesChanged;
         public Train Highlighted;
         private TrackSystem track;
+        /// <summary>The bridges: a lift bridge's span that is up (or about to go up) is no way across.</summary>
+        public BridgeSystem Bridges;
         private Material lit, smokeMaterial, ribbonMaterial;
         private Mesh ribbonMesh;
         private System.Random random = new(5);
@@ -674,6 +676,47 @@ namespace Wonderland
             return 0f;
         }
 
+        /// <summary>Whether two arc-length ranges on an edge overlap (on a loop, either way round the seam).</summary>
+        private bool Overlap(int edge, float lo0, float hi0, float lo1, float hi1)
+        {
+            if (hi0 > lo1 && lo0 < hi1) return true;
+            var l = Net.Edges[edge].Layout;
+            return l.Closed && (hi0 > lo1 + l.Length && lo0 < hi1 + l.Length || hi0 > lo1 - l.Length && lo0 < hi1 - l.Length);
+        }
+
+        /// <summary>
+        /// Whether reserving <paramref name="piece"/> would take a train onto a lift bridge's span that is up or going up
+        /// (one it holds already it may carry on across: the span waits for it).
+        /// </summary>
+        private bool LiftUp(List<Interval> piece, List<Interval> holds)
+        {
+            if (Bridges == null) return false;
+            foreach (var lift in Bridges.Lifts)
+            {
+                if (!lift.Shut) continue;
+                foreach (var (edge, lo, hi) in lift.Track)
+                {
+                    if (edge >= Net.Edges.Count) continue;   // (the network changed; the bridges catch up in a moment)
+                    float a = lo - BridgeSystem.LiftApproach, c = hi + BridgeSystem.LiftApproach;
+                    bool onto = false, on = false;
+                    foreach (var iv in piece) if (iv.Edge == edge && Overlap(edge, iv.Lo, iv.Hi, a, c)) onto = true;
+                    foreach (var iv in holds) if (iv.Edge == edge && Overlap(edge, iv.Lo, iv.Hi, a, c)) on = true;
+                    if (onto && !on) return true;
+                }
+            }
+            return false;
+        }
+
+        /// <summary>Whether any train is on, or has reserved, track between arc lengths lo and hi of an edge.</summary>
+        public bool Holds(int edge, float lo, float hi)
+        {
+            if (edge < 0 || edge >= Net.Edges.Count) return false;
+            RefreshHeld();
+            for (int t = 0; t < Trains.Count; t++)
+                foreach (var iv in held[t]) if (iv.Edge == edge && Overlap(edge, iv.Lo, iv.Hi, lo, hi)) return true;
+            return false;
+        }
+
         /// <summary>Reserves more track ahead of train <paramref name="ti"/>, as far as it may (see the class summary).</summary>
         private void GrowClaim(int ti, float wanted)
         {
@@ -704,6 +747,7 @@ namespace Wonderland
                 if (reach < extra - 0.001f && reach < step) { t.Blocked = BlockReason.Buffers; break; }
                 var tentSet = Intervals(tentative);
                 if (RedSignalOn(tentSet, own) > 0f) { t.Blocked = BlockReason.Signal; break; }
+                if (LiftUp(tentSet, claimSet)) { t.Blocked = BlockReason.Bridge; break; }
                 int blocker = -1;
                 for (int i = 0; i < Trains.Count && blocker < 0; i++)
                     if (i != ti && Conflicts(tentSet, held[i], true)) blocker = i;
@@ -1226,6 +1270,7 @@ namespace Wonderland
             else if (!t.Running) doing = t.Speed > 0.002f ? "stopping" : "stopped (trigger: go)";
             else if (t.Speed < 0.004f && t.Blocked == BlockReason.Signal) doing = "waiting at a red signal (tap it for automatic)";
             else if (t.Speed < 0.004f && t.Blocked == BlockReason.Train) doing = "waiting for the train ahead to clear the line";
+            else if (t.Speed < 0.004f && t.Blocked == BlockReason.Bridge) doing = "waiting for the lift bridge to come down: a ship is passing";
             else if (t.Blocked == BlockReason.Buffers) doing = "at the end of the line (it goes no further: trains never reverse)";
             else doing = $"running at {t.SpeedFactor * 100f:0} %";
             if (t.AtStation < 0 && Stations.Count > 0 && t.Running)

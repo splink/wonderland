@@ -132,6 +132,7 @@ namespace Wonderland
             Bridges = Child<BridgeSystem>("Bridges");
             Bridges.Init(Terrain, materials.Lit, WaterLevelFor);
             Paths.Bridges = Bridges;
+            Trains.Bridges = Bridges; Bridges.TrackHeld = Trains.Holds;   // (a lift span waits for the trains; they wait for it)
             Traffic = Child<TrafficSystem>("Traffic");
             Traffic.Init(this, materials.Lit);
             Traffic.FareAlive = seed => People.IndexOfSeed(seed) >= 0;

@@ -5,7 +5,7 @@ using UnityEngine.Rendering;
 
 namespace Wonderland
 {
-    public enum BridgeStyle { Stone = 0, Timber = 1, Truss = 2, Suspension = 3, Covered = 4, Footbridge = 5, Stones = 6 }
+    public enum BridgeStyle { Stone = 0, Timber = 1, Truss = 2, Suspension = 3, Covered = 4, Footbridge = 5, Stones = 6, Lift = 7 }
 
     /// <summary>A bridge style chosen by hand, remembered at the place it was chosen (bridges themselves are derived).</summary>
     [Serializable]
@@ -23,17 +23,42 @@ namespace Wonderland
     /// timber trestle for lanes, a little footbridge for paths, stepping stones where a trail meets a narrow stream - and a
     /// tap cycles through the other styles that fit its span: steel truss, suspension (long spans), covered (short ones).
     /// Hand-picked styles are remembered (saved, undoable) by place.
+    /// <para>
+    /// A railway's lift bridge lets ships through: its middle span rises between two steel towers (their counterweights
+    /// coming down) when a ship asks, once no train is on it or bound across it; trains wait on the bank while it is up,
+    /// and it comes down when the ship (and any boat under it) has gone.
+    /// </para>
     /// </summary>
     public sealed class BridgeSystem : MonoBehaviour
     {
-        public static readonly string[] Names = { "Stone arch bridge", "Timber trestle", "Steel truss bridge", "Suspension bridge", "Covered bridge", "Footbridge", "Stepping stones" };
+        public static readonly string[] Names = { "Stone arch bridge", "Timber trestle", "Steel truss bridge", "Suspension bridge", "Covered bridge", "Footbridge", "Stepping stones", "Lift bridge" };
         public const int Bank = 4, RoadBank = 16;   // points of approach on each bank (1 cm apart): a path's, a road's
+        /// <summary>A lift span rises this far, this fast; trains keep this far short of it while it is not down.</summary>
+        public const float LiftRise = 0.065f, LiftSpeed = 0.022f, LiftApproach = 0.03f;
+        private const float LiftLength = 0.4f;   // the lifting span, at most (the rest of the crossing, near the banks, is fixed truss)
 
         public readonly List<BridgeChoice> Choices = new();
         public readonly List<Bridge> Bridges = new();
         private TerrainField terrain;
         private Func<Vector2, float> waterLevel;
         private Mesh mesh;
+        private Material lit;
+
+        /// <summary>A lift bridge's moving span: how far up it is, who asked for it, the track it carries.</summary>
+        public sealed class Lift
+        {
+            public Vector2 Anchor;
+            public float Height;                                         // how far up the span is (0: down, trains may cross)
+            public float Asked;                                          // seconds left of a ship's (or a boat's) request
+            public readonly List<(int edge, float lo, float hi)> Track = new();   // the track on the span: piece, arc lengths
+            public Transform Span, Weights;
+            public bool Shut => Asked > 0f || Height > 0f;               // no way across for a train
+            public bool Up => Height >= LiftRise - 1e-4f;
+        }
+        public readonly List<Lift> Lifts = new();
+
+        /// <summary>Whether a train is on, or has reserved, track between two arc lengths of a piece (set by the world).</summary>
+        public Func<int, float, float, bool> TrackHeld;
 
         public sealed class Member
         {
@@ -43,6 +68,9 @@ namespace Wonderland
             public bool[] Wet;
             public float HalfWidth;
             public Rect Bounds;
+            public int Start;                     // the index in its track piece's layout of its first point
+            public int Lift0 = -1, Lift1 = -1;    // its points on a lift bridge's span
+            public Lift Lift;
         }
 
         public sealed class Bridge
@@ -54,11 +82,13 @@ namespace Wonderland
             public float Length;
             public bool Rail, Road;
             public bool Foot => !Rail && !Road;
+            public int Span0 = -1, Span1 = -1;   // a lift bridge's span: the spine's points it runs between
+            public Lift Lift;
         }
 
         public void Init(TerrainField field, Material lit, Func<Vector2, float> level)
         {
-            terrain = field; waterLevel = level;
+            terrain = field; waterLevel = level; this.lit = lit;
             var go = new GameObject("Bridges");
             go.transform.SetParent(transform, false);
             mesh = new Mesh { name = "Bridges", indexFormat = IndexFormat.UInt32 };
@@ -79,6 +109,7 @@ namespace Wonderland
                 {
                     var l = network.Edges[e].Layout;
                     var pts = l.Points;
+                    int offset = 0;
                     if (l.Closed)
                     {
                         // A loop: start the walk on dry ground, so a crossing is never split at the seam.
@@ -91,11 +122,11 @@ namespace Wonderland
                         }
                         var rotated = new List<Vector3>(n);
                         for (int k = 0; k < n; k++) rotated.Add(pts[(dry + k) % n]);
-                        pts = rotated;
+                        pts = rotated; offset = dry;
                     }
                     var list = pts;
                     foreach (var (i0, i1, wet) in WetRuns(list.Count, i => { var p = list[i]; return waterLevel(new Vector2(p.x, p.z)); }))
-                        runs.Add(new Member { Track = true, Index = e, Kind = -1, HalfWidth = 0.054f, Points = list.GetRange(i0, i1 - i0 + 1), Wet = wet });
+                        runs.Add(new Member { Track = true, Index = e, Kind = -1, HalfWidth = 0.054f, Points = list.GetRange(i0, i1 - i0 + 1), Wet = wet, Start = (offset + i0) % list.Count });
                 }
             if (paths != null)
                 for (int li = 0; li < paths.Count; li++)
@@ -161,7 +192,124 @@ namespace Wonderland
                     if ((new Vector2(c.x, c.z) - br.Anchor).magnitude < 0.12f && Allowed(br).Contains((BridgeStyle)c.style)) br.Style = (BridgeStyle)c.style;
                 Bridges.Add(br);
             }
+            SetUpLifts(network);
             BuildMesh();
+        }
+
+        // ------------------------------------------------------------------ lift bridges
+
+        /// <summary>
+        /// Each lift bridge's span: up to <see cref="LiftLength"/> of the crossing round its middle, over the water. A span
+        /// keeps its state (how far up) through a rebuild; spans no longer there are taken down.
+        /// </summary>
+        private void SetUpLifts(TrackNetwork network)
+        {
+            var old = new List<Lift>(Lifts);
+            Lifts.Clear();
+            foreach (var br in Bridges)
+            {
+                if (br.Style != BridgeStyle.Lift) continue;
+                var spine = br.Members[br.Spine];
+                int w0 = Array.IndexOf(spine.Wet, true), w1 = Array.LastIndexOf(spine.Wet, true);
+                if (w0 < 0) continue;
+                int c = NearestIndex(spine.Points, new Vector3(br.Anchor.x, 0f, br.Anchor.y)), reach = Mathf.RoundToInt(LiftLength / 0.02f);
+                br.Span0 = Mathf.Max(w0, c - reach); br.Span1 = Mathf.Min(w1, c + reach);
+                var lift = old.Find(l => (l.Anchor - br.Anchor).magnitude < 0.12f) ?? new Lift();
+                old.Remove(lift);
+                lift.Anchor = br.Anchor;
+                lift.Track.Clear();
+                foreach (var m in br.Members)
+                {
+                    int a = NearestIndex(m.Points, spine.Points[br.Span0]), b = NearestIndex(m.Points, spine.Points[br.Span1]);
+                    if (a > b) (a, b) = (b, a);
+                    m.Lift0 = a; m.Lift1 = b; m.Lift = lift;
+                    if (!m.Track || network == null || m.Index >= network.Edges.Count) continue;
+                    var layout = network.Edges[m.Index].Layout;
+                    int n = layout.Points.Count;
+                    float lo = layout.Cum[(m.Start + a) % n], hi = layout.Cum[(m.Start + b) % n];
+                    if (hi < lo) hi += layout.Length;   // (across a loop's seam)
+                    lift.Track.Add((m.Index, lo, hi));
+                }
+                br.Lift = lift;
+                Lifts.Add(lift);
+            }
+            foreach (var l in old) { if (l.Span != null) Release(l.Span.gameObject); if (l.Weights != null) Release(l.Weights.gameObject); }
+        }
+
+        private static void Release(UnityEngine.Object o) { if (o == null) return; if (Application.isPlaying) Destroy(o); else DestroyImmediate(o); }
+
+        /// <summary>The stretches of track lift spans carry (drawn on the spans, so left out of the track's own mesh).</summary>
+        public Dictionary<TrackLayout, Vector2[]> LiftedTrack(TrackNetwork network)
+        {
+            var lists = new Dictionary<TrackLayout, List<Vector2>>();
+            foreach (var l in Lifts)
+                foreach (var (edge, lo, hi) in l.Track)
+                    if (network != null && edge < network.Edges.Count)
+                    {
+                        var layout = network.Edges[edge].Layout;
+                        if (!lists.TryGetValue(layout, out var list)) lists[layout] = list = new List<Vector2>();
+                        list.Add(new Vector2(lo, hi));
+                    }
+            var d = new Dictionary<TrackLayout, Vector2[]>();
+            foreach (var (layout, list) in lists) { list.Sort((a, b) => a.x.CompareTo(b.x)); d[layout] = list.ToArray(); }
+            return d;
+        }
+
+        /// <summary>
+        /// A ship (or boat) at <paramref name="p"/> needing <paramref name="need"/> of room: a lift span over it is asked to
+        /// go up (or, with <paramref name="ask"/> false, only to stay up if it is) - and whether there is too little room
+        /// there yet.
+        /// </summary>
+        public bool Wait(Vector2 p, float margin, float need, bool ask = true)
+        {
+            bool wait = false;
+            foreach (var b in Bridges)
+            {
+                if (b.Lift == null) continue;
+                foreach (var m in b.Members)
+                {
+                    if (m.Lift0 < 0) continue;
+                    var r = m.Bounds;
+                    if (p.x < r.xMin - margin || p.x > r.xMax + margin || p.y < r.yMin - margin || p.y > r.yMax + margin) continue;
+                    float reach = (m.HalfWidth + margin) * (m.HalfWidth + margin);
+                    for (int i = m.Lift0; i <= m.Lift1; i++)
+                    {
+                        var q = m.Points[i];
+                        if (new Vector2(q.x - p.x, q.z - p.y).sqrMagnitude > reach) continue;
+                        if (ask || b.Lift.Height > 0f) b.Lift.Asked = Mathf.Max(b.Lift.Asked, 1.5f);
+                        float level = Mathf.Max(waterLevel(new Vector2(q.x, q.z)), waterLevel(p));
+                        if (q.y - (m.Track ? 0.01f : 0.006f) + b.Lift.Height - level < need) wait = true;
+                        break;
+                    }
+                }
+            }
+            return wait;
+        }
+
+        private void Update() { if (terrain != null) Step(Time.deltaTime); }
+
+        /// <summary>
+        /// The lift spans: one that is asked for goes up once no train is on it or bound across it (and, once going up,
+        /// all the way); one no longer asked for comes down.
+        /// </summary>
+        public void Step(float dt)
+        {
+            foreach (var l in Lifts)
+            {
+                bool asked = l.Asked > 0f;
+                l.Asked = Mathf.Max(0f, l.Asked - dt);
+                bool held = false;
+                if (asked && l.Height <= 0f && TrackHeld != null)
+                    foreach (var (edge, lo, hi) in l.Track) held |= TrackHeld(edge, lo - LiftApproach, hi + LiftApproach);
+                l.Height = Mathf.MoveTowards(l.Height, asked && (l.Height > 0f || !held) ? LiftRise : 0f, LiftSpeed * dt);
+                Pose(l);
+            }
+        }
+
+        private static void Pose(Lift l)
+        {
+            if (l.Span != null) l.Span.localPosition = new Vector3(0f, l.Height, 0f);
+            if (l.Weights != null) l.Weights.localPosition = new Vector3(0f, -l.Height, 0f);
         }
 
         private static IEnumerable<(int i0, int i1, bool[] wet)> WetRuns(int n, Func<int, float> level, int bank = Bank)
@@ -223,6 +371,7 @@ namespace Wonderland
             list.Add(BridgeStyle.Truss);
             if (b.Length >= 0.26f) list.Add(BridgeStyle.Suspension);
             if (b.Length <= 0.5f && b.Members.Count <= 2) list.Add(BridgeStyle.Covered);
+            if (b.Members.TrueForAll(m => m.Track) && b.Length >= 0.16f) list.Add(BridgeStyle.Lift);
             return list;
         }
 
@@ -279,9 +428,9 @@ namespace Wonderland
         /// <summary>
         /// How much room there is under the bridges over the water at a point (from the water up to the underside of the
         /// deck), for a boat as wide as <paramref name="margin"/> either side; <see cref="float.MaxValue"/> with no bridge
-        /// overhead.
+        /// overhead. A lift span counts as it is now, or (<paramref name="open"/>) as it is when up: for planning a way.
         /// </summary>
-        public float Headroom(Vector2 p, float margin = 0f)
+        public float Headroom(Vector2 p, float margin = 0f, bool open = false)
         {
             float room = float.MaxValue;
             foreach (var b in Bridges)
@@ -299,6 +448,7 @@ namespace Wonderland
                         if (level < 0f) continue;
                         // (stepping stones stand in the water; every other deck is some 6 mm thick, a track's bed more)
                         float under = b.Style == BridgeStyle.Stones ? level : q.y - (m.Track ? 0.01f : 0.006f);
+                        if (m.Lift != null && i >= m.Lift0 && i <= m.Lift1) under += open ? LiftRise : m.Lift.Height;   // (a lift span: up, or as it is)
                         room = Mathf.Min(room, Mathf.Max(0f, under - level));
                     }
                 }
@@ -384,6 +534,8 @@ namespace Wonderland
                 case BridgeStyle.Suspension: Suspension(b, path, right, half, br.Rail || br.Road); break;
                 case BridgeStyle.Covered: Covered(b, path, right, half, br.Rail); break;
                 case BridgeStyle.Footbridge: Footbridge(b, path, right, half, br.Length); break;
+                case BridgeStyle.Lift when br.Lift != null: LiftBridge(b, br, path, right, half); break;
+                case BridgeStyle.Lift: Truss(b, path, right, half, true); break;
                 default: Stones(b, spine, ref rng); break;
             }
         }
@@ -567,6 +719,117 @@ namespace Wonderland
                 b.AddBox(Vector3.zero, new Vector3(half * 2f, hh, 0.012f), Pal.StoneDark, Pal.Stone, Pal.StoneDark);
                 b.Pop();
             }
+        }
+
+        /// <summary>
+        /// A lift bridge: fixed truss spans from the banks out to two steel towers in the water, and between them the span
+        /// that rises - its deck, low girders and the track on it - with the counterweights in the towers. The span and the
+        /// counterweights are meshes of their own, moved as the span goes up and down.
+        /// </summary>
+        private void LiftBridge(MeshBuilder b, Bridge br, List<Vector3> path, List<Vector3> right, float half)
+        {
+            var steel = Pal.Hex("#3F6E8C"); var steelDark = Pal.Shade(steel, 0.72f); var machine = Pal.Hex("#C9B27A");
+            int n = path.Count, s0 = br.Span0, s1 = br.Span1;
+            // The fixed spans out to the towers: trusses, or (short ones, by the banks) plain girders on an abutment.
+            void Fixed(int from, int count, int bank)
+            {
+                if (count < 2) return;
+                var p = path.GetRange(from, count); var r = right.GetRange(from, count);
+                if (count > 14) { Truss(b, p, r, half, true); return; }
+                Slab(b, p, r, half, 0.006f, Pal.Hex("#6E6E74"), steelDark);
+                var q = path[bank];
+                float ground = Ground(q), hh = Mathf.Max(0.004f, q.y - 0.006f - ground);
+                b.Push(new Vector3(q.x, ground + hh / 2f, q.z), Quaternion.LookRotation(Vector3.Cross(right[bank], Vector3.up), Vector3.up));
+                b.AddBox(Vector3.zero, new Vector3(half * 2f + 0.006f, hh, 0.016f), Pal.StoneDark, Pal.Stone, Pal.StoneDark);
+                b.Pop();
+            }
+            Fixed(0, s0 + 1, 0);
+            Fixed(s1, n - s1, n - 1);
+            float top = Mathf.Max(path[s0].y, path[s1].y) + LiftRise + 0.034f;
+            var weights = new MeshBuilder();
+            foreach (int e in new[] { s0, s1 })
+            {
+                var p = path[e];
+                var along = path[Mathf.Min(e + 1, n - 1)] - path[Mathf.Max(e - 1, 0)]; along.y = 0f; along = along.sqrMagnitude > 1e-8f ? along.normalized : Vector3.forward;
+                var r = right[e];
+                // Two lattice towers, one either side of the track, from the bed up past the raised span.
+                foreach (int side in new[] { -1, 1 })
+                {
+                    var c = p + r * side * (half + 0.008f);
+                    float ground = Ground(c);
+                    Vector3 Corner(int i, int j, float y) => new(c.x + r.x * i * 0.006f + along.x * j * 0.006f, y, c.z + r.z * i * 0.006f + along.z * j * 0.006f);
+                    foreach (int i in new[] { -1, 1 })
+                    foreach (int j in new[] { -1, 1 })
+                        Beam(b, Corner(i, j, ground), Corner(i, j, top), 0.0022f, steel);
+                    for (float y = p.y + 0.004f, k = 0; y < top; y += 0.016f, k++)
+                    {
+                        float y2 = Mathf.Min(top, y + 0.016f);
+                        foreach (var (i0, j0, i1, j1) in new[] { (-1, -1, 1, -1), (1, -1, 1, 1), (1, 1, -1, 1), (-1, 1, -1, -1) })
+                        {
+                            Beam(b, Corner(i0, j0, y), Corner(i1, j1, y), 0.0012f, steelDark);
+                            Beam(b, Corner(i0, j0, k % 2 == 0 ? y : y2), Corner(i1, j1, k % 2 == 0 ? y2 : y), 0.001f, steelDark);
+                        }
+                    }
+                    // The sheave on top, the counterweight inside (up while the span is down).
+                    b.Push(new Vector3(c.x, top + 0.004f, c.z), Quaternion.FromToRotation(Vector3.up, r));   // (turning about the cross-wise axis)
+                    b.AddCylinder(new Vector3(0f, -0.002f, 0f), 0.0045f, 0.0045f, 0.004f, 10, machine, machine);
+                    b.Pop();
+                    weights.AddBox(new Vector3(c.x, top - 0.012f, c.z), new Vector3(0.0085f, 0.014f, 0.0085f), Pal.Hex("#6E6E70"), Pal.Hex("#8A8A8C"), Pal.Hex("#5A5A5C"));
+                    // A pier under it.
+                    float pierTop = p.y - 0.012f;
+                    if (pierTop > ground) b.AddBox(new Vector3(c.x, (ground + pierTop) / 2f, c.z), new Vector3(0.018f, pierTop - ground, 0.018f), Pal.StoneDark, Pal.Stone, Pal.StoneDark);
+                }
+                // The portal across the top, and the machine house on it.
+                Beam(b, new Vector3(p.x, top, p.z) - r * (half + 0.008f), new Vector3(p.x, top, p.z) + r * (half + 0.008f), 0.0035f, steel);
+                b.Push(new Vector3(p.x, top + 0.006f, p.z), Quaternion.LookRotation(along, Vector3.up));
+                b.AddBox(Vector3.zero, new Vector3(half * 1.2f, 0.009f, 0.012f), machine, Pal.Shade(machine, 1.1f), Pal.Shade(machine, 0.8f));
+                b.AddBox(new Vector3(0f, 0.006f, 0f), new Vector3(half * 1.3f, 0.002f, 0.015f), Pal.Hex("#7A3A2E"));
+                b.Pop();
+            }
+            // The span: built where it is when down; its object is raised.
+            var span = new MeshBuilder();
+            var deck = new List<Vector3>(); var deckRight = new List<Vector3>();
+            for (int i = s0; i <= s1; i++) { deck.Add(path[i] + Vector3.up * 0.0038f); deckRight.Add(right[i]); }
+            Slab(span, deck, deckRight, half, 0.006f, Pal.Hex("#6E6E74"), steelDark);
+            int m = deck.Count;
+            foreach (int side in new[] { -1, 1 })
+            {
+                Vector3 Low(int i) => deck[i] + deckRight[i] * side * half;
+                Vector3 High(int i) => Low(i) + Vector3.up * 0.022f;
+                for (int i = 0; i < m - 1; i += 4)
+                {
+                    int j = Mathf.Min(i + 4, m - 1);
+                    Beam(span, Low(i), Low(j), 0.0024f, steel);
+                    Beam(span, High(i), High(j), 0.0024f, steel);
+                    Beam(span, Low(i), High(i), 0.0016f, steelDark);
+                    Beam(span, (i / 4) % 2 == 0 ? Low(i) : High(i), (i / 4) % 2 == 0 ? High(j) : Low(j), 0.0014f, steel);
+                }
+                Beam(span, Low(m - 1), High(m - 1), 0.0016f, steelDark);
+            }
+            foreach (var mem in br.Members)
+                if (mem.Track && mem.Lift0 >= 0 && mem.Lift1 > mem.Lift0) TrackSystem.BuildDeckTrack(span, mem.Points.GetRange(mem.Lift0, mem.Lift1 - mem.Lift0 + 1));
+            var lift = br.Lift;
+            lift.Span = Part(lift.Span, "Lift span", span);
+            lift.Weights = Part(lift.Weights, "Counterweights", weights);
+            Pose(lift);
+        }
+
+        /// <summary>A moving part of a bridge (its object reused), its mesh built afresh.</summary>
+        private Transform Part(Transform t, string name, MeshBuilder b)
+        {
+            if (t == null)
+            {
+                var go = new GameObject(name);
+                go.transform.SetParent(transform, false);
+                go.AddComponent<MeshFilter>().sharedMesh = new Mesh { name = name, indexFormat = IndexFormat.UInt32 };
+                var r = go.AddComponent<MeshRenderer>();
+                r.sharedMaterial = lit; r.shadowCastingMode = ShadowCastingMode.On;
+                t = go.transform;
+            }
+            var mesh = t.GetComponent<MeshFilter>().sharedMesh;
+            b.ToMesh(name, mesh);
+            mesh.RecalculateBounds();
+            return t;
         }
 
         private static void Beam(MeshBuilder b, Vector3 a, Vector3 c, float size, Color colour)

@@ -39,7 +39,26 @@ namespace Wonderland
             public TrackLayout Layout;
             public bool Dead0, Dead1, Arrows;
             public bool[] Tunnel;
+            public Vector2[] Lifted = NotLifted;   // the stretches (arc lengths) lift bridges' spans carry, left out here
         }
+        private static readonly Vector2[] NotLifted = System.Array.Empty<Vector2>();
+        // The stretches lift bridges carry on their spans, by layout (set by the bridges).
+        private readonly Dictionary<TrackLayout, Vector2[]> lifted = new();
+
+        /// <summary>
+        /// The stretches of track lift bridges carry on their own spans (arc lengths, by layout): those pieces are drawn
+        /// without them. Pieces whose stretch changed are rebuilt.
+        /// </summary>
+        public void SetLifted(Dictionary<TrackLayout, Vector2[]> stretches)
+        {
+            lifted.Clear();
+            foreach (var (l, s) in stretches) lifted[l] = s;
+            for (int i = 0; i < pieces.Count && i < Network.Edges.Count; i++)
+                if (pieces[i] != null && !Same(pieces[i].Lifted, LiftedOf(Network.Edges[i].Layout))) RebuildPiece(i, null, null);
+        }
+
+        private Vector2[] LiftedOf(TrackLayout l) => lifted.TryGetValue(l, out var s) ? s : NotLifted;
+        private static bool Same(Vector2[] a, Vector2[] b) => a.Length == b.Length && System.Linq.Enumerable.SequenceEqual(a, b);
         private readonly List<Piece> pieces = new();
         private Mesh fixturesMesh, lampsMesh, previewMesh;
         private Material lit, previewMaterial;
@@ -105,7 +124,7 @@ namespace Wonderland
         private bool Shows(Piece p, int i)
         {
             var e = Network.Edges[i];
-            if (p.Layout != e.Layout || p.Dead0 != e.Joint[0] < 0 || p.Dead1 != e.Joint[1] < 0 || p.Arrows != Network.Directed(i)) return false;
+            if (p.Layout != e.Layout || p.Dead0 != e.Joint[0] < 0 || p.Dead1 != e.Joint[1] < 0 || p.Arrows != Network.Directed(i) || !Same(p.Lifted, LiftedOf(e.Layout))) return false;
             if (p.Tunnel == null || e.Tunnel == null) return p.Tunnel == e.Tunnel;
             if (p.Tunnel.Length != e.Tunnel.Length) return false;
             for (int k = 0; k < p.Tunnel.Length; k++) if (p.Tunnel[k] != e.Tunnel[k]) return false;
@@ -131,9 +150,10 @@ namespace Wonderland
             var e = Network.Edges[i];
             var piece = pieces[i];
             piece.Layout = e.Layout; piece.Dead0 = e.Joint[0] < 0; piece.Dead1 = e.Joint[1] < 0; piece.Arrows = Network.Directed(i); piece.Tunnel = (bool[])e.Tunnel?.Clone();
+            piece.Lifted = LiftedOf(e.Layout);
             var b = new MeshBuilder();
-            BuildTrack(b, e.Layout, e.Joint[0] < 0, e.Joint[1] < 0);
-            if (Network.Directed(i)) Arrows(b, e.Layout, 1, ArrowColour, RailTop - 0.0012f, 0.16f);
+            BuildTrack(b, e.Layout, e.Joint[0] < 0, e.Joint[1] < 0, piece.Lifted);
+            if (Network.Directed(i)) Arrows(b, e.Layout, 1, ArrowColour, RailTop - 0.0012f, 0.16f, piece.Lifted);
             if (e.Tunnel != null) BuildTunnels(b, e.Layout, e.Tunnel);
             b.ToMesh("Track piece", piece.Mesh);
             piece.Mesh.RecalculateBounds();
@@ -335,9 +355,41 @@ namespace Wonderland
             return best;
         }
 
-        public static void BuildTrack(MeshBuilder b, TrackLayout layout, bool bufferStart = true, bool bufferEnd = true)
+        public static void BuildTrack(MeshBuilder b, TrackLayout layout, bool bufferStart = true, bool bufferEnd = true) => BuildTrack(b, layout, bufferStart, bufferEnd, NotLifted);
+
+        /// <summary>Sleepers and rails on a steel deck (no ballast): a lift bridge's span carries its own.</summary>
+        public static void BuildDeckTrack(MeshBuilder b, List<Vector3> points) => BuildTrack(b, new TrackLayout(points, false), false, false, NotLifted, false);
+
+        /// <summary>
+        /// The track along a layout: ballast, sleepers, rails, buffer stops. <paramref name="leaveOut"/> (arc lengths, from
+        /// - to) are stretches lift bridges' spans carry instead.
+        /// </summary>
+        private static void BuildTrack(MeshBuilder b, TrackLayout layout, bool bufferStart, bool bufferEnd, Vector2[] leaveOut, bool ballast = true)
         {
             var pts = layout.Points; int n = pts.Count;
+            bool cut = leaveOut.Length > 0;
+            bool Out(float s)
+            {
+                foreach (var o in leaveOut)
+                    if (s > o.x && s < o.y || layout.Closed && s + layout.Length > o.x && s + layout.Length < o.y) return true;
+                return false;
+            }
+            // The runs of points drawn: all of them, or what is left either side of the stretch left out.
+            void Extrude(List<Vector3> line, List<Vector3> right, List<Vector3> up, Vector2[] profile, Color[] colours)
+            {
+                if (!cut) { b.AddExtrusion(line, right, up, profile, colours, layout.Closed); return; }
+                var (l, r, u) = (new List<Vector3>(), new List<Vector3>(), new List<Vector3>());
+                void Flush() { if (l.Count > 1) b.AddExtrusion(l, r, u, profile, colours, false); l.Clear(); r.Clear(); u.Clear(); }
+                int first = 0;
+                if (layout.Closed) for (int i = 0; i < n; i++) if (Out(layout.Cum[i])) { first = i; break; }   // (a loop: start in the gap)
+                for (int k = 0; k < n; k++)
+                {
+                    int i = (first + k) % n;
+                    if (Out(layout.Cum[i])) { Flush(); continue; }
+                    l.Add(line[i]); r.Add(right[i]); u.Add(up[i]);
+                }
+                Flush();
+            }
             var right = new List<Vector3>(n); var up = new List<Vector3>(n);
             for (int i = 0; i < n; i++)
             {
@@ -349,20 +401,24 @@ namespace Wonderland
             }
             // Ballast bed: trapezoid that sinks into the graded ground; gravel speckle per vertex.
             int start = b.VertexCount;
-            var ballastProfile = new[] { new Vector2(-BedHalfWidth, -0.012f), new Vector2(-0.027f, 0.0006f), new Vector2(0.027f, 0.0006f), new Vector2(BedHalfWidth, -0.012f) };
-            var ballastColours = new[] { Pal.BallastDark, Pal.Ballast, Pal.Ballast, Pal.BallastDark };
-            b.AddExtrusion(pts, right, up, ballastProfile, ballastColours, layout.Closed);
-            for (int i = start; i < b.VertexCount; i++)
+            if (ballast)
             {
-                var v = b.Vertices[i];
-                float g = Noise.Hash(Mathf.RoundToInt(v.x * 2000f), Mathf.RoundToInt(v.z * 2000f), i & 3);
-                var c = (Color)b.Colors[i];
-                b.Colors[i] = Pal.Shade(c, 0.86f + g * 0.26f);
+                var ballastProfile = new[] { new Vector2(-BedHalfWidth, -0.012f), new Vector2(-0.027f, 0.0006f), new Vector2(0.027f, 0.0006f), new Vector2(BedHalfWidth, -0.012f) };
+                var ballastColours = new[] { Pal.BallastDark, Pal.Ballast, Pal.Ballast, Pal.BallastDark };
+                Extrude(pts, right, up, ballastProfile, ballastColours);
+                for (int i = start; i < b.VertexCount; i++)
+                {
+                    var v = b.Vertices[i];
+                    float g = Noise.Hash(Mathf.RoundToInt(v.x * 2000f), Mathf.RoundToInt(v.z * 2000f), i & 3);
+                    var c = (Color)b.Colors[i];
+                    b.Colors[i] = Pal.Shade(c, 0.86f + g * 0.26f);
+                }
             }
             // Sleepers every 14 mm, slightly irregular like hand-laid track.
             var rng = new Rng(77);
             for (float s = 0.005f; s < layout.Length - (layout.Closed ? 0.007f : 0.004f); s += 0.014f)
             {
+                if (Out(s)) continue;
                 var p = layout.Evaluate(s, out var tangent);
                 tangent.y = 0f;
                 var rot = Quaternion.LookRotation(tangent.normalized, Vector3.up) * Quaternion.Euler(0f, rng.Range(-2.5f, 2.5f), 0f);
@@ -383,7 +439,7 @@ namespace Wonderland
             {
                 var rail = new List<Vector3>(n);
                 for (int i = 0; i < n; i++) rail.Add(pts[i] + right[i] * (side * TrainFactory.Gauge * 0.5f) + Vector3.up * 0.0028f);
-                b.AddExtrusion(rail, right, up, railProfile, railColours, layout.Closed);
+                Extrude(rail, right, up, railProfile, railColours);
             }
             if (!layout.Closed)
             {
@@ -664,13 +720,16 @@ namespace Wonderland
         /// Chevrons along a line every <paramref name="spacing"/>, pointing the way trains run (<paramref name="direction"/>
         /// +1: the way its points go, -1: the other way), lying <paramref name="lift"/> above it.
         /// </summary>
-        public static void Arrows(MeshBuilder b, TrackLayout l, int direction, Color colour, float lift, float spacing)
+        public static void Arrows(MeshBuilder b, TrackLayout l, int direction, Color colour, float lift, float spacing, Vector2[] leaveOut = null)
         {
             if (direction == 0 || l.Length < 0.1f) return;
             const float w = 0.01f, len = 0.013f, thick = 0.0028f;
             float first = l.Closed ? spacing * 0.5f : 0.06f, last = l.Closed ? l.Length : l.Length - 0.06f;
             for (float s = first; s < last; s += spacing)
             {
+                bool lifted = false;   // (not on a lift bridge's span: it rides up and down)
+                if (leaveOut != null) foreach (var o in leaveOut) lifted |= s > o.x - 0.01f && s < o.y + 0.01f || l.Closed && s + l.Length > o.x - 0.01f && s + l.Length < o.y + 0.01f;
+                if (lifted) continue;
                 var p = l.Evaluate(s, out var t); t.y = 0f;
                 if (t.sqrMagnitude < 1e-8f) continue;
                 var f = t.normalized * direction; var side = Vector3.Cross(Vector3.up, f);
