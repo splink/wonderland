@@ -736,6 +736,14 @@ namespace Wonderland
             }, everything: true);
             System.Array.Copy(exact, Terrain.Height, exact.Length);
             Terrain.UpdateSurface(Terrain.All);
+            // Mending what an old fault left in a save: streams whose water level was never set, and the walls of land
+            // they carved up to the ceiling.
+            bool mend = false;
+            foreach (var s in Streams.Streams)
+                if (s.points.Exists(q => !(q.y <= TerrainField.MaxHeight))) { StreamSystem.Relevel(s, Terrain, Streams.Streams); mend = true; }
+            if (mend) Streams.Rebuild();
+            int walls = Terrain.RepairWalls();
+            if (walls > 0 || mend) Debug.Log($"Wonderland: mended the land - {walls} cells of wall taken down{(mend ? ", streams levelled again" : "")}");
             if (d.hour >= 0f) { Clock.Hour = Mathf.Repeat(d.hour, 24f); Clock.Day = Mathf.Max(0, d.day); Clock.Mode = (ClockMode)Mathf.Clamp(d.clockMode, 0, 2); }
             People.SetSupplies(d.supplies);
             Cctv.Import(d.cameras);

@@ -60,7 +60,7 @@ namespace Wonderland
                 {
                     bay.Length = DrivewayWidth;
                     bay.Depth = Vector2.Dot(way - at, bay.Out) - edge;
-                    if (bay.Depth < 0.004f || bay.Depth > 0.22f || Paths.NearJunction(at, DrivewayWidth)) continue;
+                    if (bay.Depth < 0.004f || bay.Depth > 0.22f || Paths.NearJunction(at, DrivewayWidth * 0.5f)) continue;   // (not opening into a junction)
                 }
                 else
                 {
@@ -79,6 +79,7 @@ namespace Wonderland
             Catalog.FireStation => VehicleFactory.Length(VehicleKind.FireEngine) + 0.012f,
             Catalog.Hospital => VehicleFactory.Length(VehicleKind.Ambulance) + 0.012f,
             Catalog.Police => VehicleFactory.Length(VehicleKind.Police) + 0.012f,
+            Catalog.CarPark or Catalog.ParkingGarage => 0.02f,   // (a short driveway to its way in)
             _ => 0f,
         };
 
@@ -95,11 +96,13 @@ namespace Wonderland
             var p = new Vector2(h.x, h.z);
             var half = Catalog.Get(h.variant).Half;
             if (!Paths.NearestStreet(p, forecourt > 0f ? half.y + 0.11f : 0.1f, out _, out var at, out var along)) return h;
-            if (Paths.NearJunction(at, forecourt > 0f ? DrivewayWidth : (kind == BayKind.Bus ? BusBayLength : TaxiBayLength) * 0.5f + 0.04f)) return h;
+            if (Paths.NearJunction(at, forecourt > 0f ? DrivewayWidth * 0.5f : (kind == BayKind.Bus ? BusBayLength : TaxiBayLength) * 0.5f + 0.04f)) return h;
             var right = new Vector2(along.y, -along.x);
             var away = Vector2.Dot(p - at, right) >= 0f ? right : -right;
             float edge = PathSystem.HalfWidth((int)PathKind.Road) - PathSystem.KerbWidth, depth = kind == BayKind.Bus ? BusBayDepth : TaxiBayDepth;
-            var c = forecourt > 0f
+            bool lot = h.variant is Catalog.CarPark or Catalog.ParkingGarage;
+            var c = lot ? at + away * Mathf.Max(Vector2.Dot(p - at, away), edge + forecourt + half.y)   // (its front edge, where its way in is, at least that far back; further if it was put further)
+                : forecourt > 0f
                 ? at + away * (edge + forecourt + half.y * 0.86f + PeopleSystem.Radius + 0.008f)   // (its doors - where the driveway ends - that far back)
                 : at + away * (edge + depth + PathSystem.KerbWidth + 0.003f + half.y);
             h.x = c.x; h.z = c.y;

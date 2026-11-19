@@ -234,6 +234,7 @@ namespace Wonderland
             }
             RecomputeEdge(redo);
             UpdateSurface(redo);
+            RepairWalls();   // (land coming back into the grid from a save made before the fault was mended)
         }
 
         private static int ChunkIndex(int gx, int gz) =>
@@ -677,6 +678,32 @@ namespace Wonderland
             Despike(r);
             UpdateSurface(r);
             return r;
+        }
+
+        /// <summary>
+        /// Takes down walls left by an old fault (a stream whose water level was never set carved its banks up to the
+        /// land's ceiling): cells in a strip no wider than a few cells standing 10 cm or more above the land round them go
+        /// back down to it. Nothing sculpted is ever that sheer: a real mountain's slopes slump.
+        /// </summary>
+        public int RepairWalls()
+        {
+            int fixedCells = 0;
+            var near = new List<float>(25);
+            for (int z = 2; z < Nz - 2; z++)
+            for (int x = 2; x < Nx - 2; x++)
+            {
+                int i = z * Nx + x;
+                if (Height[i] < 0.15f) continue;
+                near.Clear();
+                for (int dz = -2; dz <= 2; dz++) for (int dx = -2; dx <= 2; dx++) near.Add(Height[i + dz * Nx + dx]);
+                near.Sort();
+                float median = near[12];
+                // (10 cm above the middle of the land 4 cm round it: no brush makes that - the slopes slump long before)
+                if (Height[i] - median < 0.1f) continue;
+                Height[i] = median; fixedCells++;
+            }
+            if (fixedCells > 0) { Despike(All); UpdateSurface(All); Debug.Log($"Wonderland: took down {fixedCells} cells of wall"); }
+            return fixedCells;
         }
 
         /// <summary>A brush raised ground out of a pond (the water's mesh wants rebuilding); cleared by whoever rebuilds it.</summary>

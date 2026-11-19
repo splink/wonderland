@@ -296,6 +296,19 @@ namespace Wonderland
                     if (o != s && o.points.Count > 1 && Nearest(o, new Vector2(x, z), out _, out float oa) < (HalfWidth + Bank) * o.WidthAlong(oa) + Margin) return true;
                 return false;
             }
+            // The water of the stream whose channel a point lies in (else what it had).
+            float OthersLevel(Vector3 p, float fallback)
+            {
+                if (others == null) return fallback;
+                float best = float.MaxValue, at = fallback;
+                foreach (var o in others)
+                {
+                    if (o == s || o.points.Count < 2) continue;
+                    float d = Nearest(o, new Vector2(p.x, p.z), out float ol, out _);
+                    if (d < best && ol < TerrainField.MaxHeight) { best = d; at = ol; }
+                }
+                return at;
+            }
             float level = float.MaxValue;
             for (int i = 0; i < s.points.Count; i++)
             {
@@ -312,9 +325,10 @@ namespace Wonderland
                     float left = terrain.EdgeAt(p.x + side.x, p.z + side.z) > 0.6f && !inLeft ? terrain.SurfaceAt(p.x + side.x, p.z + side.z) : float.MaxValue;
                     float right = terrain.EdgeAt(p.x - side.x, p.z - side.z) > 0.6f && !inRight ? terrain.SurfaceAt(p.x - side.x, p.z - side.z) : float.MaxValue;
                     if (Mathf.Min(left, right) < float.MaxValue) ground = Mathf.Min(left, right) - 0.004f;
-                    else if (inLeft || inRight) ground = float.MaxValue;   // (running into another stream: its level comes from that one, see Join)
+                    else if (inLeft || inRight) ground = OthersLevel(p, ground);   // (in another stream's channel - a branch leaving it, a creek coming in: that one's water)
                 }
-                level = Mathf.Max(Lowest, Mathf.Min(level, ground));
+                // (never above the land's highest: a level left unset carved the banks up into a wall)
+                level = Mathf.Clamp(Mathf.Min(level, ground), Lowest, TerrainField.MaxHeight);
                 s.points[i] = new Vector3(p.x, level, p.z);
             }
             MeetPond(s, terrain);
@@ -330,6 +344,8 @@ namespace Wonderland
         /// </summary>
         public static RectInt Carve(TerrainField terrain, StreamPath s, List<StreamPath> others = null)
         {
+            // (a stream with no sane water level carves nothing: it would raise its banks to the sky)
+            foreach (var q in s.points) if (!(q.y <= TerrainField.MaxHeight)) return new RectInt(0, 0, 0, 0);
             float minX = float.MaxValue, minZ = float.MaxValue, maxX = float.MinValue, maxZ = float.MinValue;
             foreach (var p in s.points) { minX = Mathf.Min(minX, p.x); maxX = Mathf.Max(maxX, p.x); minZ = Mathf.Min(minZ, p.z); maxZ = Mathf.Max(maxZ, p.z); }
             float widest = (HalfWidth + Bank) * s.MaxWidth + Margin;

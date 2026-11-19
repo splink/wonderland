@@ -35,6 +35,17 @@ namespace Wonderland.Editor
         /// </summary>
         private static void BayJourney()
         {
+            {
+                // A car park put down carelessly beside a street - turned sideways, overlapping the pavement - turns to
+                // face it and stands back with a driveway to its way in.
+                var c = Scratch("Careless car park", 720f);
+                c.BuildPath(Line(c.Terrain, new Vector2(-0.6f, 0f), new Vector2(0.6f, 0f)), PathKind.Road);
+                string e = c.PlaceHouse(new HouseInstance { x = 0.05f, z = 0.07f, rotation = 90f, variant = Catalog.CarPark });
+                var lot = c.Buildings.Houses.Find(h => h.variant == Catalog.CarPark);
+                var way = e == null ? c.BayOf(new Vector2(lot.x, lot.z)) : null;
+                Check(e == null && way != null && Mathf.Abs(Mathf.DeltaAngle(lot.rotation, 0f)) < 1f, $"A car park put down sideways against a street turns to face it and gets its driveway ({e ?? "placed"}, turned {lot.rotation:0}, driveway {(way != null ? $"{way.Depth * 1000f:0} mm" : "none")})");
+                Object.DestroyImmediate(c.gameObject);
+            }
             var w = BayStreet(700f, out string report);
             Report.Append("INFO  ").AppendLine(report.Replace("\n", "; "));
             var kinds = w.Paths.Bays.ConvertAll(b => b.Kind);
