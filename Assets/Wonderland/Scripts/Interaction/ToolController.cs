@@ -328,7 +328,7 @@ namespace Wonderland
                     foreach (int id in Catalog.InFamily(BuildCategory, BuildFamily))
                     {
                         int v = id;
-                        tiles.Add(new PaletteUI.LibraryTile { Id = id, Label = Catalog.Get(id).Name, Model = HouseFactory.Get(id, 0, 1), Selected = HouseVariant == id && !carrying,
+                        tiles.Add(new PaletteUI.LibraryTile { Id = id, Label = Catalog.Get(id).Name, Model = HouseFactory.Preview(id), Selected = HouseVariant == id && !carrying,
                             OnClick = () => { HouseVariant = v; carrying = false; houseStyle %= Mathf.Max(1, Catalog.Get(v).Styles); RefreshOptions(); } });
                     }
                     Palette.ShowLibrary($"{Catalog.CategoryNames[(int)BuildCategory]} · {BuildFamily}", tiles, Catalog.Info);

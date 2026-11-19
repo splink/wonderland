@@ -83,6 +83,7 @@ namespace Wonderland
             Tools = new GameObject("Tools").AddComponent<ToolController>();
             Tools.Init(World, Palette, Rig != null ? Rig.rightControllerAnchor : null);
             Tools.Head = Rig != null ? Rig.centerEyeAnchor : null;
+            StartCoroutine(HouseFactory.WarmPreviews());   // (the library's tile models, ready before they are asked for)
             // The map above the palette: the whole world from above, the trains and cars moving on it.
             var map = new GameObject("Mini map") { layer = PaletteUI.UiLayer }.AddComponent<MiniMap>();
             map.transform.SetParent(Palette.transform, false);

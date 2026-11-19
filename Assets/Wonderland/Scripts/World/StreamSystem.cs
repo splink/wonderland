@@ -356,6 +356,59 @@ namespace Wonderland
             }
         }
 
+        /// <summary>
+        /// Where a stream runs into another's side (or leaves it), it meets it as a real confluence does: its last stretch
+        /// swings round in one smooth curve to join at no more than 45 degrees to the other's flow - downstream, never
+        /// against it - and widens into a mouth. So a branch drawn off a river later looks as if it was always there.
+        /// </summary>
+        public static void Confluence(List<StreamPath> all, StreamPath s)
+        {
+            int n = s.points.Count;
+            if (n < 8) return;
+            foreach (var o in all)
+            {
+                if (o == s || o.points.Count < 4) continue;
+                for (int end = 0; end < 2; end++)
+                {
+                    int tip = end == 0 ? 0 : n - 1;
+                    var p = new Vector2(s.points[tip].x, s.points[tip].z);
+                    float d = Nearest(o, p, out _, out float along);
+                    float ow = o.WidthAlong(along);
+                    if (d > HalfWidth * Mathf.Max(ow, s.WidthAt(tip)) + 0.03f) continue;
+                    int k = Mathf.Clamp(Mathf.RoundToInt(along / Spacing), 1, o.points.Count - 2);
+                    if (k <= 2 || k >= o.points.Count - 3) continue;   // (at the other's end: carried on, not a confluence)
+                    var q = new Vector2(o.points[k].x, o.points[k].z);
+                    var flow = new Vector2(o.points[k + 1].x - o.points[k - 1].x, o.points[k + 1].z - o.points[k - 1].z).normalized;
+                    // How far back the curve starts (enough for the sweep to show beside the other's water), and the
+                    // stream's own heading there.
+                    int span = Mathf.Min(n / 2, Mathf.RoundToInt((0.06f + 3f * HalfWidth * Mathf.Max(ow, s.WidthAt(tip))) / Spacing));
+                    int from = end == 0 ? span : n - 1 - span;
+                    var p0 = new Vector2(s.points[from].x, s.points[from].z);
+                    int before = end == 0 ? Mathf.Min(from + 1, n - 1) : Mathf.Max(from - 1, 0);
+                    var t0 = (p0 - new Vector2(s.points[before].x, s.points[before].z)).normalized;   // (heading towards the confluence)
+                    // Meeting the other's flow: a tributary arrives going downstream with it, a branch leaves going downstream.
+                    var arrive = end == 1 ? (q - p0).normalized : (p0 - q).normalized;
+                    if (Vector2.Dot(arrive, flow) < 0f) arrive = Vector2.Reflect(arrive, new Vector2(-flow.y, flow.x));
+                    float angle = Vector2.SignedAngle(flow, arrive);
+                    if (Mathf.Abs(angle) > 45f) arrive = (Vector2)(Quaternion.Euler(0f, 0f, Mathf.Sign(angle) * 45f) * flow);
+                    float len = (q - p0).magnitude;
+                    // A cubic curve from where the stream was to the other's middle, tangent to both.
+                    Vector2 c0 = p0 + t0 * len / 3f, c1 = end == 1 ? q - arrive * len / 3f : q + arrive * len / 3f;
+                    bool varied = s.widths != null && s.widths.Count == n;
+                    if (!varied) { s.widths = new List<float>(); for (int i = 0; i < n; i++) s.widths.Add(s.Width); }
+                    for (int j = 0; j <= span; j++)
+                    {
+                        float t = j / (float)span;
+                        float u = 1f - t;
+                        var b = u * u * u * p0 + 3f * u * u * t * c0 + 3f * u * t * t * c1 + t * t * t * q;
+                        int i = end == 0 ? from - j : from + j;
+                        s.points[i] = new Vector3(b.x, s.points[i].y, b.y);
+                        s.widths[i] = s.widths[from] * Mathf.Lerp(1f, 1.45f, t * t);   // (the mouth widens)
+                    }
+                }
+            }
+        }
+
         /// <summary>A river's channel is deeper too (not in proportion: a creek is still a little channel).</summary>
         private static float DepthScale(float width) => Mathf.Lerp(1f, width, 0.6f);
 

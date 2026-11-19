@@ -36,6 +36,25 @@ namespace Wonderland
             return mesh;
         }
 
+        /// <summary>The little model on an object's library tile (its Low level: tiles are a few centimetres across).</summary>
+        public static Mesh Preview(int variant) => Get(variant, 0, MeshBuilder.Low);
+
+        /// <summary>
+        /// Builds every library tile's model ahead of time, a little each frame (at most <paramref name="budgetMs"/> a
+        /// frame), so the tiles show their models the moment a family is opened.
+        /// </summary>
+        public static System.Collections.IEnumerator WarmPreviews(float budgetMs = 6f)
+        {
+            var clock = new System.Diagnostics.Stopwatch();
+            for (int id = 0; id < Catalog.Count; id++)
+            {
+                clock.Restart();
+                Preview(id);
+                if (clock.Elapsed.TotalMilliseconds > budgetMs * 0.5f) yield return null;
+                else if (id % 4 == 3) yield return null;
+            }
+        }
+
         /// <summary>Half extents of the footprint including eaves (x, z).</summary>
         public static Vector2 HalfExtents(int variant) => Catalog.Get(variant).Half;
 

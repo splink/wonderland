@@ -370,7 +370,8 @@ namespace Wonderland
             Checkpoint();
             // Drawn on from a stream's free end it carries that stream on (one stream, widening or narrowing gently).
             var joined = StreamSystem.Carry(Streams.Streams, path, Terrain);
-            if (joined != path) StreamSystem.Relevel(joined, Terrain, Streams.Streams);
+            StreamSystem.Confluence(Streams.Streams, joined);   // (meeting another's side: curving in, its mouth widening)
+            StreamSystem.Relevel(joined, Terrain, Streams.Streams);
             Streams.Streams.Add(joined);
             StreamSystem.Join(Streams.Streams);   // (onto another stream it starts or ends at)
             AfterStreamsChanged(StreamSystem.Carve(Terrain, joined, Streams.Streams));

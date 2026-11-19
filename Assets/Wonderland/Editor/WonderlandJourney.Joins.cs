@@ -123,6 +123,18 @@ namespace Wonderland.Editor
                 int at = Mathf.Clamp(Mathf.RoundToInt(along / StreamSystem.Spacing), 0, main.points.Count - 1);
                 float bed = t.SurfaceAt(main.points[at].x, main.points[at].z);
                 Check(bed < mainLevel - 0.001f, $"A creek running into a stream's side leaves the stream's bed open (bed {(bed - mainLevel) * 1000f:0.0} mm under the water)");
+                var creek = w.Streams.Streams.Find(x => x != main && x.points.Count < main.points.Count && x.JoinsAtEnd);
+                float meet = 999f, flare = 0f;
+                if (creek != null)
+                {
+                    var last = creek.points[^1] - creek.points[^2]; var tail = new Vector2(last.x, last.z);
+                    StreamSystem.Nearest(main, new Vector2(creek.points[^1].x, creek.points[^1].z), out _, out float at2);
+                    int k2 = Mathf.Clamp(Mathf.RoundToInt(at2 / StreamSystem.Spacing), 1, main.points.Count - 2);
+                    var f = main.points[k2 + 1] - main.points[k2 - 1];
+                    meet = Vector2.Angle(tail, new Vector2(f.x, f.z));
+                    flare = creek.WidthAt(creek.points.Count - 1) / creek.WidthAt(creek.points.Count / 2);
+                }
+                Check(creek != null && meet < 50f && flare > 1.3f, $"...and joins it as a real confluence: curving in to meet its flow at {meet:0} degrees (drawn at 90), its mouth widening x{flare:0.0}");
                 var levels = new List<float>();
                 foreach (var s in w.Streams.Streams) foreach (var q in s.points) levels.Add(q.y);
                 for (int k = 0; k < 4; k++) w.UpdateStreamsFromTerrain();
