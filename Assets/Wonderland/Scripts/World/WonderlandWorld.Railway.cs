@@ -464,6 +464,7 @@ namespace Wonderland
         /// <summary>Re-derives every bridge (from the railway, the ways and the water) and lays the ways onto their decks.</summary>
         public void RefreshBridges()
         {
+            UpdateBays();
             Bridges.Rebuild(Track.Network, Paths.Lines);
             Paths.Rebuild();
         }

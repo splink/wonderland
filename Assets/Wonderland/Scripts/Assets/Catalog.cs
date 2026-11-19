@@ -117,7 +117,7 @@ namespace Wonderland
             Camera = 50, Balloon = 51, Jetty = 52, RowingBoat = 53, SailingBoat = 54, Steamer = 55, Halt = 56, TaxiRank = 57,
             Sawmill = 58, FurnitureShop = 59, IceCream = 60, Pub = 61, Hotel = 62, PostOffice = 63, Letterbox = 64, CarPark = 65, FreightYard = 66, Harbour = 67, Zoo = 68, FairyCastle = 69, Stadium = 70, Zebra = 71,
             ZooGate = 72, ZooPlaza = 73, Savanna = 74, ElephantHouse = 75, LionRock = 76, PenguinPool = 77, MonkeyIsland = 78, Aviary = 79, TropicalHouse = 80,
-            PettingZoo = 81, ZooKiosk = 82, SafariCafe = 83, ZooGarden = 84, BusStop = 85, Farmhouse = 86, Theatre = 87;
+            PettingZoo = 81, ZooKiosk = 82, SafariCafe = 83, ZooGarden = 84, BusStop = 85, Farmhouse = 86, Theatre = 87, ParkingGarage = 88;
 
         /// <summary>A station of any size (the big one, or a country halt): trains stop beside it.</summary>
         public static bool IsStation(int variant) => variant == Station || variant == Halt || variant == FreightYard;
@@ -241,7 +241,7 @@ namespace Wonderland
                     Spots = new[] { Door(-0.018f, 0.044f), new ActivitySpot(0.018f, -0.056f, SpotKind.Browse) } },
                 new() { Name = "Letterbox", Short = "Letters", Category = PlaceCategory.Small, Half = new Vector2(0.006f, 0.006f), Height = 0.025f, Pad = false, Small = true, Styles = 1, Hint = "the post van empties it on its round",
                     Spots = new[] { new ActivitySpot(0f, -0.012f, SpotKind.Browse) } },
-                new() { Name = "Car park", Short = "Parking", Category = PlaceCategory.Travel, Half = new Vector2(0.082f, 0.052f), Height = 0.01f, Walkable = true, Styles = 1, Hint = "visitors' cars park here - put it by a road near the shops" },
+                new() { Name = "Car park", Short = "Parking", Category = PlaceCategory.Travel, Half = new Vector2(0.101f, 0.052f), Height = 0.01f, Walkable = true, Styles = 1, Hint = "visitors' cars park here - put it by a road near the shops" },
                 new() { Name = "Freight yard", Short = "Freight", Category = PlaceCategory.Travel, Half = new Vector2(0.075f, 0.04f), Height = 0.1f, Styles = 1,
                     Hint = "beside the railway: its crane loads goods trains, and its lorry takes what arrives on" },
                 new() { Name = "Harbour", Short = "Harbour", Category = PlaceCategory.Travel, Half = new Vector2(0.075f, 0.05f), Height = 0.1f, Styles = 1,
@@ -296,6 +296,7 @@ namespace Wonderland
                 Spots = new[] { Door(0.034f, 0.05f), new ActivitySpot(-0.045f, -0.06f, SpotKind.Sit, 180f) } });
             list.Add(new() { Name = "Theatre", Short = "Theatre", Category = PlaceCategory.Town, Half = new Vector2(0.064f, 0.062f), Height = 0.13f, Styles = 1, Hint = "an audience every evening",
                 Spots = new[] { Door(0f, 0.062f), new ActivitySpot(-0.03f, -0.075f, SpotKind.Gather), new ActivitySpot(0f, -0.08f, SpotKind.Gather), new ActivitySpot(0.03f, -0.075f, SpotKind.Gather), new ActivitySpot(0.045f, -0.068f, SpotKind.Watch, -20f) } });
+            list.Add(new() { Name = "Parking garage", Short = "Garage", Category = PlaceCategory.Travel, Half = new Vector2(0.066f, 0.056f), Height = 0.08f, Styles = 1, Hint = "cars drive in off the street and park on its decks - put it by a road near the shops" });
             for (int i = 0; i < list.Count; i++) list[i].Id = i;
             // What each place is for: the needs it satisfies decide who comes and when (see Needs).
             foreach (var b in list)

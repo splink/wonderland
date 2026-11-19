@@ -26,6 +26,14 @@ namespace Wonderland
             VehicleKind.Van => 0.056f, VehicleKind.Bus => 0.1f, VehicleKind.Truck => 0.088f, VehicleKind.Tanker => 0.088f, VehicleKind.Flatbed => 0.088f, VehicleKind.Tractor => 0.034f, _ => 0.05f,
         };
 
+        /// <summary>How wide it is (across its wheels and wings).</summary>
+        public static float Width(VehicleKind k) => k switch
+        {
+            VehicleKind.Bicycle or VehicleKind.Motorbike => 0.008f, VehicleKind.Tractor => 0.018f,
+            VehicleKind.Bus or VehicleKind.FireEngine or VehicleKind.Truck or VehicleKind.Tanker or VehicleKind.Flatbed or VehicleKind.Van => 0.024f,
+            _ => 0.021f,
+        };
+
         public static Mesh Get(VehicleKind k, int colour = 0) => Get(k, colour, 0);
 
         private static readonly System.Collections.Generic.Dictionary<int, Mesh> levels = new();

@@ -275,6 +275,7 @@ namespace Wonderland
         {
             UpdateWindow(Time.deltaTime);
             if (resitHouses) { Buildings.Resit(); resitHouses = false; }
+            if (UpdateBays()) Paths.Rebuild();   // (buildings moved or taken away: their lay-bys and driveways with them)
             // Sculpting under the railway: re-profile it a few times per second (and once more after the stroke).
             if (streamsDirty && Time.realtimeSinceStartup - streamsUpdated > 0.3f) UpdateStreamsFromTerrain();
             if (trackDirty && Time.realtimeSinceStartup - trackUpdated > 0.25f) UpdateTrackFromTerrain();

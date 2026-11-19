@@ -153,7 +153,7 @@ namespace Wonderland
             inc.Arrived = true; inc.Scene = 0f;
             v.Siren = false; v.State = Mode.AtScene;
             var fwd = new Vector2(Mathf.Sin(v.Heading * Mathf.Deg2Rad), Mathf.Cos(v.Heading * Mathf.Deg2Rad));
-            v.Position += new Vector2(fwd.y, -fwd.x) * 0.008f;   // pull in
+            v.Shift = v.ShiftTo = 0.012f;   // pulled in to the kerb, up on it: the traffic passes
             Pose(v, 0f);
             if (inc.Kind == IncidentKind.Fire)
             {

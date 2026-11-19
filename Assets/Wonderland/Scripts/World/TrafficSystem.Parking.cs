@@ -1,18 +1,30 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace Wonderland
 {
     /// <summary>
-    /// Car parks: a household's car going to a place with a car park near it (by a road) drives to the car park instead
-    /// of stopping at the kerb, turns into a free bay and stays while its driver is out, then backs out and drives home.
-    /// So a car park fills up when the shops near it are busy, and stands empty at night. A full car park, or one taken
-    /// away, means the kerb as before.
+    /// Car parks and parking garages: a household's car going to a place with one near it (by a street) drives there
+    /// instead of stopping at the kerb, turns in off the street by its driveway, goes up the way in and along the aisle
+    /// and into a free bay (in a garage, inside and out of sight), stays while its driver is out, then comes back out the
+    /// same way and drives home. So they fill up when the shops near them are busy and stand empty at night. Full, or
+    /// taken away, means the kerb as before.
     /// </summary>
     public sealed partial class TrafficSystem
     {
-        public const float ParkSeconds = 1.6f;
+        public const float ParkSeconds = 1.6f, ParkSpeed = 0.045f;
 
-        /// <summary>A car park near <paramref name="door"/> with a free bay and a road to it (its bay, by position), or false.</summary>
+        private static bool Parking(int variant) => variant == Catalog.CarPark || variant == Catalog.ParkingGarage;
+        private static int Spaces(int variant) => variant == Catalog.ParkingGarage ? HouseFactory.GarageSpaces : HouseFactory.ParkingBays;
+
+        private int ParkingAt(Vector2 at)
+        {
+            var houses = world.Buildings.Houses;
+            for (int i = 0; i < houses.Count; i++) if (Parking(houses[i].variant) && (new Vector2(houses[i].x, houses[i].z) - at).sqrMagnitude < 1e-8f) return i;
+            return -1;
+        }
+
+        /// <summary>A car park or garage near <paramref name="door"/> with a free space and a road to it (its space, by position), or false.</summary>
         private bool FreeBay(Vector2 door, out Vector2 carPark, out int bay)
         {
             carPark = default; bay = -1;
@@ -20,14 +32,22 @@ namespace Wonderland
             float best = 0.35f;
             for (int i = 0; i < houses.Count; i++)
             {
-                if (houses[i].variant != Catalog.CarPark) continue;
+                if (!Parking(houses[i].variant)) continue;
                 var at = new Vector2(houses[i].x, houses[i].z);
                 float d = (at - door).magnitude;
-                if (d > best || Kerb(at) == null) continue;
-                for (int k = 0; k < HouseFactory.ParkingBays; k++)
+                if (d > best || ParkingAim(at) == null) continue;
+                for (int k = 0; k < Spaces(houses[i].variant); k++)
                     if (!BayTaken(at, k)) { best = d; carPark = at; bay = k; break; }
             }
             return bay >= 0;
+        }
+
+        /// <summary>Where a car heading for a car park drives to: the street beside its driveway (else the nearest kerb).</summary>
+        private Vector2? ParkingAim(Vector2 carPark)
+        {
+            var drive = world.BayOf(carPark);
+            if (drive != null && drive.Kind == BayKind.Drive) return drive.At + drive.Out * PathSystem.LaneOffset((int)PathKind.Road, false);
+            return Kerb(carPark);
         }
 
         private bool BayTaken(Vector2 carPark, int bay)
@@ -36,28 +56,72 @@ namespace Wonderland
             return false;
         }
 
-        /// <summary>Where a bay is (local to the world) and which way a car parked in it faces.</summary>
+        /// <summary>Where a space is (local to the world) and which way a car parked in it faces.</summary>
         private bool BayPlace(Vector2 carPark, int bay, out Vector2 at, out float yaw)
         {
             at = default; yaw = 0f;
-            int house = HouseAt(carPark, Catalog.CarPark);
+            int house = ParkingAt(carPark);
             if (house < 0) return false;
             var h = world.Buildings.Houses[house];
-            var local = HouseFactory.ParkingBay(bay, out float bayYaw);
+            float bayYaw = 0f;
+            var local = h.variant == Catalog.ParkingGarage ? HouseFactory.GarageInside : HouseFactory.ParkingBay(bay, out bayYaw);
             var d = Quaternion.Euler(0f, h.rotation, 0f) * local;
             at = new Vector2(h.x + d.x, h.z + d.z); yaw = h.rotation + bayYaw;
             return true;
         }
 
-        /// <summary>For a car park's card: how full it is.</summary>
-        public string ParkingFor(int house)
+        /// <summary>
+        /// The way from where the car stopped in the street to its space: across to the driveway, up it to the way in,
+        /// along the aisle and round into the bay (a garage: in at its barrier).
+        /// </summary>
+        private void PlanParking(Vehicle v)
         {
-            if (house < 0 || house >= world.Buildings.Houses.Count || world.Buildings.Houses[house].variant != Catalog.CarPark) return null;
-            int n = ParkedAt(house);
-            return n == 0 ? "empty" : $"{n} of {HouseFactory.ParkingBays} bays taken";
+            v.ParkPath.Clear();
+            v.ParkPath.Add(v.Position);
+            int house = ParkingAt(v.CarPark);
+            if (house < 0 || !BayPlace(v.CarPark, v.Bay, out var bay, out _)) return;
+            var h = world.Buildings.Houses[house];
+            var rot = Quaternion.Euler(0f, h.rotation, 0f);
+            Vector2 L(Vector3 local) { var d = rot * local; return new Vector2(h.x + d.x, h.z + d.z); }
+            var drive = world.BayOf(v.CarPark);
+            if (drive != null && drive.Kind == BayKind.Drive) { v.ParkPath.Add(drive.Mouth + drive.Out * 0.008f); v.ParkPath.Add(drive.End); }
+            if (h.variant == Catalog.ParkingGarage) { v.ParkPath.Add(L(HouseFactory.GarageEntrance + new Vector3(0f, 0f, 0.008f))); v.ParkPath.Add(bay); return; }
+            var gate = HouseFactory.CarParkEntrance;
+            var space = HouseFactory.ParkingBay(v.Bay, out _);
+            v.ParkPath.Add(L(new Vector3(gate.x, 0f, gate.z + 0.012f)));
+            v.ParkPath.Add(L(new Vector3(gate.x + 0.006f, 0f, -0.002f)));
+            v.ParkPath.Add(L(new Vector3(space.x - Mathf.Sign(space.z) * 0f - 0.022f, 0f, 0f)));
+            v.ParkPath.Add(L(new Vector3(space.x, 0f, space.z * 0.4f)));
+            v.ParkPath.Add(bay);
         }
 
-        /// <summary>Cars in a car park now (tests, cards).</summary>
+        private static float Length(List<Vector2> path) { float s = 0f; for (int i = 1; i < path.Count; i++) s += (path[i] - path[i - 1]).magnitude; return s; }
+
+        /// <summary>The point <paramref name="t"/> (0 to 1) of the way along a path, and the direction there.</summary>
+        private static Vector2 Along(List<Vector2> path, float t, out Vector2 dir, out int leg)
+        {
+            float total = Length(path), want = t * total;
+            dir = Vector2.up; leg = 0;
+            for (int i = 1; i < path.Count; i++)
+            {
+                var seg = path[i] - path[i - 1];
+                float len = seg.magnitude;
+                if (len > 1e-6f) dir = seg / len;
+                if (want <= len || i == path.Count - 1) { leg = i; return path[i - 1] + dir * Mathf.Min(want, len); }
+                want -= len;
+            }
+            return path[0];
+        }
+
+        /// <summary>For a car park's or garage's card: how full it is.</summary>
+        public string ParkingFor(int house)
+        {
+            if (house < 0 || house >= world.Buildings.Houses.Count || !Parking(world.Buildings.Houses[house].variant)) return null;
+            int n = ParkedAt(house);
+            return n == 0 ? "empty" : $"{n} of {Spaces(world.Buildings.Houses[house].variant)} spaces taken";
+        }
+
+        /// <summary>Cars in a car park or garage now (tests, cards).</summary>
         public int ParkedAt(int house)
         {
             if (house < 0 || house >= world.Buildings.Houses.Count) return 0;
@@ -68,22 +132,29 @@ namespace Wonderland
         }
 
         /// <summary>
-        /// A visiting car in a car park: turning into its bay, waiting, or backing out (true while it is busy with that).
-        /// The car park gone: it stays where it is and leaves from there.
+        /// A visiting car at a car park or garage: driving in to its space, waiting, or coming back out (true while it is
+        /// busy with that). It drives forwards in and reverses out of a bay, then drives forwards to the street. The car
+        /// park gone: it stays where it is and leaves from there.
         /// </summary>
         private bool StepParking(Vehicle v, float dt, bool leaving)
         {
             if (v.Bay < 0) return false;
-            if (!BayPlace(v.CarPark, v.Bay, out var bay, out float yaw)) { v.Bay = -1; return false; }
-            if (leaving && v.ParkDir >= 0) v.ParkDir = -1;
+            if (!BayPlace(v.CarPark, v.Bay, out var bay, out float yaw)) { v.Bay = -1; v.Inside = false; return false; }
+            if (leaving && v.ParkDir >= 0) { v.ParkDir = -1; v.Inside = false; }
             if (v.ParkDir == 0) return false;
-            v.ParkT = Mathf.Clamp01(v.ParkT + v.ParkDir * dt / ParkSeconds);
-            float s = Mathf.SmoothStep(0f, 1f, v.ParkT);
-            v.Position = Vector2.Lerp(v.Kerbside, bay, s);
-            v.Heading = Mathf.LerpAngle(v.KerbHeading, yaw, s);
+            if (v.ParkPath.Count < 2) { v.ParkPath.Clear(); v.ParkPath.Add(v.Kerbside); v.ParkPath.Add(bay); }
+            float length = Mathf.Max(0.01f, Length(v.ParkPath));
+            v.ParkT = Mathf.Clamp01(v.ParkT + v.ParkDir * dt * ParkSpeed / length);
+            v.Position = Along(v.ParkPath, Mathf.SmoothStep(0f, 1f, v.ParkT), out var dir, out int leg);
+            // Facing the way it goes - except backing out of a bay (the last leg, going out).
+            bool reversing = v.ParkDir < 0 && leg == v.ParkPath.Count - 1;
+            var face = v.ParkDir > 0 || reversing ? dir : -dir;
+            float want = v.ParkT >= 0.999f ? yaw : Mathf.Atan2(face.x, face.y) * Mathf.Rad2Deg;
+            v.Heading = Mathf.MoveTowardsAngle(v.Heading, want, 360f * dt);
             Pose(v, dt);
-            if (v.ParkDir > 0 && v.ParkT >= 1f) { v.ParkDir = 0; return true; }
-            if (v.ParkDir < 0 && v.ParkT <= 0f) { v.ParkDir = 0; v.Bay = -1; return false; }   // out on the road: off home
+            bool garage = world.Buildings.Houses[ParkingAt(v.CarPark)].variant == Catalog.ParkingGarage;
+            if (v.ParkDir > 0 && v.ParkT >= 1f) { v.ParkDir = 0; v.Inside = garage; return true; }
+            if (v.ParkDir < 0 && v.ParkT <= 0f) { v.ParkDir = 0; v.Bay = -1; v.ParkPath.Clear(); return false; }   // out on the street: off home
             return true;
         }
     }

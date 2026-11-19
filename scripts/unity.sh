@@ -36,6 +36,7 @@ case "$task" in
   roadrender) method=Wonderland.Editor.WonderlandJourney.RoadRenders; graphics=() ;;
   zoorender) method=Wonderland.Editor.WonderlandJourney.ZooRenders; graphics=() ;;
   joinrender) method=Wonderland.Editor.WonderlandJourney.JoinRenders; graphics=() ;;
+  bayrender) method=Wonderland.Editor.WonderlandJourney.BayRenders; graphics=() ;;
   terrainrender) method=Wonderland.Editor.WonderlandJourney.TerrainModeRenders; graphics=() ;;
   simprofile) method=Wonderland.Editor.WonderlandJourney.SimProfile ;;
   followrender) method=Wonderland.Editor.WonderlandJourney.FollowRenders; graphics=() ;;
@@ -57,7 +58,7 @@ case "$task" in
   lineup) method=Wonderland.Editor.WonderlandRenders.Lineup; graphics=() ;;
   renders) method=Wonderland.Editor.WonderlandJourney.Renders; graphics=() ;;
   compile) method="" ;;
-  *) echo "Usage: $0 [configure|build|test|village|town|rail|gridrail|roads|window|windowrender|questworld|interaction|cards|pond|railrender|gridrender|roadrender|zoorender|joinrender|terrainrender|simprofile|followrender|walkprobe|trainflow|trackshape|trackshaperender|shops|trackprobe|spikes|editperf|buildprobe|budget|gallery|showcase|lineup|renders|compile]" >&2; exit 2 ;;
+  *) echo "Usage: $0 [configure|build|test|village|town|rail|gridrail|roads|window|windowrender|questworld|interaction|cards|pond|railrender|gridrender|roadrender|zoorender|joinrender|bayrender|terrainrender|simprofile|followrender|walkprobe|trainflow|trackshape|trackshaperender|shops|trackprobe|spikes|editperf|buildprobe|budget|gallery|showcase|lineup|renders|compile]" >&2; exit 2 ;;
 esac
 mkdir -p "$project_dir/Logs"
 log="$project_dir/Logs/$task.log"

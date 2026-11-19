@@ -539,7 +539,7 @@ namespace Wonderland
         }
 
         /// <summary>A point along a road for its mesh: where, which way, how high the (flat) road surface is there, how far along; whether it is inside a junction (left out: the junction is drawn as one).</summary>
-        private struct RoadSample { public Vector2 P, T; public float Y, S; public bool Junction; }
+        private struct RoadSample { public Vector2 P, T; public float Y, S; public bool Junction; public int Cut; }   // (Cut: kerb and pavement left out on the right (1) or left (2), for a lay-by or a driveway)
 
         private static readonly Color Paving = new(0.78f, 0.75f, 0.7f);
         public const float KerbHeight = 0.0022f, RoadLift = 0.0016f;   // (a kerb about 16 cm high in the miniature's scale)
@@ -650,6 +650,7 @@ namespace Wonderland
             float hw = HalfWidth(l.kind);
             bool highway = l.kind == (int)PathKind.Highway;
             var samples = RoadSamples(l);
+            var bays = MarkBays(l, samples);
             // Cross-section strips, left to right: skirt, pavement, kerb top, kerb face, asphalt, kerb face, kerb top,
             // pavement, skirt. Streets and lanes have a pavement either side for people to walk on; highways don't.
             float pw = Pavement(l.kind);
@@ -661,6 +662,7 @@ namespace Wonderland
                 new Strip(hw - KerbWidth, 0f, hw - KerbWidth, KerbHeight, Stone.Kerb), new Strip(hw - KerbWidth, KerbHeight, hw, KerbHeight, Stone.Kerb), new Strip(hw, KerbHeight, hw + pw, KerbHeight, edge), new Strip(hw + pw, KerbHeight, hw + pw, -Skirt, edge),
             };
             CrossSection(b, samples, l.closed, strips);
+            foreach (var (bay, from, to) in bays) DrawBay(b, bay, samples, from, to, hw, pw);
             // Markings, painted a hair above the asphalt, measured exactly along the road.
             float edgeLine = hw - KerbWidth - 0.0016f;
             PaintLine(b, samples, l.closed, edgeLine, 0.0011f, Paint, 0f, 0f);
@@ -680,7 +682,7 @@ namespace Wonderland
                 for (float at = 0.4f; at < samples[^1].S - 0.1f; at += 0.7f, side = -side)
                 {
                     int i = samples.FindIndex(x => x.S >= at);
-                    if (i < 0 || samples[i].Junction || InJunction(samples[i].P, 0.03f)) continue;
+                    if (i < 0 || samples[i].Junction || samples[i].Cut != 0 || InJunction(samples[i].P, 0.03f)) continue;
                     var sm = samples[i];
                     var q = sm.P + new Vector2(sm.T.y, -sm.T.x) * side * (hw + 0.004f);
                     float y = RoadHeight(q, out bool deck);
@@ -720,9 +722,11 @@ namespace Wonderland
                     if (Vector3.Dot(normal, Vector3.up) < -0.01f || (Mathf.Abs(normal.y) < 0.01f && Vector3.Dot(normal, new Vector3(right.x, 0f, right.y) * Mathf.Sign(st.X0 + st.X1 + 1e-6f)) < 0f)) normal = -normal;
                     b.AddVertex(p0, normal, colour); b.AddVertex(p1, normal, colour);
                 }
+                int side = st.X0 + st.X1 > 1e-5f ? 1 : st.X0 + st.X1 < -1e-5f ? 2 : 0;
                 for (int i = 0; i < last; i++)
                 {
                     if (samples[i].Junction || samples[(i + 1) % count].Junction) continue;
+                    if (((samples[i].Cut | samples[(i + 1) % count].Cut) & side) != 0) continue;
                     int i0 = start + i * 2, i1 = start + ((i + 1) % count) * 2;
                     var v0 = b.Vertices[i0]; var v1 = b.Vertices[i0 + 1]; var v2 = b.Vertices[i1];
                     // Wound so the face points along its normal.

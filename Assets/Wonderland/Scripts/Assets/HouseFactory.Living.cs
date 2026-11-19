@@ -20,6 +20,7 @@ namespace Wonderland
                 case Catalog.Sawmill: return SawmillShed(b, ref rng);
                 case Catalog.Letterbox: return PillarBox(b);
                 case Catalog.CarPark: return CarParkBays(b);
+                case Catalog.ParkingGarage: return ParkingGarage(b, ref rng);
                 case Catalog.Zebra: return ZebraStripes(b);
                 case Catalog.FreightYard: return FreightYardPad(b, ref rng);
                 case Catalog.Harbour: return HarbourQuay(b, ref rng);
@@ -165,16 +166,45 @@ namespace Wonderland
             return 0.024f;
         }
 
-        /// <summary>A car park: tarmac with painted bays either side of an aisle, a lamp at each end. Visitors' cars park in it.</summary>
+        // The car park: its bays in two rows either side of an aisle, the first space of the front row left as the way
+        // in from the street (the driveway meets it there).
+        private const float ParkW = 0.2f, ParkD = 0.1f;
+        private static float ParkPitch => (ParkW - 0.02f) / (ParkingBays / 2 + 1);
+
+        /// <summary>Where a car park's driveway meets it (local: the front edge, at its way in).</summary>
+        public static Vector3 CarParkEntrance => new(-ParkW / 2 + 0.01f + ParkPitch * 0.5f, 0f, -ParkD / 2);
+
+        /// <summary>
+        /// A car park: tarmac with painted bays either side of an aisle, the way in at the front left (arrows painted on
+        /// it), a lamp at each end and a P sign by the way in. Visitors' cars drive in off the street and park in it.
+        /// </summary>
         private static float CarParkBays(MeshBuilder b)
         {
-            const float W = 0.16f, D = 0.1f;
+            const float W = ParkW, D = ParkD;
             b.AddBox(new Vector3(0f, 0.0008f, 0f), new Vector3(W, 0.0016f, D), Pal.Hex("#4A4A50"), Pal.Hex("#55555C"), Pal.Hex("#3A3A40"));
             var paint = Pal.Hex("#F2EFE8");
+            float pitch = ParkPitch, x0 = -W / 2 + 0.01f;
             foreach (int sz in new[] { -1, 1 })
-                for (int i = 0; i <= ParkingBays / 2; i++)
-                    b.AddBox(new Vector3(-W / 2 + 0.01f + i * (W - 0.02f) / (ParkingBays / 2), 0.0017f, sz * (D / 2 - 0.016f)), new Vector3(0.0012f, 0.0002f, 0.026f), paint);
-            b.AddBox(new Vector3(0f, 0.0017f, 0f), new Vector3(W - 0.03f, 0.0002f, 0.0016f), Pal.Hex("#F2C12E"));   // arrows down the aisle
+                for (int i = sz < 0 ? 1 : 1; i <= ParkingBays / 2 + 1; i++)
+                    b.AddBox(new Vector3(x0 + i * pitch, 0.0017f, sz * (D / 2 - 0.016f)), new Vector3(0.0012f, 0.0002f, 0.026f), paint);
+            b.AddBox(new Vector3(0.01f, 0.0017f, 0f), new Vector3(W - 0.05f, 0.0002f, 0.0016f), Pal.Hex("#F2C12E"));   // down the aisle
+            // The way in: arrows from the street to the aisle.
+            var gate = CarParkEntrance;
+            for (int k = 0; k < 2; k++)
+            {
+                float z = -D / 2 + 0.012f + k * 0.018f;
+                b.AddBox(new Vector3(gate.x, 0.0017f, z), new Vector3(0.0016f, 0.0002f, 0.009f), paint);
+                foreach (int s in new[] { -1, 1 })
+                {
+                    b.Push(new Vector3(gate.x + s * 0.0022f, 0.0017f, z + 0.0035f), Quaternion.Euler(0f, s * 40f, 0f));
+                    b.AddBox(Vector3.zero, new Vector3(0.0014f, 0.0002f, 0.0055f), paint);
+                    b.Pop();
+                }
+            }
+            // A P sign on a post beside the way in.
+            var post = new Vector3(gate.x + pitch * 0.5f + 0.002f, 0f, -D / 2 + 0.004f);
+            b.AddCylinder(post, 0.0008f, 0.0008f, 0.03f, 6, Pal.Hex("#3A3F46"), Pal.Hex("#3A3F46"), true);
+            Lettering.Board(b, "P", post + Vector3.up * 0.032f, Vector3.back, 0.008f, Pal.Hex("#2A5DB0"), Pal.FlowerWhite, Pal.FlowerWhite);
             foreach (int sx in new[] { -1, 1 })
             {
                 b.AddCylinder(new Vector3(sx * (W / 2 - 0.004f), 0f, 0f), 0.0007f, 0.0007f, 0.04f, 5, Pal.TrainBlack, Pal.TrainBlack, true);
@@ -182,6 +212,67 @@ namespace Wonderland
             }
             return 0.045f;
         }
+
+        /// <summary>
+        /// A parking garage: three concrete decks on columns, open at the sides so the parked cars show, a ramp up the
+        /// back, the way in at the front left with a barrier, and a big blue P on the front. Cars drive in off the street
+        /// and park inside (out of sight while they are in).
+        /// </summary>
+        private static float ParkingGarage(MeshBuilder b, ref Rng rng)
+        {
+            const float W = GarageW, D = GarageD, storey = 0.022f;
+            var concrete = Pal.Hex("#B8B4AC"); var dark = Pal.Hex("#5A5A60"); var blue = Pal.Hex("#2A5DB0");
+            b.AddBox(new Vector3(0f, 0.0008f, 0f), new Vector3(W, 0.0016f, D), dark);
+            for (int deck = 1; deck <= 3; deck++)
+            {
+                float y = deck * storey;
+                b.AddBox(new Vector3(0f, y, 0f), new Vector3(W, 0.0024f, D), concrete, Pal.Shade(concrete, 1.05f), Pal.Shade(concrete, 0.8f));
+                // The parapet: a low wall with a gap at its top for the view of the cars.
+                foreach (int sz in new[] { -1, 1 }) b.AddBox(new Vector3(0f, y + 0.004f, sz * (D / 2 - 0.0008f)), new Vector3(W, 0.006f, 0.0016f), Pal.Shade(concrete, 0.95f));
+                foreach (int sx in new[] { -1, 1 }) b.AddBox(new Vector3(sx * (W / 2 - 0.0008f), y + 0.004f, 0f), new Vector3(0.0016f, 0.006f, D), Pal.Shade(concrete, 0.92f));
+            }
+            // Columns.
+            for (int ix = 0; ix < 4; ix++)
+            for (int iz = 0; iz < 2; iz++)
+            {
+                var c = new Vector3(-W / 2 + 0.004f + ix * (W - 0.008f) / 3f, 0f, (iz * 2 - 1) * (D / 2 - 0.004f));
+                b.AddBox(c + Vector3.up * storey * 1.5f, new Vector3(0.0035f, storey * 3f, 0.0035f), Pal.Shade(concrete, 0.9f));
+            }
+            // Parked cars on the decks (bright, so it reads as a car park from far off).
+            var colours = new[] { Pal.Hex("#C8392E"), Pal.Hex("#2E6FB0"), Pal.Hex("#F2C12E"), Pal.Hex("#3C9A4A"), Pal.FlowerWhite, Pal.Hex("#3A3F46") };
+            if (!b.TooSmall(0.004f))
+                for (int deck = 0; deck <= 3; deck++)
+                    for (int k = 0; k < 5; k++)
+                    {
+                        if (deck == 0 && k == 0 || rng.Chance(0.3f)) continue;
+                        float y = deck * storey + (deck == 0 ? 0.0016f : 0.0012f);
+                        var at = new Vector3(-W / 2 + 0.014f + k * (W - 0.028f) / 4f, y, rng.Chance(0.5f) ? -D * 0.25f : D * 0.25f);
+                        var c = colours[rng.Range(0, colours.Length)];
+                        b.AddBox(at + Vector3.up * 0.003f, new Vector3(0.011f, 0.005f, 0.024f), c);
+                        b.AddBox(at + Vector3.up * 0.0068f, new Vector3(0.009f, 0.0035f, 0.012f), Pal.Shade(c, 0.85f));
+                    }
+            // The ramp up the back, and the stair tower at the front right.
+            b.Push(new Vector3(W / 2 - 0.016f, storey * 0.5f, 0.0f), Quaternion.Euler(-Mathf.Atan2(storey, D * 0.8f) * Mathf.Rad2Deg, 0f, 0f));
+            b.AddBox(Vector3.zero, new Vector3(0.026f, 0.0018f, D * 0.85f), Pal.Shade(concrete, 0.85f));
+            b.Pop();
+            b.AddBox(new Vector3(W / 2 - 0.008f, storey * 1.7f, -D / 2 + 0.008f), new Vector3(0.016f, storey * 3.4f, 0.016f), Pal.Hex("#8A9AA6"));
+            // The way in: a striped barrier arm (raised) and a P sign over it.
+            var gate = GarageEntrance;
+            b.AddBox(new Vector3(gate.x + 0.012f, 0.005f, gate.z + 0.002f), new Vector3(0.0035f, 0.01f, 0.0035f), Pal.Hex("#3A3F46"));
+            b.Push(new Vector3(gate.x + 0.012f, 0.0095f, gate.z + 0.002f), Quaternion.Euler(0f, 0f, 70f));
+            for (int k = 0; k < 4; k++) b.AddBox(new Vector3(0.003f + k * 0.005f, 0f, 0f), new Vector3(0.005f, 0.0012f, 0.0012f), k % 2 == 0 ? Pal.Hex("#C8392E") : Pal.FlowerWhite);
+            b.Pop();
+            Lettering.Board(b, "P", new Vector3(0.012f, storey * 2.1f, -D / 2 - 0.0012f), Vector3.back, 0.022f, blue, Pal.FlowerWhite, Pal.FlowerWhite);
+            Lettering.Add(b, "PARKING", new Vector3(0.012f, storey * 1.25f, -D / 2 - 0.0012f), Vector3.back, 0.006f, 0.001f, blue);
+            return storey * 3f + 0.01f;
+        }
+
+        public const float GarageW = 0.13f, GarageD = 0.11f;
+        public const int GarageSpaces = 12;
+
+        /// <summary>Where a parking garage's driveway meets it (local: the front edge, its way in), and where cars go inside.</summary>
+        public static Vector3 GarageEntrance => new(-GarageW / 2 + 0.02f, 0f, -GarageD / 2);
+        public static Vector3 GarageInside => new(-GarageW / 2 + 0.02f, 0f, -GarageD / 2 + 0.035f);
 
         public const int ParkingBays = 8;
 
@@ -488,11 +579,10 @@ namespace Wonderland
         /// <summary>Where bay <paramref name="k"/> of a car park is (local) and which way a car in it faces (degrees).</summary>
         public static Vector3 ParkingBay(int k, out float yaw)
         {
-            const float W = 0.16f, D = 0.1f;
             int side = k < ParkingBays / 2 ? -1 : 1, i = k % (ParkingBays / 2);
-            float pitch = (W - 0.02f) / (ParkingBays / 2);
             yaw = side < 0 ? 180f : 0f;
-            return new Vector3(-W / 2 + 0.01f + (i + 0.5f) * pitch, 0f, side * (D / 2 - 0.022f));
+            // (the front row starts one space in: its first is the way in)
+            return new Vector3(-ParkW / 2 + 0.01f + (i + 1.5f) * ParkPitch, 0f, side * (ParkD / 2 - 0.024f));
         }
 
         /// <summary>A taxi rank: a little glass shelter with a bench, and a yellow TAXI sign on a post at the kerb (front).</summary>

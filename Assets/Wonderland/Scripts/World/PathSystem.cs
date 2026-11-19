@@ -228,6 +228,7 @@ namespace Wonderland
         /// </summary>
         public float WalkLift(Vector2 p)
         {
+            if (Bays.Count > 0 && BayAt(p) != null) return RoadLift;   // (a lay-by or a driveway: level with the street)
             float d = Query(p, 0.09f, li => IsWay(Lines[li].kind), out int line);
             if (line < 0) return 0f;
             int kind = Lines[line].kind;

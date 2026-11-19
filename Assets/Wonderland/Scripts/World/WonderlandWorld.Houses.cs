@@ -180,6 +180,7 @@ namespace Wonderland
 
         public string PlaceHouse(HouseInstance h, bool checkpoint = true)
         {
+            h = StandBackFromStreet(h);
             string error = ValidateHouse(h);
             if (error != null) return error;
             int boat = Catalog.BoatOf(h.variant);
@@ -200,6 +201,7 @@ namespace Wonderland
             Forest.MarkDirtyRegion(new Vector2(h.x, h.z), r + 0.1f);
             Cover.MarkDirtyRegion(new Vector2(h.x, h.z), r + 0.1f);
             if (checkpoint) MoveIn(Buildings.Houses.Count - 1);
+            if (UpdateBays()) Paths.Rebuild();
             return null;
         }
 

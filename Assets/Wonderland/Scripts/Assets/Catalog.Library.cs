@@ -106,9 +106,10 @@ namespace Wonderland
             D(SignalBox, "Railway", "The signalman's box beside the line", "beside the railway line");
             D(WaterTower, "Railway", "Water for the steam engines");
             D(Fuel, "Road", "Pumps and a little shop for drivers", "by a road");
-            D(TaxiRank, "Road", "Two taxis wait here for fares", "by a road");
-            D(CarPark, "Road", "Visitors park here while they shop", "by a road, near the shops");
-            D(BusStop, "Road", "A shelter and a bench: buses call here and the people waiting get on", "beside a road, facing it");
+            D(TaxiRank, "Road", "Two taxis wait in its lay-by off the street for fares", "beside a street: it steps back to make room for its lay-by");
+            D(CarPark, "Parking", "Visitors' cars turn in off the street by its driveway and park in its bays while they shop", "by a street (its way in facing it), near the shops");
+            D(ParkingGarage, "Parking", "Three decks of parking: cars turn in off the street, go up inside and park", "by a street (its way in facing it), near the shops");
+            D(BusStop, "Road", "A shelter and a bench by a lay-by: buses pull in off the street, the people waiting get on", "beside a street: it steps back to make room for its lay-by");
             D(Jetty, "Water", "Boat trips from its end", "at a pond's edge, its end over the water");
             D(RowingBoat, "Water", "Rows about the pond", "on the water");
             D(SailingBoat, "Water", "Sails with the wind", "on the water");

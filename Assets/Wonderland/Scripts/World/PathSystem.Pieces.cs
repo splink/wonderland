@@ -126,6 +126,7 @@ namespace Wonderland
                     h.Add(j.At); h.Add(j.Radius); h.Add(j.Y); h.Add(j.Arms.Count); h.Add(j.Lights); h.Add(j.Members.Contains(l));
                 }
             if (Bridges != null) h.Add(Bridges.KeyNear(area));
+            h.Add(BaysKey(l));
             int key = h.ToHashCode();
             bool have = linePieces.TryGetValue(l, out var piece) && piece.Key == key;
             int groundKey = have && !terrain.ChangedNear(area) ? piece.GroundKey : GroundKey(l);
