@@ -27,7 +27,7 @@ PASS  Eraser tap removes the house under the pointer
 PASS  Palette Undo restores it
 PASS  The library: Leisure, then Evenings, then the disco's tile with its model (chosen 44)
 PASS  Pointing at a tile says what it is, what it does and where it must go ("<b>Station</b> / A station on the platform's edge: trains stop and passengers get on and off / <color=#E8D7A8>a station master works here 6:00-21:00 · a taxi waits here</color> / <color=#9FD0FF>Put it beside the railway line</color>")
-PASS  Every object in the library is in a category and a family, with a description (72 of 72, 0 without)
+PASS  Every object in the library is in a category and a family, with a description (85 of 85, 0 without)
 PASS  Category and item chips place a fountain from the Town set (Fountain placed; selected 13)
 PASS  Drawing with the Paths tool lays a footpath (1)
 PASS  ...and a fence

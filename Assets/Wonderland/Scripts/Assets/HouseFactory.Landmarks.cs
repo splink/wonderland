@@ -401,7 +401,7 @@ namespace Wonderland
         /// <summary>A round rose window: tracery spokes over coloured glass in a stone ring.</summary>
         private static void RoseWindow(MeshBuilder b, Vector3 c, Vector3 normal, float r)
         {
-            b.Push(c, Quaternion.LookRotation(-normal, Vector3.up) * Quaternion.Euler(90f, 0f, 0f));
+            b.Push(c, Quaternion.FromToRotation(Vector3.up, normal));
             b.AddCylinder(Vector3.zero, r * 1.2f, r * 1.2f, 0.0008f, 24, CastleTrim, CastleTrim, true);
             b.AddCylinder(new Vector3(0f, 0.0008f, 0f), r, r, 0.0003f, 24, Pal.Hex("#C8392E"), Pal.Hex("#B0304A"), true);
             if (!b.TooSmall(0.002f))

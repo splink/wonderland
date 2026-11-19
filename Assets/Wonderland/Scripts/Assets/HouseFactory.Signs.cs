@@ -28,6 +28,7 @@ namespace Wonderland
 
         private static void Signage(MeshBuilder b, int variant)
         {
+            if (IsOverhauled(variant)) return;   // (their signs are part of their design)
             switch (variant)
             {
                 case Catalog.Bakery:
