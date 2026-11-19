@@ -641,9 +641,20 @@ namespace Wonderland.Editor
                 $"The right stick scrolls the world the way the player faces ({went.x * 100f:0} cm east in a second, facing east); the world stays where it is in the room, the brush as it was");
             for (int i = 0; i < 20; i++) Frame(hand, aim, false, scroll: new Vector2(-1f, 0f));
             Check(world.WindowCenter.y > start.y + 0.05f, $"...and left and right ({(world.WindowCenter.y - start.y) * 100f:0} cm north for left, facing east)");
-            // Move: Higher / Lower / Table / Floor beside the palette, and either stick up or down.
+            // Turning the world: hold grip and push the right stick sideways - it turns about the window's middle.
+            var turnedFrom = world.PlacementRotation.eulerAngles.y; var middle = world.PlacementPosition;
+            for (int i = 0; i < 36; i++) Frame(hand, aim + Vector3.up * 3f, false, grip: true, scroll: new Vector2(1f, 0f));
+            Frame(hand, aim + Vector3.up * 3f, false);
+            float turnedBy = Mathf.DeltaAngle(turnedFrom, world.PlacementRotation.eulerAngles.y);
+            Check(turnedBy > 20f && (world.PlacementPosition - middle).magnitude < 1e-3f, $"Grip and the right stick sideways turn the world about the window's middle ({turnedBy:0} degrees in half a second)");
+            // The World panel: Move, Higher / Lower / Table / Floor, Turn, Window, Scale - and either stick while moving.
             tools.ToggleMoving();
-            Check(tools.PlacingWorld && Find("Higher") != null && Find("Floor") != null, "Move opens a panel with Higher, Lower, Table and Floor");
+            Check(!tools.PlacingWorld && Find("Higher") != null && Find("Floor") != null && Find("Turn left") != null && Find("Scale: 100 %") != null && Find("Window: 2 m") != null,
+                "The World button opens one panel: Move, Higher, Lower, Table, Floor, Turn, the window's size and the world's scale");
+            float facing = world.PlacementRotation.eulerAngles.y;
+            ClickButton(hand, "Turn right");
+            Check(Mathf.Abs(Mathf.DeltaAngle(facing, world.PlacementRotation.eulerAngles.y) - 15f) < 0.1f, "Turn right turns the world 15 degrees");
+            ClickButton(hand, "Move");
             float lift = world.Lift;
             float floorY = world.PlacementPosition.y - world.Lift;
             ClickButton(hand, "Higher"); ClickButton(hand, "Higher");
@@ -655,7 +666,7 @@ namespace Wonderland.Editor
             Check(Mathf.Abs(world.Lift - 0.72f) < 1e-3f, $"Table puts it at table height ({world.Lift * 100f:0} cm)");
             ClickButton(hand, "Floor");
             ClickButton(hand, "Done");
-            Check(world.Lift == 0f && !tools.PlacingWorld && Mathf.Abs(world.PlacementPosition.y - floorY) < 1e-3f, "Floor puts it back on the floor, Done puts it down");
+            Check(world.Lift == 0f && !tools.PlacingWorld && !palette.InfoShown && Mathf.Abs(world.PlacementPosition.y - floorY) < 1e-3f, "Floor puts it back on the floor, Done puts it down and closes the panel");
             world.UseWindow(false);
             UnityEngine.Object.DestroyImmediate(head.gameObject);
         }

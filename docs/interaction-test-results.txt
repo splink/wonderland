@@ -67,9 +67,11 @@ PASS  The village clock is always shown (15:00)
 PASS  Undo takes a step back and Redo puts it back
 PASS  The right stick scrolls the world the way the player faces (80 cm east in a second, facing east); the world stays where it is in the room, the brush as it was
 PASS  ...and left and right (22 cm north for left, facing east)
-PASS  Move opens a panel with Higher, Lower, Table and Floor
+PASS  Grip and the right stick sideways turn the world about the window's middle (30 degrees in half a second)
+PASS  The World button opens one panel: Move, Higher, Lower, Table, Floor, Turn, the window's size and the world's scale
+PASS  Turn right turns the world 15 degrees
 PASS  Higher lifts the world 5 cm a tap (10 cm)
 PASS  ...and so does the stick, up (28 cm)
 PASS  Table puts it at table height (72 cm)
-PASS  Floor puts it back on the floor, Done puts it down
+PASS  Floor puts it back on the floor, Done puts it down and closes the panel
 RESULT: PASS

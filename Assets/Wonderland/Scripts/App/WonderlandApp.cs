@@ -105,7 +105,7 @@ namespace Wonderland
             };
             Palette.AddGlobal("Save", () => Tools.ShowWorlds(true));
             Palette.AddGlobal("Load", () => Tools.ShowWorlds(false));
-            Palette.AddGlobal("Move", Tools.ToggleMoving);
+            Palette.AddGlobal("World", Tools.ToggleMoving);
             Palette.AddGlobal("Home", () => Tools.Say(World.WindowTarget == Vector2.zero ? "Already home, where the world started" : World.NavigateHome() ? "Back home, where the world started" : "Can't get home from here"));
             // Sound, tips, labels, the grid, stats, performance and New world: all under Settings.
             Tools.SoundState = () => SoundSystem.Setting switch { SoundSetting.On => "On", SoundSetting.Quiet => "Quiet", _ => "Off" };
@@ -133,8 +133,6 @@ namespace Wonderland
             Anchor.Floor = ScannedFloor;
             Anchor.Holding = () => Tools.PlacingWorld;
             Tools.WorldPlaced = Anchor.Pin;
-            // The window shifted to where the room has space for it: pinned there (once the saved spot has been found).
-            World.PlacementShifted += () => { if (!startingUp && !Tools.PlacingWorld) Anchor.Pin(); };
             // The Perf panel's settings: applied now, and whenever one changes.
             Light Sun() { foreach (var l in FindObjectsByType<Light>(FindObjectsSortMode.None)) if (l.type == LightType.Directional) return l; return null; }
             PerfSettings.Apply(Sun());
@@ -148,17 +146,13 @@ namespace Wonderland
             if (System.IO.File.Exists(PerfBench.Trigger)) { var bench = gameObject.AddComponent<PerfBench>(); bench.World = World; bench.Anchor = Anchor; bench.Materials = Materials; }
             yield return Anchor.Restore();
             // Now that the world stands where it belongs in the room, the window is fitted to the room from there.
-            startingUp = false;
-            var before = World.PlacementPosition;
             World.FitToRoom();
-            if ((World.PlacementPosition - before).sqrMagnitude > 1e-6f) Anchor.Pin();
             if (Anchor.Status.StartsWith("back")) roomNote = null;
             else if (Anchor.Status.StartsWith("the saved spot")) roomNote = "Your world's saved spot wasn't found in this room - use Move to put it back";
             string note = World.RoomStatus.Contains("ignored") ? World.RoomStatus : roomNote;
             Tools.Say(restored ? "Welcome back - your world was restored" + (note != null ? " · " + note : "") : note ?? "Sculpt some hills to begin", 8f);
         }
 
-        private bool startingUp = true;
         private Light keyLight;
 
         /// <summary>The light follows the village clock: morning sun, golden evening, moonlit night.</summary>

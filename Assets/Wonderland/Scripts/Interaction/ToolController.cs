@@ -494,7 +494,9 @@ namespace Wonderland
             UpdateTips(dt);
             Palette.SetHint(PlacingWorld ? "Point at the floor and pull the trigger to put the world there  ·  stick left/right: turn it, up/down: raise or lower it" : Peek() ?? Hint());
             UpdateInspection(dt);
-            if (!PlacingWorld) Scroll(input.Stick, dt); else TurnAndLift(input.Stick + input.LeftStick, dt);
+            if (PlacingWorld) TurnAndLift(input.Stick + input.LeftStick, dt);
+            else if (input.Grip && !Holding) GripTurn(input, dt);
+            else { GripTurn(input, dt); Scroll(input.Stick, dt); }
             var ray = input.Ray;
             float rayLength = 2.5f;
             var colour = new Color(1f, 1f, 1f, 0.7f);
@@ -1269,65 +1271,116 @@ namespace Wonderland
             if (Mathf.Abs(stick.y) > 0.3f) World.Lift = Mathf.Clamp(World.Lift + stick.y * 0.35f * dt, 0f, MaxLift);
             var turn = Mathf.Abs(stick.x) > 0.25f ? Quaternion.Euler(0f, stick.x * 60f * dt, 0f) : Quaternion.identity;
             if (Mathf.Abs(stick.y) > 0.3f || Mathf.Abs(stick.x) > 0.25f) World.Place(new Vector3(p.x, floorY + World.Lift, p.z), turn * World.PlacementRotation);
-            if (Mathf.Abs(stick.y) > 0.3f && infoMode == 5 && (Time.frameCount & 7) == 0) ShowMovePanel();   // (the height shown)
+            if (Mathf.Abs(stick.y) > 0.3f && infoMode == 5 && (Time.frameCount & 7) == 0) ShowWorldPanel();   // (the height shown)
         }
 
         /// <summary>The highest the world may be lifted off the floor (metres).</summary>
         public const float MaxLift = 1.2f;
 
         /// <summary>
-        /// Move: the world follows the pointer on the floor until the trigger puts it down; the panel beside the palette
-        /// raises or lowers it (onto a table, say) - so does either stick, up or down - and turns it.
+        /// The World panel (the World button): everything about the world as a whole in one place - Move (it follows the
+        /// pointer on the floor until the trigger puts it down), its height (Higher / Lower, Table, Floor; or either stick
+        /// up and down while moving), turning it (Turn left / right; or hold grip and push the right stick sideways at
+        /// any time), the window's size and the world's scale.
         /// </summary>
+        public void OpenWorldPanel()
+        {
+            infoMode = 5;
+            ShowWorldPanel();
+            Say("The world as a whole: move it, lift it, turn it, size its window and its scale", 4f);
+        }
+
+        /// <summary>Starts moving the world (from the World panel, or Settings > Height).</summary>
         public void StartMoving()
         {
             PlacingWorld = true;
-            infoMode = 5;
-            ShowMovePanel();
-            Say("Point where the world should lie and pull the trigger - Higher / Lower lift it off the floor", 5f);
+            if (infoMode != 5) infoMode = 5;
+            ShowWorldPanel();
+            Say("Point where the world should lie and pull the trigger to put it down", 5f);
         }
 
-        private void ShowMovePanel()
+        private void ShowWorldPanel()
         {
             string height = World.Lift < 0.005f ? "on the floor" : $"{World.Lift * 100f:0} cm above the floor";
-            var body = new CardText(26).Section("Move the world")
-                .Row("Where", "point at the floor - the world follows")
-                .Row("Put it down", "trigger, with the pointer on the floor")
+            float scale = PerfSettings.WorldScale;
+            var size = World.WindowSize * World.transform.lossyScale.x;
+            var body = new CardText(26).Section("The world")
+                .Row("Window", $"{size.x:0.0} x {size.y:0.0} m" + (World.WindowLimit != null ? $" ({World.WindowLimit})" : ""))
+                .Row("Scale", $"{scale * 100f:0} % - smaller shows more of the world")
                 .Row("Height", height)
-                .Row("Turn", "either stick left / right")
-                .Row("Raise / lower", "the buttons, or either stick up / down");
-            Palette.ShowInfo("Move", height, body.ToString(), FinishMoving);
+                .Row("Move", PlacingWorld ? "point at the floor - trigger puts it down" : "Move, then point where it should go")
+                .Row("Turn", "the buttons, or hold grip and push the right stick sideways");
+            Palette.ShowInfo("World", PlacingWorld ? "moving - trigger on the floor puts it down" : height, body.ToString(), CloseWorldPanel);
             void Lift(float to)
             {
                 var p = World.PlacementPosition;
                 float floorY = p.y - World.Lift;
                 World.Lift = Mathf.Clamp(to, 0f, MaxLift);
                 World.Place(new Vector3(p.x, floorY + World.Lift, p.z), World.PlacementRotation);
-                ShowMovePanel();
+                if (!PlacingWorld) WorldPlaced?.Invoke();
+                ShowWorldPanel();
             }
+            void Turn(float degrees) { TurnWorld(degrees); if (!PlacingWorld) WorldPlaced?.Invoke(); ShowWorldPanel(); }
             Palette.SetInfoButtons(new[]
             {
+                new PaletteUI.Option(PlacingWorld ? "Put it here" : "Move", PlacingWorld, () => { if (PlacingWorld) FinishMoving(); else StartMoving(); }),
+                new PaletteUI.Option($"Window: {WonderlandWorld.MaxWindow:0.#} m", false, () =>
+                {
+                    var sizes = WonderlandWorld.WindowSizes;
+                    int at = System.Array.FindIndex(sizes, x => Mathf.Abs(x - WonderlandWorld.MaxWindow) < 0.01f);
+                    WonderlandWorld.MaxWindow = sizes[(at + 1) % sizes.Length];
+                    World.FitToRoom();
+                    var now = World.WindowSize * World.transform.lossyScale.x;
+                    Say($"The window: {now.x:0.0} x {now.y:0.0} m" + (World.WindowLimit != null ? $" - {World.WindowLimit}" : ""));
+                    ShowWorldPanel();
+                }),
+                new PaletteUI.Option($"Scale: {PerfSettings.WorldScale * 100f:0} %", false, () => { PerfSettings.WorldSize.Next(); Say($"The world at {PerfSettings.WorldScale * 100f:0} % - its window stays the same size in the room"); ShowWorldPanel(); }),
+                new PaletteUI.Option("Turn left", false, () => Turn(-15f)),
+                new PaletteUI.Option("Turn right", false, () => Turn(15f)),
                 new PaletteUI.Option("Higher", false, () => Lift(World.Lift + 0.05f)),
                 new PaletteUI.Option("Lower", false, () => Lift(World.Lift - 0.05f)),
                 new PaletteUI.Option("Table", false, () => Lift(0.72f)),
                 new PaletteUI.Option("Floor", World.Lift < 0.005f, () => Lift(0f)),
-                new PaletteUI.Option("Done", false, FinishMoving),
+                new PaletteUI.Option("Done", false, CloseWorldPanel),
             });
         }
 
-        /// <summary>The Move button: starts moving the world, or puts it down.</summary>
-        public void ToggleMoving() { if (PlacingWorld) FinishMoving(); else StartMoving(); }
+        /// <summary>Turns the whole world about the window's middle (it stays where it is in the room).</summary>
+        public void TurnWorld(float degrees)
+        {
+            World.Place(World.PlacementPosition, Quaternion.Euler(0f, degrees, 0f) * World.PlacementRotation);
+            World.FitToRoom();
+        }
+
+        /// <summary>The World button: opens the World panel, or closes it (putting the world down if it was moving).</summary>
+        public void ToggleMoving() { if (infoMode == 5) CloseWorldPanel(); else OpenWorldPanel(); }
+
+        private void CloseWorldPanel()
+        {
+            if (PlacingWorld) FinishMoving();
+            if (infoMode == 5) CloseInfo();
+        }
 
         /// <summary>Puts the world down where it is (Move).</summary>
         private void FinishMoving()
         {
             if (!PlacingWorld) return;
             PlacingWorld = false;
-            if (infoMode == 5) CloseInfo();
             World.FitToRoom(); WorldPlaced?.Invoke();
             Say(World.Lift < 0.005f ? "World placed - it stays on this spot" : $"World placed, {World.Lift * 100f:0} cm above the floor - it stays on this spot");
             Haptic(0.5f, 0.06f);
+            if (infoMode == 5) ShowWorldPanel();
         }
+
+        /// <summary>Grip held (nothing in hand) and the right stick sideways: the world turns, like a turntable.</summary>
+        private void GripTurn(PointerInput input, float dt)
+        {
+            if (!input.Grip || Mathf.Abs(input.Stick.x) < 0.25f || Holding) { if (gripTurned && !input.Grip) { gripTurned = false; World.FitToRoom(); WorldPlaced?.Invoke(); } return; }
+            gripTurned = true;
+            World.Place(World.PlacementPosition, Quaternion.Euler(0f, input.Stick.x * 60f * dt, 0f) * World.PlacementRotation);
+        }
+
+        private bool gripTurned;
 
         // ------------------------------------------------------------------ scrolling
 

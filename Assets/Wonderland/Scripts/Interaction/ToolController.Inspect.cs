@@ -478,6 +478,7 @@ namespace Wonderland
             var buttons = new List<PaletteUI.Option>();
             foreach (var s in PerfSettings.All)
             {
+                if (s == PerfSettings.WorldSize) continue;   // (the World panel has it)
                 var setting = s;
                 buttons.Add(new PaletteUI.Option(s.Label, s.Value != s.Default, () => { setting.Next(); Say($"{setting.Label} - {setting.Help}"); ShowPerf(); }, !measuring));
             }

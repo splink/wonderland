@@ -24,7 +24,7 @@ namespace Wonderland
         public const float PanSpeed = 0.4f;
         private const string WindowKey = "wonderland.window";
         /// <summary>The window sizes Settings offers (metres a side).</summary>
-        public static readonly float[] WindowSizes = { 2f, 3f, 1.5f };
+        public static readonly float[] WindowSizes = { 2f, 3f, 4f, 1.5f };
 
         /// <summary>The largest the window may be (metres a side, a room permitting): 2 m unless chosen otherwise in Settings.</summary>
         public static float MaxWindow
@@ -209,80 +209,33 @@ namespace Wonderland
 
         // ------------------------------------------------------------------ size from the room
 
-        /// <summary>The placement moved by itself (the window shifted to where the room has space): the app re-pins it.</summary>
-        public event Action PlacementShifted;
-
         /// <summary>
-        /// The window's size in this room: <see cref="MaxWindow"/> square (in the room's metres, whatever the world's own
-        /// scale), or the largest rectangle up to that which fits the room's floor. Placed near a wall the window doesn't
-        /// shrink to stay centred where it was put: it shifts (up to a metre and a half) to where the biggest square fits,
-        /// nearest the placement first, and each side then grows on its own as far as the room allows - a long narrow
-        /// room gets a long narrow window.
+        /// The window's size: the size chosen (<see cref="MaxWindow"/>, in the room's metres whatever the world's own
+        /// scale), capped only by the scanned room's own extent - never by where in the room the world was put, and
+        /// never moving it: the world stays exactly where the player placed it. (The guardian's play area, when there is
+        /// no room scan, is a safety boundary, not the room: it doesn't limit the window.) Why it is smaller than chosen,
+        /// if it is, is in <see cref="WindowLimit"/>.
         /// </summary>
         private void FitWindowToRoom()
         {
             float scale = Mathf.Max(0.01f, transform.lossyScale.x);
             float most = MaxWindow / scale;   // (local metres)
             var size = new Vector2(most, most);
-            var centre = WindowCenter;
-            if (roomLocal != null)
+            WindowLimit = null;
+            if (roomLocal != null && room != null && room.Source == "room scan")
             {
-                bool Fits(Vector2 c, Vector2 s)
-                {
-                    for (int i = 0; i <= 8; i++)
-                    {
-                        float u = i / 8f - 0.5f;
-                        if (!RoomFootprint.Inside(roomLocal.Floor, c + new Vector2(u * s.x, -s.y * 0.5f)) || !RoomFootprint.Inside(roomLocal.Floor, c + new Vector2(u * s.x, s.y * 0.5f))
-                            || !RoomFootprint.Inside(roomLocal.Floor, c + new Vector2(-s.x * 0.5f, u * s.y)) || !RoomFootprint.Inside(roomLocal.Floor, c + new Vector2(s.x * 0.5f, u * s.y))) return false;
-                    }
-                    return true;
-                }
-                float Largest(Vector2 c)
-                {
-                    if (!RoomFootprint.Inside(roomLocal.Floor, c)) return 0f;
-                    float lo = 0f, hi = most;
-                    if (Fits(c, new Vector2(hi, hi))) return hi;
-                    for (int k = 0; k < 10; k++) { float mid = (lo + hi) / 2f; if (Fits(c, new Vector2(mid, mid))) lo = mid; else hi = mid; }
-                    return lo;
-                }
-                // The best place for the biggest square near where it was put.
-                float best = Largest(centre), step = 0.15f / scale, reach = 1.5f / scale;
-                var at = centre;
-                if (best < most - 1e-4f)
-                    for (float dz = -reach; dz <= reach + 1e-4f; dz += step)
-                    for (float dx = -reach; dx <= reach + 1e-4f; dx += step)
-                    {
-                        var c = centre + new Vector2(dx, dz);
-                        float k = Largest(c);
-                        // (a bigger window wins; an equal one nearer the placement)
-                        if (k > best + 0.02f / scale || (k > best - 1e-4f && (c - centre).sqrMagnitude < (at - centre).sqrMagnitude)) { best = k; at = c; }
-                    }
-                size = new Vector2(Mathf.Max(best, 0.3f / scale), Mathf.Max(best, 0.3f / scale));
-                for (int axis = 0; axis < 2; axis++)
-                    while (size[axis] < most)
-                    {
-                        var bigger = size; bigger[axis] = Mathf.Min(most, size[axis] + 0.05f / scale);
-                        if (!Fits(at, bigger)) break;
-                        size = bigger;
-                    }
-                if ((at - centre).sqrMagnitude > 1e-6f)
-                {
-                    // Shift the window in the room (the same land stays in it): the placement moves.
-                    var shifted = transform.TransformPoint(new Vector3(at.x, 0f, at.y));
-                    var placed = PlacementPosition;
-                    Place(new Vector3(shifted.x, placed.y, shifted.z), PlacementRotation);
-                    roomLocal = room.ToLocal(transform);   // (the room as seen from where the world is now)
-                    PlacementShiftedBy = at - centre;
-                    PlacementShifted?.Invoke();
-                }
+                var room2 = roomLocal.Bounds.size - Vector2.one * (2f * RoomFootprint.WallMargin / scale);
+                if (room2.x < size.x || room2.y < size.y) WindowLimit = $"the room is {room2.x * scale:0.0} x {room2.y * scale:0.0} m";
+                size = new Vector2(Mathf.Min(size.x, room2.x), Mathf.Min(size.y, room2.y));
             }
             float grid = BuildGrid.Size;
             size = new Vector2(Mathf.Max(0.6f, Mathf.Floor(size.x / grid) * grid), Mathf.Max(0.6f, Mathf.Floor(size.y / grid) * grid));
             if (size != WindowSize) { WindowSize = size; windowDirty = true; }
+            Debug.Log($"Wonderland window: {size.x * scale:0.00} x {size.y * scale:0.00} m in the room (chosen {MaxWindow:0.#} m, world scale {scale:0.00}, room {(room == null ? "unknown" : room.Source)}{(WindowLimit != null ? ", limited: " + WindowLimit : "")})");
         }
 
-        /// <summary>How far the last fit moved the window in the room (local metres; tests).</summary>
-        public Vector2 PlacementShiftedBy { get; private set; }
+        /// <summary>Why the window is smaller than the size chosen (null: it isn't).</summary>
+        public string WindowLimit { get; private set; }
 
         // ------------------------------------------------------------------ drawing just the window
 

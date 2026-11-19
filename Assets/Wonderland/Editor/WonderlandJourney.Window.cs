@@ -84,9 +84,9 @@ namespace Wonderland.Editor
             rw.UseWindow(true);
             rw.Room = room;
             var p = rw.PlacementPosition;
-            bool inside = Mathf.Abs(p.x - 1000f) + rw.WindowSize.x / 2f <= 2.001f && Mathf.Abs(p.z) + rw.WindowSize.y / 2f <= 2.001f;
-            Check(rw.WindowSize == new Vector2(2f, 2f) && inside && rw.PlacementShiftedBy.magnitude > 0.5f,
-                $"Put down 40 cm from a wall, the window shifts into the room at full size instead of shrinking ({rw.WindowSize.x:0.00} x {rw.WindowSize.y:0.00} m, moved {rw.PlacementShiftedBy.magnitude * 100f:0} cm)");
+            rw.FitToRoom();
+            Check(rw.WindowSize == new Vector2(2f, 2f) && (rw.PlacementPosition - p).magnitude < 1e-4f && (p - new Vector3(1000f, 0f, 1.6f)).magnitude < 1e-3f,
+                $"Put down 40 cm from a wall, the window is the size chosen and stays exactly where it was put ({rw.WindowSize.x:0.00} x {rw.WindowSize.y:0.00} m)");
             var sizes = new List<float>();
             foreach (float want in new[] { 3f, 1.5f, 2f }) { WonderlandWorld.MaxWindow = want; rw.FitToRoom(); sizes.Add(rw.WindowSize.x); }
             Check(sizes[0] == 3f && sizes[1] == 1.5f && sizes[2] == 2f, $"The Window setting changes the window in the room (3 m: {sizes[0]:0.0}, 1.5 m: {sizes[1]:0.0}, 2 m: {sizes[2]:0.0})");
