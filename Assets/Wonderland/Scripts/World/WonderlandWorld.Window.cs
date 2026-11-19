@@ -132,6 +132,12 @@ namespace Wonderland
             ApplyWindow();
         }
 
+        /// <summary>One frame of the window (the slide, the cut, what is shown) - what LateUpdate does (tests, probes).</summary>
+        public void Advance(float dt) => UpdateWindow(dt);
+
+        /// <summary>Works out at once what the window shows (tests: things placed or moved since the last frame).</summary>
+        public void RefreshVisibility() => CullToWindow();
+
         /// <summary>Finishes a slide at once (tests).</summary>
         public void FinishSlide()
         {
@@ -214,6 +220,7 @@ namespace Wonderland
             windowDirty = false;
             Terrain.Window = r;
             TerrainView.SetCut(r);
+            windowMovedSinceCull = true;
             WindowMoved?.Invoke();
         }
 
@@ -223,9 +230,10 @@ namespace Wonderland
         private void UpdateWindow(float dt)
         {
             if (!Windowed) return;
+            bool slid = Sliding;
             StepSlide(dt);
             ApplyWindow();
-            CullToWindow();
+            if (slid || windowMovedSinceCull || ++cullFrame % 3 == 0) CullToWindow();   // (things move in and out of the window slowly: every third frame is enough)
         }
 
         // ------------------------------------------------------------------ out of sight
@@ -236,7 +244,9 @@ namespace Wonderland
         /// lives - trains run, people go about their day, cars drive - it just isn't shown. Ground just outside is built in
         /// advance, so what slides into view is there.
         /// </summary>
-        private Func<Vector2, float, bool> inWindow, nearWindow, everywhere;
+        private Func<Vector2, float, bool> inWindow, nearWindow, everywhere, keptNear;
+        private int cullFrame;
+        private bool windowMovedSinceCull = true;
         private Func<Vector3, bool> figureInWindow;
 
         private void CullToWindow()
@@ -244,11 +254,13 @@ namespace Wonderland
             inWindow ??= (p, r) => InWindow(p, r);
             nearWindow ??= (p, r) => InWindow(p, r + 0.6f);
             everywhere ??= (p, r) => true;
+            keptNear ??= (p, r) => InWindow(p, r + 2f);
             figureInWindow ??= p => InWindow(transform.InverseTransformPoint(p), 0.03f);
             var shown = Windowed ? inWindow : everywhere;
             Forest.Shown = Cover.Shown = Windowed ? nearWindow : null;   // (built a little ahead)
             FigureBatch.Window = Windowed ? figureInWindow : null;
-            Forest.Cull(shown); Cover.Cull(shown); Buildings.Cull(shown); Trains.Cull(shown); Traffic.Cull(shown); Boats.Cull(shown);
+            windowMovedSinceCull = false;
+            Forest.Cull(shown, Windowed ? keptNear : null); Cover.Cull(shown, Windowed ? keptNear : null); Buildings.Cull(shown); Trains.Cull(shown); Traffic.Cull(shown); Boats.Cull(shown);
             if (Sliding) { Forest.RebuildDirty(6); Cover.RebuildDirty(6); }
         }
     }

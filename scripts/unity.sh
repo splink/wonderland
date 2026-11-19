@@ -6,6 +6,7 @@
 #   scripts/unity.sh village     just the village life and work journeys (Logs/village-results.txt)
 #   scripts/unity.sh questworld  benchmark on a player's saved world, Tests/Saves/quest-world.json (Logs/questworld-results.txt)
 #   scripts/unity.sh rail        the railway scenarios drawn freely and on the grid (Logs/rail-results.txt; gridrail: grid only)
+#   scripts/unity.sh window      the endless world: window, streaming, undo, out of sight, the map (Logs/window-results.txt)
 #   scripts/unity.sh town        just the livelier town: traffic, emergencies, pets, CCTV, sound (Logs/town-results.txt)
 #   scripts/unity.sh renders     editor renders of assets and an assembled world (docs/renders/, needs graphics)
 set -euo pipefail

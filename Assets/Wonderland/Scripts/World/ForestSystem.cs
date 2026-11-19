@@ -45,13 +45,27 @@ namespace Wonderland
         public System.Func<Vector2, float, bool> Shown;
 
         /// <summary>Shows just the chunks in the window: the trees outside it are neither drawn nor rebuilt.</summary>
-        public void Cull(System.Func<Vector2, float, bool> shown)
+        /// <remarks>Chunks far from the window (not <paramref name="kept"/>) are let go of altogether and built again when the
+        /// window comes back to them.</remarks>
+        public void Cull(System.Func<Vector2, float, bool> shown, System.Func<Vector2, float, bool> kept = null)
         {
+            List<long> drop = null;
             foreach (var (k, c) in chunks)
             {
-                bool show = shown(ChunkCentre(k), ChunkSize);
+                var centre = ChunkCentre(k);
+                if (kept != null && !kept(centre, ChunkSize)) { (drop ??= new List<long>()).Add(k); continue; }
+                bool show = shown(centre, ChunkSize);
                 if (c.go.activeSelf != show) c.go.SetActive(show);
             }
+            if (drop != null) foreach (var k in drop) { Drop(k); dirty.Add(k); }
+        }
+
+        /// <summary>Lets go of a chunk's objects and meshes.</summary>
+        private void Drop(long k)
+        {
+            if (chunks.TryGetValue(k, out var c)) { Release(c.go); Release(c.mesh); chunks.Remove(k); }
+            if (proxyMeshes.TryGetValue(k, out var proxy)) { Release(proxy); proxyMeshes.Remove(k); }
+            if (levelMeshes.TryGetValue(k, out var levels)) { foreach (var m in levels) if (m != null) Release(m); levelMeshes.Remove(k); }
         }
 
         private static long ChunkKey(float x, float z) => ((long)Mathf.FloorToInt(x / ChunkSize) << 32) ^ (uint)Mathf.FloorToInt(z / ChunkSize);
@@ -103,13 +117,7 @@ namespace Wonderland
                 dirty.Remove(k);
                 lastBuilt[k] = now;
                 var list = byChunk[k];
-                if (list.Count == 0)
-                {
-                    if (chunks.TryGetValue(k, out var empty)) { Release(empty.go); Release(empty.mesh); chunks.Remove(k); }
-                    if (proxyMeshes.TryGetValue(k, out var emptyProxy)) { Release(emptyProxy); proxyMeshes.Remove(k); }
-                    if (levelMeshes.TryGetValue(k, out var emptyLevels)) { foreach (var m in emptyLevels) if (m != null) Release(m); levelMeshes.Remove(k); }
-                    continue;
-                }
+                if (list.Count == 0) { Drop(k); continue; }
                 if (!chunks.TryGetValue(k, out var chunk))
                 {
                     var go = new GameObject("Forest chunk " + k);

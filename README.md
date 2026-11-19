@@ -354,8 +354,31 @@ first:
   lines are 3.6 cm apart, enough for two trains side by side.
 
 **The world stays where you put it.** It is pinned to the room with a Meta spatial anchor: next launch it comes back to
-the same spot, and it doesn't drift when the headset re-centres (taken off and put on again). Its height is the room
-scan's floor. **Move** re-pins it.
+the same spot, and it doesn't drift when the headset re-centres (taken off and put on again). It starts on the room
+scan's floor. **Move** puts it somewhere else: point at the floor, stick left/right to turn it, up/down to raise or
+lower it (to table height, say); trigger re-pins it there.
+
+**An endless world, seen through a window.** The land goes on in every direction - flat, gently uneven land everywhere,
+ready to be shaped with the usual tools. What you see is a window of up to **3 x 3 m** (smaller when the room is: each
+side shrinks on its own to fit the floor), cut off cleanly at its edges like a piece sawn out of a bigger model
+landscape, with soil showing at the cut.
+- **Going further:** eight arrows lie on the floor just outside the cut edge - one mid-side each way, one at each
+  corner. Point at one and pull the trigger: the window slides half its size that way (1.5 m), so half of what you saw
+  stays in view and new land comes in. Everything keeps its place in the world; only the window moves. **Home**
+  (palette) slides back to where the world started.
+- **Building across the edge:** roads, track, streams and forests carry on across the old edge as if it had never been
+  there - extending a line from one window into the next makes one line. The building grid is the same everywhere.
+- **The map** above the palette shows the whole world built so far from above - land, water, roads, the railway, the
+  buildings - with the trains and cars moving on it as dots, the window as a white frame and home in pink. Point at a
+  place on it and pull the trigger to slide the window there.
+- **Out of sight, still alive:** what is outside the window isn't drawn or animated, but it all goes on - trains run
+  on along their lines through other parts of the world, cars drive on along the streets, people go about their day -
+  and when you go there, it is as it should be.
+- **Saving:** only the ground you changed is kept, as 1.2 m chunks in files beside the save (each saved whole, so a
+  save cut short never breaks the world; a damaged chunk costs only that piece of land). Older worlds load as before -
+  their bare floor becomes flat land, so they go on in every direction too.
+- **Undo / Redo** go back and forward one action at a time (the last 10), on land in or out of the window, and they
+  only take back the action: a train that was running keeps running.
 
 **A one-way railway.** The whole railway runs one way: cream arrows between the rails show which way, and every train
 runs with them, engine first - trains can never meet head-on. A switch either splits one line into two going the same
@@ -428,7 +451,7 @@ the tops and boulders on the slopes. Ponds get sandy beaches.
 
 Palette: the tools in four named groups - **Landscape** (Terrain, Water, Forest) · **Build** (Roads, Track, Build) ·
 **Bring to life** (Train, Life) · **Change** (Select, Eraser) - an options row for the current tool, and
-**Undo · Redo · Save · Load · Move · Help · Settings**. The world saves automatically when the app is paused or closed and is restored
+**Undo · Redo · Save · Load · Move · Home · Help · Settings**, with the map above. The world saves automatically when the app is paused or closed and is restored
 on the next launch.
 
 ## The working world

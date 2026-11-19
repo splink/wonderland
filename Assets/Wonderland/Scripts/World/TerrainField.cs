@@ -63,6 +63,7 @@ namespace Wonderland
         /// <summary>1 where land may grow (free floor inside the room).</summary>
         public byte[] Allowed;
         private float[] scratch, rim, rimNoise, distance, blur;   // rim = Shape(Edge); rimNoise = shoreline roughness (m)
+        private float[] fresh;   // each cell's fresh-land height (NaN: none), to tell untouched land cheaply
 
         /// <summary>Cells the Trim brush must not remove (e.g. under houses). Set by the world.</summary>
         public Func<float, float, bool> Protect;
@@ -149,7 +150,7 @@ namespace Wonderland
             int n = Nx * Nz;
             Height = new float[n]; Surface = new float[n]; Land = new float[n]; Edge = new float[n]; Lock = new float[n]; Soil = new float[n]; Pad = new float[n];
             Water = new float[n]; WaterLevel = new float[n];
-            Allowed = new byte[n]; scratch = new float[n]; rim = new float[n]; rimNoise = new float[n]; distance = new float[n]; blur = new float[n];
+            Allowed = new byte[n]; scratch = new float[n]; rim = new float[n]; rimNoise = new float[n]; distance = new float[n]; blur = new float[n]; fresh = new float[n];
             for (int i = 0; i < n; i++) Allowed[i] = 1;
         }
 
@@ -158,8 +159,9 @@ namespace Wonderland
         private void InitCell(int i, int x, int z, bool undulate = true)
         {
             float lx = LocalX(x), lz = LocalZ(z);
-            rimNoise[i] = (Noise.Fbm2(lx * 3.5f + Seed * 0.71f, lz * 3.5f - Seed * 0.37f, 3) - 0.5f) * 0.12f;
+            rimNoise[i] = float.NaN;   // (worked out when a shore is near: RimNoise)
             Height[i] = BaseHeight + (undulate ? (Noise.Fbm2(lx * 4f + Seed, lz * 4f) - 0.5f) * 0.008f : 0f);
+            fresh[i] = undulate ? Height[i] : float.NaN;
             Land[i] = Endless ? 1f : 0f; Lock[i] = 0f; Soil[i] = 0f; Water[i] = 0f; WaterLevel[i] = 0f;
         }
 
@@ -177,7 +179,7 @@ namespace Wonderland
                 int i = z * Nx + x;
                 if (Land[i] >= 0.5f) continue;
                 Land[i] = 1f;
-                Height[i] = BaseHeight + (Noise.Fbm2(LocalX(x) * 4f + Seed, LocalZ(z) * 4f) - 0.5f) * 0.008f;
+                Height[i] = fresh[i] = BaseHeight + (Noise.Fbm2(LocalX(x) * 4f + Seed, LocalZ(z) * 4f) - 0.5f) * 0.008f;
             }
             RecomputeEdge(All);
             UpdateSurface(All);
@@ -193,28 +195,44 @@ namespace Wonderland
             int oldNx = Nx, oldGX = GX0, oldGZ = GZ0;
             var oldRect = Cells;
             if (Store != null) Evict(oldRect, cells);
-            float[] h = Height, l = Land, lk = Lock, so = Soil, wa = Water, wl = WaterLevel;
+            float[] h = Height, l = Land, lk = Lock, so = Soil, wa = Water, wl = WaterLevel, rn = rimNoise, fr = fresh, ed = Edge, rm = rim, sf = Surface;
             Allocate(cells);
             for (int z = 0; z < Nz; z++)
             for (int x = 0; x < Nx; x++)
             {
                 int i = z * Nx + x, gx = GX0 + x, gz = GZ0 + z;
-                InitCell(i, x, z);
                 if (gx < oldRect.xMin || gx >= oldRect.xMax || gz < oldRect.yMin || gz >= oldRect.yMax)
                 {
-                    // Coming back into the grid: the ground as it was left.
+                    // Coming back into the grid: the ground as it was left (no need to work out fresh land there).
                     if (Store != null && Store.TryGet(TerrainStore.ChunkOf(gx), TerrainStore.ChunkOf(gz), out var c))
                     {
                         int k = ChunkIndex(gx, gz);
                         Height[i] = c.Height[k]; Land[i] = c.Land[k] / 255f; Lock[i] = c.Lock[k] / 255f; Soil[i] = c.Soil[k] / 255f; Water[i] = c.Water[k] / 255f; WaterLevel[i] = c.WaterLevel[k];
+                        rimNoise[i] = float.NaN; fresh[i] = float.NaN;
                     }
+                    else InitCell(i, x, z);
                     continue;
                 }
                 int j = (gz - oldGZ) * oldNx + (gx - oldGX);
                 Height[i] = h[j]; Land[i] = l[j]; Lock[i] = lk[j]; Soil[i] = so[j]; Water[i] = wa[j]; WaterLevel[i] = wl[j];
+                rimNoise[i] = rn[j]; fresh[i] = fr[j]; Edge[i] = ed[j]; rim[i] = rm[j]; Surface[i] = sf[j];
             }
-            RecomputeEdge(All);
-            UpdateSurface(All);
+            // An endless world's kept land keeps its shores: only round the new land are they worked out again.
+            var redo = All;
+            if (Endless && oldRect.Overlaps(cells))
+            {
+                int nx0 = int.MaxValue, nz0 = int.MaxValue, nx1 = int.MinValue, nz1 = int.MinValue;
+                for (int z = 0; z < Nz; z++)
+                for (int x = 0; x < Nx; x++)
+                {
+                    int gx = GX0 + x, gz = GZ0 + z;
+                    if (gx >= oldRect.xMin && gx < oldRect.xMax && gz >= oldRect.yMin && gz < oldRect.yMax) { x = Mathf.Max(x, oldRect.xMax - GX0 - 1); continue; }
+                    nx0 = Mathf.Min(nx0, x); nz0 = Mathf.Min(nz0, z); nx1 = Mathf.Max(nx1, x); nz1 = Mathf.Max(nz1, z);
+                }
+                redo = nx0 > nx1 ? new RectInt(0, 0, 0, 0) : Expand(new RectInt(nx0, nz0, nx1 - nx0 + 1, nz1 - nz0 + 1), RimCells + 2);
+            }
+            RecomputeEdge(redo);
+            UpdateSurface(redo);
         }
 
         private static int ChunkIndex(int gx, int gz) =>
@@ -240,8 +258,20 @@ namespace Wonderland
                     leaving = !to.Contains(new Vector2Int(gx, gz));
                 if (!leaving) continue;
                 bool kept = Store.TryGet(cx, cz, out var c);
-                if (!kept) c = FreshChunk(cx, cz);
-                bool fresh = !kept, changed = false;
+                if (!kept)
+                {
+                    // Untouched land (the usual case) needs no keeping: found out before building anything.
+                    bool untouched = true;
+                    for (int gz = Mathf.Max(span.yMin, from.yMin); gz < Mathf.Min(span.yMax, from.yMax) && untouched; gz++)
+                    for (int gx = Mathf.Max(span.xMin, from.xMin); gx < Mathf.Min(span.xMax, from.xMax) && untouched; gx++)
+                    {
+                        int i = (gz - GZ0) * Nx + (gx - GX0);
+                        untouched = Lock[i] == 0f && Soil[i] == 0f && Water[i] == 0f && Land[i] == 1f && Mathf.Abs(Height[i] - fresh[i]) <= 1e-5f && Mathf.Abs(Surface[i] - Height[i]) <= 1e-5f;
+                    }
+                    if (untouched) continue;
+                    c = FreshChunk(cx, cz, from);
+                }
+                bool isFresh = false, changed = false;
                 for (int gz = Mathf.Max(span.yMin, from.yMin); gz < Mathf.Min(span.yMax, from.yMax); gz++)
                 for (int gx = Mathf.Max(span.xMin, from.xMin); gx < Mathf.Min(span.xMax, from.xMax); gx++)
                 {
@@ -250,17 +280,17 @@ namespace Wonderland
                         || c.Lock[k] != Byte(Lock[i]) || c.Soil[k] != Byte(Soil[i]) || c.Water[k] != Byte(Water[i]);
                     c.Height[k] = Height[i]; c.Surface[k] = Surface[i]; c.WaterLevel[k] = WaterLevel[i];
                     c.Land[k] = Byte(Land[i]); c.Lock[k] = Byte(Lock[i]); c.Soil[k] = Byte(Soil[i]); c.Water[k] = Byte(Water[i]);
-                    if (fresh && (c.Lock[k] != 0 || c.Soil[k] != 0 || c.Water[k] != 0 || c.Land[k] != 255 || Mathf.Abs(Height[i] - FreshHeight(gx, gz)) > 1e-5f || Mathf.Abs(Surface[i] - Height[i]) > 1e-5f))
-                        fresh = false;
+                    if (isFresh && (c.Lock[k] != 0 || c.Soil[k] != 0 || c.Water[k] != 0 || c.Land[k] != 255 || !(Mathf.Abs(Height[i] - this.fresh[i]) <= 1e-5f) || Mathf.Abs(Surface[i] - Height[i]) > 1e-5f))
+                        isFresh = false;
                 }
-                if (!fresh && (!kept || changed)) Store.Put(cx, cz, c);
+                if (!isFresh && (!kept || changed)) Store.Put(cx, cz, c);
             }
         }
 
         private static byte Byte(float v) => (byte)Mathf.RoundToInt(Mathf.Clamp01(v) * 255f);
 
-        /// <summary>A chunk of fresh flat land.</summary>
-        private TerrainStore.Chunk FreshChunk(int cx, int cz)
+        /// <summary>A chunk of fresh flat land (the cells of <paramref name="skip"/>, about to be written over, are left).</summary>
+        private TerrainStore.Chunk FreshChunk(int cx, int cz, RectInt? skip = null)
         {
             var c = new TerrainStore.Chunk();
             int n = TerrainStore.Cells;
@@ -268,6 +298,7 @@ namespace Wonderland
             for (int x = 0; x < n; x++)
             {
                 int k = z * n + x;
+                if (skip is RectInt sk && sk.Contains(new Vector2Int(cx * n + x, cz * n + z))) continue;
                 c.Height[k] = c.Surface[k] = FreshHeight(cx * n + x, cz * n + z);
                 c.Land[k] = (byte)(Endless ? 255 : 0);
             }
@@ -515,9 +546,17 @@ namespace Wonderland
             for (int x = r.xMin; x < r.xMax; x++)
             {
                 int i = z * Nx + x;
-                Edge[i] = Land[i] < 0.5f ? 0f : Mathf.Clamp01((distance[i] + rimNoise[i]) / RimWidth);
+                // (Far from any shore the edge is 1 whatever the shoreline's roughness: no need to work that out.)
+                Edge[i] = Land[i] < 0.5f ? 0f : distance[i] - 0.13f >= RimWidth ? 1f : Mathf.Clamp01((distance[i] + RimNoise(i, x, z)) / RimWidth);
                 rim[i] = Shape(Edge[i]);
             }
+        }
+
+        /// <summary>The shoreline's roughness at a cell (metres), worked out the first time it is needed.</summary>
+        private float RimNoise(int i, int x, int z)
+        {
+            if (float.IsNaN(rimNoise[i])) rimNoise[i] = (Noise.Fbm2(LocalX(x) * 3.5f + Seed * 0.71f, LocalZ(z) * 3.5f - Seed * 0.37f, 3) - 0.5f) * 0.12f;
+            return rimNoise[i];
         }
 
         private RectInt Expand(RectInt r, int by)
@@ -574,7 +613,7 @@ namespace Wonderland
             {
                 int i = z * Nx + x;
                 float dx = LocalX(x) - centre.x, dz = LocalZ(z) - centre.y;
-                float d2 = (dx * dx + dz * dz) / r2 * (1f + rimNoise[i] * 2.5f);
+                float d2 = (dx * dx + dz * dz) / r2 * (1f + RimNoise(i, x, z) * 2.5f);
                 if (d2 >= 1f || Lock[i] > 0.05f || Pad[i] > 0.05f || Land[i] < 0.5f || rim[i] < 0.15f || KeepAt(i) > 0.5f) continue;
                 float inner = 1f - d2;
                 if (drain)
@@ -750,7 +789,7 @@ namespace Wonderland
                 int i = z * Nx + x;
                 if (grow && Allowed[i] == 0) continue;                         // walls, furniture, outside the room
                 // Roughen the brush edge so painted shores meander.
-                float d2 = (dx * dx + dz * dz) / r2 * (1f + rimNoise[i] * 3f);
+                float d2 = (dx * dx + dz * dz) / r2 * (1f + RimNoise(i, x, z) * 3f);
                 if (d2 >= 1f) continue;
                 if (!grow && (Lock[i] > 0.02f || Pad[i] > 0.02f || (Protect != null && Protect(LocalX(x), LocalZ(z))))) continue;
                 float w = Mathf.Clamp01((1f - d2) * 2.5f) * Mathf.Min(1f, 5f * strength * dt);

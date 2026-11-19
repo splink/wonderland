@@ -251,10 +251,9 @@ namespace Wonderland
             Terrain.Resize(cells);
             TerrainView.Reinit();
             if (WaterView != null) WaterView.RebuildAll();
-            Cover.Scatter();
-            Forest.MarkAllDirty();
+            Cover.Scatter(keep: true);   // (trees need nothing: the land they stand on hasn't changed)
             Terrain.SetAllowed(null);
-            ApplyPads();
+            ApplyPads(Terrain.All, reshape: false);
             Debug.Log($"Wonderland: terrain grid grew to {Terrain.Nx * Terrain.Cell:0.0} x {Terrain.Nz * Terrain.Cell:0.0} m");
             return true;
         }
@@ -320,10 +319,9 @@ namespace Wonderland
             Terrain.Resize(cells);
             TerrainView.Reinit();
             if (WaterView != null) WaterView.RebuildAll();
-            Cover.Scatter();
-            Forest.MarkAllDirty();
+            Cover.Scatter(keep: true);   // (trees need nothing: the land they stand on hasn't changed)
             Terrain.SetAllowed(null);
-            ApplyPads();
+            ApplyPads(Terrain.All, reshape: false);
             lastGround.Clear();
             return true;
         }

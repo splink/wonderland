@@ -44,17 +44,35 @@ namespace Wonderland
         /// Candidate positions on a global 4.2 cm lattice, each seeded by its lattice index: the same tufts appear in the
         /// same places however the terrain grid is cut, so re-fitting the grid to the room changes nothing visible.
         /// </summary>
-        public void Scatter()
+        private RectInt scattered;   // the spots (in 5 cm steps) scattered so far
+
+        /// <summary>
+        /// Scatters the tufts over the grid. With <paramref name="keep"/> (the grid slid), the tufts already there stay and
+        /// only the land new to the grid is scattered (each spot's tuft depends on nothing but where it is).
+        /// </summary>
+        public void Scatter(bool keep = false)
         {
-            foreach (var k in chunks.Keys) dirty.Add(k);
-            tufts.Clear(); count = 0;
             const float spacing = 0.05f;   // (was 0.042: 30 % fewer tufts - the grass reads the same from a step away)
             float share = PerfSettings.GrassShare;
             int ix0 = Mathf.FloorToInt(terrain.X0 / spacing), ix1 = Mathf.CeilToInt(terrain.XMax / spacing);
             int iz0 = Mathf.FloorToInt(terrain.Z0 / spacing), iz1 = Mathf.CeilToInt(terrain.ZMax / spacing);
+            var old = keep ? scattered : new RectInt(0, 0, 0, 0);
+            scattered = new RectInt(ix0, iz0, ix1 - ix0 + 1, iz1 - iz0 + 1);
+            if (keep)
+            {
+                // Chunks now off the grid go; chunks the new land reaches are rebuilt.
+                foreach (var k in new List<long>(tufts.Keys))
+                {
+                    var c = ChunkCentre(k);
+                    if (c.x >= ix0 * spacing && c.x <= ix1 * spacing && c.y >= iz0 * spacing && c.y <= iz1 * spacing) continue;
+                    count -= tufts[k].Count; tufts.Remove(k); dirty.Add(k);
+                }
+            }
+            else { foreach (var k in chunks.Keys) dirty.Add(k); tufts.Clear(); count = 0; }
             for (int iz = iz0; iz <= iz1; iz++)
             for (int ix = ix0; ix <= ix1; ix++)
             {
+                if (keep && old.Contains(new Vector2Int(ix, iz))) continue;   // (scattered already)
                 if (share < 1f && Noise.Hash(ix, iz, seed + 7) >= share) continue;   // (the Grass setting)
                 var rng = new Rng((int)(Noise.Hash(ix, iz, seed) * 16777215f) + 1);
                 var p = new Vector2((ix + rng.Range(-0.45f, 0.45f)) * spacing, (iz + rng.Range(-0.45f, 0.45f)) * spacing);
@@ -70,22 +88,29 @@ namespace Wonderland
                 long key = ChunkKey(p.x, p.y);
                 if (!tufts.TryGetValue(key, out var list)) tufts[key] = list = new List<Tuft>();
                 list.Add(new Tuft { x = p.x, z = p.y, scale = rng.Range(0.75f, 1.3f), rotation = rng.Range(0f, 360f), kind = kind, tint = rng.Range(0.85f, 1.1f) });
+                if (keep) dirty.Add(key);
                 count++;
             }
-            MarkAllDirty();
+            if (!keep) MarkAllDirty();
         }
 
         /// <summary>Whether a chunk (centre, half size) is near enough the world window to be built (null: everywhere).</summary>
         public System.Func<Vector2, float, bool> Shown;
 
         /// <summary>Shows just the chunks in the window: the grass and flowers outside it are neither drawn nor rebuilt.</summary>
-        public void Cull(System.Func<Vector2, float, bool> shown)
+        /// <remarks>Chunks far from the window (not <paramref name="kept"/>) are let go of and built again when it comes back.</remarks>
+        public void Cull(System.Func<Vector2, float, bool> shown, System.Func<Vector2, float, bool> kept = null)
         {
+            List<long> drop = null;
             foreach (var (k, c) in chunks)
             {
-                bool show = shown(ChunkCentre(k), ChunkSize);
+                var centre = ChunkCentre(k);
+                if (kept != null && !kept(centre, ChunkSize)) { (drop ??= new List<long>()).Add(k); continue; }
+                bool show = shown(centre, ChunkSize);
                 if (c.go.activeSelf != show) c.go.SetActive(show);
             }
+            if (drop != null)
+                foreach (var k in drop) { var c = chunks[k]; Release(c.go); Release(c.mesh); chunks.Remove(k); if (tufts.ContainsKey(k)) dirty.Add(k); }
         }
 
         private static long ChunkKey(float x, float z) => ((long)Mathf.FloorToInt(x / ChunkSize) << 32) ^ (uint)Mathf.FloorToInt(z / ChunkSize);
@@ -122,7 +147,7 @@ namespace Wonderland
             {
                 if (ready.Count >= maxChunks) break;
                 if (minInterval > 0f && lastBuilt.TryGetValue(k, out float t) && now - t < minInterval) continue;
-                if (Shown != null && !Shown(ChunkCentre(k), ChunkSize)) continue;   // (out of the window: built when it comes into view)
+                if (Shown != null && tufts.ContainsKey(k) && !Shown(ChunkCentre(k), ChunkSize)) continue;   // (a chunk to empty is emptied anyway)   // (out of the window: built when it comes into view)
                 ready.Add(k);
             }
             foreach (long k in ready)

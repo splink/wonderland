@@ -40,21 +40,41 @@ namespace Wonderland
             Reinit();
         }
 
-        /// <summary>Recreates the chunk layout for the field's current grid (after it was resized).</summary>
+        private RectInt laidOut;   // the grid (global cells) the chunks were laid out for
+
+        /// <summary>
+        /// Recreates the chunk layout for the field's current grid (after it was resized). In an endless world the grid
+        /// slides by whole chunks: a chunk still in it - and not on the edge it had, where its neighbours were missing -
+        /// keeps its mesh (vertices are in world coordinates), so only the land coming into the grid is built.
+        /// </summary>
         public void Reinit()
         {
+            var keep = new Dictionary<Vector2Int, Chunk>();
             if (chunks != null)
                 foreach (var c in chunks)
                 {
+                    bool inner = c.X0 > 0 && c.Z0 > 0 && c.X0 + c.W < laidOut.width - 1 && c.Z0 + c.H < laidOut.height - 1;
+                    var at = new Vector2Int(laidOut.x + c.X0, laidOut.y + c.Z0);
+                    if (field.Endless && inner && c.W == ChunkCells && c.H == ChunkCells) { keep[at] = c; continue; }
                     if (Application.isPlaying) { Destroy(c.Renderer.gameObject); Destroy(c.Mesh); }
                     else { DestroyImmediate(c.Renderer.gameObject); DestroyImmediate(c.Mesh); }
                 }
+            laidOut = field.Cells;
             chunksX = Mathf.CeilToInt((field.Nx - 1) / (float)ChunkCells);
             chunksZ = Mathf.CeilToInt((field.Nz - 1) / (float)ChunkCells);
             chunks = new Chunk[chunksX * chunksZ];
+            var build = new List<RectInt>();
             for (int cz = 0; cz < chunksZ; cz++)
             for (int cx = 0; cx < chunksX; cx++)
             {
+                int kx0 = cx * ChunkCells, kz0 = cz * ChunkCells;
+                if (keep.Remove(new Vector2Int(laidOut.x + kx0, laidOut.y + kz0), out var kept) && kept.W == Mathf.Min(ChunkCells, field.Nx - 1 - kx0) && kept.H == Mathf.Min(ChunkCells, field.Nz - 1 - kz0))
+                {
+                    kept.X0 = kx0; kept.Z0 = kz0;
+                    chunks[cz * chunksX + cx] = kept;
+                    continue;
+                }
+                build.Add(new RectInt(kx0, kz0, ChunkCells, ChunkCells));
                 var go = new GameObject($"Terrain chunk {cx},{cz}");
                 go.transform.SetParent(transform, false);
                 var mesh = new Mesh { name = go.name };
@@ -70,7 +90,12 @@ namespace Wonderland
                     X0 = x0, Z0 = z0, W = Mathf.Min(ChunkCells, field.Nx - 1 - x0), H = Mathf.Min(ChunkCells, field.Nz - 1 - z0), Mesh = mesh, Renderer = r,
                 };
             }
-            RebuildAll();
+            foreach (var c in keep.Values)
+            {
+                if (Application.isPlaying) { Destroy(c.Renderer.gameObject); Destroy(c.Mesh); }
+                else { DestroyImmediate(c.Renderer.gameObject); DestroyImmediate(c.Mesh); }
+            }
+            Rebuild(build);
         }
 
         public void RebuildAll() => Rebuild(field.All);
@@ -122,6 +147,11 @@ namespace Wonderland
             var s = field.Surface;
             float cell = field.Cell;
             int N = field.Nx, Nz = field.Nz;
+            // Sand only where water is near: a dry chunk needn't look for it vertex by vertex.
+            bool wet = false;
+            for (int z = Mathf.Max(0, c.Z0 - 4); z <= Mathf.Min(Nz - 1, c.Z0 + c.H + 4) && !wet; z++)
+            for (int x = Mathf.Max(0, c.X0 - 4); x <= Mathf.Min(N - 1, c.X0 + c.W + 4) && !wet; x++)
+                wet = field.Water[z * N + x] > 0.5f;
             for (int lz = 0; lz <= c.H; lz++)
             for (int lx = 0; lx <= c.W; lx++)
             {
@@ -133,7 +163,7 @@ namespace Wonderland
                 c.Normals[v] = new Vector3(hl - hr, 2f * cell, hd - hu).normalized;
                 float laplacian = (hl + hr + hd + hu - 4f * h) / (cell * cell);
                 float cavity = Mathf.Clamp01(0.5f - laplacian * 0.05f);
-                c.Colours[v] = new Color32((byte)(Mathf.Clamp01(field.Soil[i]) * 255f), (byte)(field.Edge[i] * 255f), (byte)(cavity * 255f), (byte)(255 - Beach(x, z) * 255f));
+                c.Colours[v] = new Color32((byte)(Mathf.Clamp01(field.Soil[i]) * 255f), (byte)(field.Edge[i] * 255f), (byte)(cavity * 255f), (byte)(255 - (wet ? Beach(x, z) : 0f) * 255f));
             }
             triangles.Clear();
             var edge = field.Edge;

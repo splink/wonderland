@@ -30,7 +30,7 @@ namespace Wonderland.Editor
             Report.Clear();
             bool gridWas = BuildGrid.Snap;
             BuildGrid.Snap = true;
-            try { Probe(); RealWorlds(); }
+            try { Probe(); RealWorlds(); Expanse(); }
             catch (Exception e) { Report.AppendLine("EXCEPTION " + e); }
             finally { BuildGrid.Snap = gridWas; }
             File.WriteAllText("Logs/buildprobe-results.txt", Report.ToString());
@@ -169,6 +169,87 @@ namespace Wonderland.Editor
                 }
             }
             if (built == 0) Report.AppendLine($"  no branch could be built ({tries} tries)");
+        }
+
+        /// <summary>
+        /// A big endless world: a railway and a street 24 m long across many windows, houses and trees along them, trains
+        /// and cars running. Navigating along it: what each slide costs, what is drawn against what exists, the memory,
+        /// and saving it.
+        /// </summary>
+        private static void Expanse()
+        {
+            var w = new GameObject("Expanse").AddComponent<WonderlandWorld>();
+            w.transform.position = new Vector3(0f, 0f, 400f);
+            w.Create(2f, WonderlandJourney.Materials(), 7, false, endless: true);
+            w.UseWindow(true);
+            var t = w.Terrain;
+            bool snap = BuildGrid.Snap; BuildGrid.Snap = true;
+            var build = Stopwatch.StartNew();
+            int built = 0, houses = 0;
+            // Built window by window, as a player would: the window slides along, the line and street carry on.
+            for (int seg = 0; seg < 16; seg++)
+            {
+                float x0 = -1.2f + seg * 1.5f, x1 = x0 + 1.5f;
+                List<Vector3> L(float z, float a, float b) { var pts = new List<Vector3>(); for (int i = 0; i <= 20; i++) { float x = Mathf.Lerp(a, b, i / 20f); pts.Add(new Vector3(x, t.SurfaceAt(x, z), z)); } return pts; }
+                if (w.BuildTrack(L(0.3f, x0, x1)).Ok) built++;
+                w.BuildPath(L(-0.4f, x0, x1), PathKind.Road);
+                for (int k = 0; k < 6; k++) if (w.PlaceHouse(new HouseInstance { x = x0 + 0.15f + k * 0.22f, z = -0.85f - (k % 2) * 0.3f, rotation = 0f, variant = k % 3 }) == null) houses++;
+                for (int k = 0; k < 3; k++) w.PaintForest(new Vector3(x0 + 0.7f, 0f, 1.0f), 0.3f, 1f, 0.3f);
+                w.Navigate(new Vector2Int(1, 0)); w.FinishSlide();
+            }
+            for (int i = 0; i < 4; i++) w.PlaceTrain(t.PointAt(2f + i * 5f, 0.3f), TrainKind.Passenger, Vector3.right, out _);
+            for (int i = 0; i < 6; i++) w.PlaceVehicle(t.PointAt(1f + i * 3.5f, -0.4f), VehicleKind.Car, 90f, i);
+            Report.AppendLine($"Expanse: {built}/16 pieces of railway, {w.Track.Network.Edges.Count} pieces now, {w.Paths.Lines.Count} roads, {houses} houses, {w.Forest.Trees.Count} trees, {w.People.Population} people, built in {build.Elapsed.TotalSeconds:0.0} s");
+            // Sliding back home along it, and out again.
+            var slides = new List<double>(); var frames = new List<double>();
+            long managed0 = GC.GetTotalMemory(true);
+            for (int i = 0; i < 32; i++)
+            {
+                var c = Stopwatch.StartNew();
+                w.Navigate(new Vector2Int(i < 16 ? -1 : 1, 0));
+                double start = c.Elapsed.TotalMilliseconds;
+                // The slide's frames (a real 0.45 s at 72 Hz): each frame's cost; the worst is the hitch a player would see.
+                double worstFrame = start;
+                for (int f = 0; f < 33 && w.Sliding; f++)
+                {
+                    var fc = Stopwatch.StartNew();
+                    w.Advance(1f / 72f);
+                    w.Forest.RebuildDirty(2, 0.12f); w.Cover.RebuildDirty(2, 0.15f);
+                    worstFrame = Math.Max(worstFrame, fc.Elapsed.TotalMilliseconds);
+                }
+                slides.Add(worstFrame);
+                frames.Add(c.Elapsed.TotalMilliseconds);
+            }
+            slides.Sort();
+            frames.Sort();
+            Report.AppendLine($"  sliding 32 times along it: the slowest frame of a slide {slides[16]:0} ms (median), {slides[^1]:0} ms (worst); a whole slide's work {frames[16]:0} ms (median); the grid stays {t.Nx * t.Cell:0.0} x {t.Nz * t.Cell:0.0} m");
+            long managed1 = GC.GetTotalMemory(true);
+            int renderers = 0, drawn = 0;
+            foreach (var r in w.GetComponentsInChildren<Renderer>(true)) { renderers++; if (r.enabled && r.gameObject.activeInHierarchy) drawn++; }
+            Report.AppendLine($"  {drawn} of {renderers} renderers drawn at the window; {t.Store.Count} chunks of land kept; managed memory {managed0 / 1048576} -> {managed1 / 1048576} MB over 32 slides");
+            // The simulation everywhere: a second of frames.
+            var sim = Stopwatch.StartNew();
+            for (int f = 0; f < 72; f++) { w.Trains.Step(1f / 72f); w.Traffic.Step(1f / 72f); w.People.Step(1f / 72f); w.SendMessage("LateUpdate"); }
+            Report.AppendLine($"  a second of the whole world's life (trains, traffic, people): {sim.Elapsed.TotalMilliseconds / 72f:0.0} ms a frame");
+            string dir = Path.Combine(Path.GetTempPath(), "wonderland-expanse");
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);
+            Directory.CreateDirectory(dir);
+            var save = Stopwatch.StartNew();
+            w.Save(Path.Combine(dir, "world.json"));
+            double first = save.Elapsed.TotalMilliseconds;
+            save.Restart(); w.Save(Path.Combine(dir, "world.json"));
+            Report.AppendLine($"  saving: {first:0} ms the first time, {save.Elapsed.TotalMilliseconds:0} ms again; {new FileInfo(Path.Combine(dir, "world.json")).Length / 1024} KB + {Directory.GetFiles(WonderlandWorld.ChunkFolder(Path.Combine(dir, "world.json"))).Length} chunk files");
+            var load = Stopwatch.StartNew();
+            var again = new GameObject("Expanse again").AddComponent<WonderlandWorld>();
+            again.transform.position = new Vector3(0f, 0f, 450f);
+            again.Load(WonderlandJourney.Materials(), Path.Combine(dir, "world.json"));
+            again.UseWindow(true);
+            Report.AppendLine($"  loading it: {load.Elapsed.TotalMilliseconds:0} ms ({again.Buildings.Houses.Count} houses, {again.Track.Network.Edges.Count} track pieces)");
+            UnityEngine.Object.DestroyImmediate(again.gameObject);
+            Directory.Delete(dir, true);
+            BuildGrid.Snap = snap;
+            Shader.SetGlobalFloat("_WL_WindowOn", 0f);
+            UnityEngine.Object.DestroyImmediate(w.gameObject);
         }
 
         /// <summary>A line's bends: each stretch where it turns, and by how much (degrees); and its straight stretches' headings.</summary>

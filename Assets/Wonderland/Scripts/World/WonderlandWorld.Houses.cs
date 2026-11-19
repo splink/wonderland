@@ -12,7 +12,7 @@ namespace Wonderland
         /// Grades a flat pad under a house (cut and fill to its average footprint height, soft 7 cm margin) and protects
         /// it from brushes, so a house never ends up half buried on a slope.
         /// </summary>
-        private RectInt PadHouse(HouseInstance h)
+        private RectInt PadHouse(HouseInstance h, bool reshape = true)
         {
             var region = PadRegion(h, out var e, out float margin);
             if (region.width <= 0) return region;
@@ -28,7 +28,7 @@ namespace Wonderland
                 float w = d <= 0f ? 1f : Mathf.SmoothStep(1f, 0f, d / margin);
                 int i = z * Terrain.Nx + x;
                 if (Terrain.Pad[i] >= 1f) continue;   // another house's flat ground
-                Terrain.Height[i] = Mathf.Lerp(Terrain.Height[i], Terrain.HeightForSurface(i, target), w);
+                if (reshape) Terrain.Height[i] = Mathf.Lerp(Terrain.Height[i], Terrain.HeightForSurface(i, target), w);
                 Terrain.Pad[i] = Mathf.Max(Terrain.Pad[i], d <= 0f ? 1f : w * 0.9f);
             }
             Terrain.UpdateSurface(region);
@@ -52,14 +52,17 @@ namespace Wonderland
         /// Re-derives every house pad (after houses were removed, moved, restored or loaded) - or, with
         /// <paramref name="within"/>, the pads there: every house whose pad reaches into it is padded again.
         /// </summary>
-        public void ApplyPads(RectInt? within = null)
+        /// <remarks>With <paramref name="reshape"/> false only the protection is laid down again, the ground left as it is
+        /// (land coming back into the grid: it was graded when the house was put there).</remarks>
+        public void ApplyPads(RectInt? within = null, bool reshape = true)
         {
             var area = within ?? Terrain.All;
             for (int z = area.yMin; z < area.yMax; z++)
                 System.Array.Clear(Terrain.Pad, z * Terrain.Nx + area.xMin, area.width);
             var padded = new List<RectInt>();
             foreach (var h in Buildings.Houses)
-                if (within == null || PadRegion(h, out _, out _).Overlaps(area)) padded.Add(PadHouse(h));
+                if (within == null || PadRegion(h, out _, out _).Overlaps(area)) padded.Add(PadHouse(h, reshape));
+            if (!reshape) return;   // (the ground is as it was: nothing looks or sits differently)
             TerrainView.Rebuild(padded);
             Buildings.Resit();
             Forest.MarkAllDirty();

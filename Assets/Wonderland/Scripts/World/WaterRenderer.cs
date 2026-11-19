@@ -57,6 +57,16 @@ namespace Wonderland
             builder.Clear();
             int x0 = cx * ChunkCells, z0 = cz * ChunkCells;
             int x1 = Mathf.Min(field.Nx - 1, x0 + ChunkCells), z1 = Mathf.Min(field.Nz - 1, z0 + ChunkCells);
+            // Dry all round (the usual case): nothing to build - and no searching cell by cell.
+            bool anyWater = false;
+            for (int z = Mathf.Max(0, z0 - 3); z <= Mathf.Min(field.Nz - 1, z1 + 3) && !anyWater; z++)
+            for (int x = Mathf.Max(0, x0 - 3); x <= Mathf.Min(field.Nx - 1, x1 + 3) && !anyWater; x++)
+                anyWater = field.Water[z * field.Nx + x] > 0f;
+            if (!anyWater)
+            {
+                if (chunks.TryGetValue(key, out var dry)) { Release(dry.go); Release(dry.mesh); chunks.Remove(key); }
+                return;
+            }
             float cell = field.Cell;
             for (int z = z0; z < z1; z++)
             for (int x = x0; x < x1; x++)

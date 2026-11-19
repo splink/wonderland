@@ -297,9 +297,9 @@ namespace Wonderland.Editor
             for (int k = 0; k < 6; k++) { w.PaintForest(new Vector3(-0.8f, 0f, -0.9f), 0.2f, 1f, 0.3f); w.PaintForest(new Vector3(4.0f, 0f, 1.0f), 0.2f, 1f, 0.3f); }
             var line = w.BuildTrack(Line(t, new Vector2(-1.3f, 0.3f), new Vector2(6.5f, 0.3f)));
             w.PlaceTrain(t.PointAt(-1.0f, 0.3f), TrainKind.Passenger, Vector3.right, out var train);
-            w.SendMessage("LateUpdate");
+            w.RefreshVisibility();
             w.Forest.RebuildDirty();
-            w.SendMessage("LateUpdate");
+            w.RefreshVisibility();
             var houses = w.Buildings.transform;
             int activeHouses = 0, hiddenHouses = 0;
             foreach (Transform h in houses) { if (h.gameObject.activeSelf) activeHouses++; else hiddenHouses++; }
@@ -313,7 +313,7 @@ namespace Wonderland.Editor
             for (int i = 0; i < 72 * 40 && train != null; i++)
             {
                 w.Trains.Step(Dt);
-                if (i % 12 == 0) w.SendMessage("LateUpdate");
+                if (i % 12 == 0) w.RefreshVisibility();
                 var p = w.Trains.LocoPosition(train);
                 farthest = Mathf.Max(farthest, p.x);
                 if (p.x > 1.8f && i % 12 == 0) { left = true; hiddenWhileOut &= !w.Trains.Drawn(train); }
@@ -329,7 +329,7 @@ namespace Wonderland.Editor
             {
                 w.Traffic.Step(Dt);
                 if (i % 12 != 0) continue;
-                w.SendMessage("LateUpdate");
+                w.RefreshVisibility();
                 carFarthest = Mathf.Max(carFarthest, car.Position.x);
                 if (!w.InWindow(car.Position, 0.1f)) { carOut = true; carHidden &= !car.Root.gameObject.activeSelf; }
             }
@@ -338,7 +338,7 @@ namespace Wonderland.Editor
 
             // Going after it: the window follows, the train and the far house appear.
             w.Navigate(new Vector2Int(1, 0)); w.FinishSlide(); w.Navigate(new Vector2Int(1, 0)); w.FinishSlide(); w.Navigate(new Vector2Int(1, 0)); w.FinishSlide();
-            w.SendMessage("LateUpdate");
+            w.RefreshVisibility();
             activeHouses = 0; foreach (Transform h in houses) if (h.gameObject.activeSelf) activeHouses++;
             var at = train != null ? w.Trains.LocoPosition(train) : Vector3.zero;
             bool trainShown = train != null && (w.InWindow(at) == w.Trains.Drawn(train));
