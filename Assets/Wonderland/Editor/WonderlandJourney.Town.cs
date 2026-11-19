@@ -151,6 +151,7 @@ namespace Wonderland.Editor
             for (float tt = 0f; tt < 7f; tt += 0.05f) { w.Buildings.Animate(tt, 0f, disco); litCounts.Add(w.Buildings.NeonLit(disco)); }
             Check(litCounts.Contains(0) && litCounts.Contains(5) && litCounts.Count >= 4, $"The disco's DISCO sign lights up letter by letter, blinks and shines ({litCounts.Count} different states)");
             // (over a whole day a cloud wraps round the land, perhaps back near where it was: watch it for a few seconds)
+            w.Sky.Shown = true;   // (an earlier journey may have hidden them)
             var drifting = w.Sky.PositionOf(0); float drift = 0f;
             for (float tt = 0f; tt < 4f; tt += Dt) { w.Sky.Step(Dt); var now = w.Sky.PositionOf(0); var step = new Vector2(now.x - drifting.x, now.z - drifting.z); if (step.magnitude < 0.5f) drift += step.magnitude; drifting = now; }
             Check(drift > 0.004f, $"Clouds drift on the breeze ({drift * 100f:0.0} cm in 4 s)");

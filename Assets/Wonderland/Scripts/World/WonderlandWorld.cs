@@ -332,6 +332,7 @@ namespace Wonderland
             var region = Terrain.ApplyBrush(brush, centre, radius, strength, dt, flattenTarget);
             if (region.width == 0) return;
             TerrainView.Rebuild(region);
+            if (Terrain.WaterChanged) { Terrain.WaterChanged = false; WaterView.Rebuild(new RectInt(region.x - 2, region.y - 2, region.width + 4, region.height + 4)); }
             People.WorldChanged();
             if (Track.HasTrack && brush != TerrainBrush.Grow && brush != TerrainBrush.Trim && TouchesTrack(centre, radius)) trackDirty = true;
             if (Paths.Lines.Count > 0 && Paths.Covers(centre, radius + 0.04f)) pathsDirty = true;

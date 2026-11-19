@@ -319,6 +319,7 @@ namespace Wonderland
                     else terrain.Height[i] = Mathf.Lerp(terrain.Height[i], Mathf.Min(terrain.Height[i], target), w * w);
                 }
             }
+            terrain.Despike(region);
             terrain.UpdateSurface(region);
             return region;
         }

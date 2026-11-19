@@ -643,8 +643,44 @@ namespace Wonderland
                     else if (target < Height[i]) Height[i] = Mathf.Lerp(Height[i], target, rate * 0.5f);
                 }
             }
+            Despike(r);
             UpdateSurface(r);
             return r;
+        }
+
+        /// <summary>A brush raised ground out of a pond (the water's mesh wants rebuilding); cleared by whoever rebuilds it.</summary>
+        public bool WaterChanged;
+
+        /// <summary>The most a single cell may stand above (or sink below) all eight of its neighbours.</summary>
+        public const float SpikeLimit = 0.003f;
+
+        /// <summary>
+        /// Takes out single-cell spikes and pits in a region (and its margin): a cell standing more than
+        /// <see cref="SpikeLimit"/> above all eight of its neighbours (or below all of them) is brought back to that. Real
+        /// shapes - a ridge, a crag, a channel two or more cells wide - are never touched; neither are house pads or the
+        /// ground under roads and the railway. Whatever made the spike (a brush at a pond's edge, a stream's banks, a
+        /// drained pond), it doesn't survive the stroke, and nothing is left sticking up that resists flattening.
+        /// </summary>
+        public void Despike(RectInt r)
+        {
+            var w = Expand(r, 1);
+            for (int z = Mathf.Max(1, w.yMin); z < Mathf.Min(Nz - 1, w.yMax); z++)
+            for (int x = Mathf.Max(1, w.xMin); x < Mathf.Min(Nx - 1, w.xMax); x++)
+            {
+                int i = z * Nx + x;
+                if (Pad[i] > 0.5f || KeepAt(i) > 0.5f) continue;
+                float lo = float.MaxValue, hi = float.MinValue, h = Height[i] * rim[i];
+                for (int dz = -1; dz <= 1; dz++)
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    if (dx == 0 && dz == 0) continue;
+                    int j = i + dz * Nx + dx;
+                    float v = Height[j] * rim[j];
+                    lo = Mathf.Min(lo, v); hi = Mathf.Max(hi, v);
+                }
+                if (h > hi + SpikeLimit) Height[i] = HeightForSurface(i, hi + SpikeLimit * 0.5f);
+                else if (h < lo - SpikeLimit && Water[i] < 0.5f) Height[i] = HeightForSurface(i, lo - SpikeLimit * 0.5f);
+            }
         }
         public float LockAt(float x, float z) => Inside(x, z) ? Bilinear(Lock, x, z) : Endless ? SampleOff(x, z, 5) : 0f;
         public Vector3 PointAt(float x, float z) => new(x, SurfaceAt(x, z), z);
@@ -769,9 +805,12 @@ namespace Wonderland
                         break;
                 }
                 Height[i] = Mathf.Clamp(h, MinHeight, MaxHeight);
+                // Raised out of a pond: dry land now (else it stood up through the water as a spike that stayed wet).
+                if (Water[i] > 0.5f && Height[i] * rim[i] > WaterLevel[i] + 0.002f) { Water[i] = 0f; WaterChanged = true; }
             }
             if (brush == TerrainBrush.Raise || brush == TerrainBrush.Lower) Slump(r, 2);
             if (brush == TerrainBrush.Peaks) Slump(r, 1);
+            Despike(r);
             UpdateSurface(r);
             return r;
         }
