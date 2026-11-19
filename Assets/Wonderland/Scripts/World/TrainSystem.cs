@@ -92,7 +92,6 @@ namespace Wonderland
         public const float DwellSeconds = 3.5f;
         public const float Gap = 0.006f;             // between the cars of one train
         public const float Spacing = 0.03f;          // trains keep at least this far apart
-        public const int MaxTrains = 8;
         public const int LiveryCount = 6;
 
         public readonly List<Train> Trains = new();
@@ -126,10 +125,13 @@ namespace Wonderland
 
         // ------------------------------------------------------------------ consists
 
-        /// <summary>How many carriages (wagons; railcar units) a train of this kind may have, and has unless changed.</summary>
+        /// <summary>
+        /// The fewest carriages (wagons; railcar units) a train of this kind has, and how many it has unless changed. There
+        /// is no most: a train grows as long as there is track behind it and no other train in the way.
+        /// </summary>
         public static (int min, int usual, int max) CarRange(TrainKind kind) => kind switch
         {
-            TrainKind.Goods => (0, 4, 8), TrainKind.Railcar => (1, 1, 3), TrainKind.Express => (2, 4, 7), TrainKind.Tank => (0, 2, 3), _ => (0, 2, 6),
+            TrainKind.Goods => (0, 4, int.MaxValue), TrainKind.Railcar => (1, 1, int.MaxValue), TrainKind.Express => (2, 4, int.MaxValue), TrainKind.Tank => (0, 2, int.MaxValue), _ => (0, 2, int.MaxValue),
         };
 
         public static int CarsOf(Train t) => t.Carriages >= 0 ? t.Carriages : CarRange(t.Kind).usual;
@@ -171,7 +173,6 @@ namespace Wonderland
         public Train Add(TrainKind kind, int livery, int edge, float s, int orientation, out string error)
         {
             error = null;
-            if (Trains.Count >= MaxTrains) { error = $"That's plenty of trains ({MaxTrains})"; return null; }
             var t = new Train { Kind = kind, Livery = livery, Length = LengthOf(kind), SpeedFactor = kind == TrainKind.Express ? 1.3f : kind == TrainKind.Tank ? 0.8f : 1f };
             if (Net.Directed(edge)) orientation = 1;   // one way: every train faces the way the railway runs
             if (!Lay(t, edge, s, orientation, t.Length * 0.5f, null)) { error = "Not enough track here for this train"; return null; }
@@ -203,9 +204,8 @@ namespace Wonderland
         /// </summary>
         public string SetCars(Train t, int cars)
         {
-            var (min, _, max) = CarRange(t.Kind);
+            var (min, _, _) = CarRange(t.Kind);
             int now = CarsOf(t);
-            if (cars > max) return $"That's as long as this train gets ({max} {CarWord(t.Kind, max)})";
             if (cars < min) return t.Kind == TrainKind.Railcar ? "A railcar runs on its own at the least" : "Just the engine now";
             if (cars == now) return null;
             var front = PointAt(t.Path, t.Length, out var forward);   // the engine's end (the path runs tail to engine)

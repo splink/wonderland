@@ -344,6 +344,7 @@ namespace Wonderland.Editor
                 if (Environment.GetEnvironmentVariable("WL_GRID_ONLY") != "1") { BuildGrid.Snap = false; RailJourney(); }
                 BuildGrid.Snap = true; mode = "[grid] "; RailJourney(); mode = "";
                 GridRailJourney();
+                ManyTrainsJourney();
             }
             catch (Exception e) { Fail("Exception: " + e); }
             finally { BuildGrid.Snap = gridWas; mode = ""; }
@@ -351,6 +352,46 @@ namespace Wonderland.Editor
             System.IO.File.WriteAllText("Logs/rail-results.txt", Report.ToString());
             Debug.Log("Wonderland rail test\n" + Report);
             if (Application.isBatchMode) EditorApplication.Exit(failures == 0 ? 0 : 1);
+        }
+
+        /// <summary>
+        /// No set limits: a dozen trains run on one big loop at once, and a goods train coupled up to twenty wagons runs
+        /// round its curves - the only limits are room on the track and the trains already there.
+        /// </summary>
+        private static void ManyTrainsJourney()
+        {
+            bool gridWas = BuildGrid.Snap;
+            BuildGrid.Snap = false;
+            var w = Scratch("Many trains", 1400f);
+            var t = w.Terrain;
+            w.BuildTrack(Loop(t, 0.85f, 0.75f, 0.97f, false));
+            int placed = 0; string why = null;
+            var kinds = new[] { TrainKind.Tank, TrainKind.Railcar };   // (short ones: twelve fit on a 5 m loop with room to keep their distance)
+            for (int k = 0; k < 12; k++)
+            {
+                float a = k / 12f * Mathf.PI * 2f;
+                var at = t.PointAt(Mathf.Cos(a) * 0.85f, Mathf.Sin(a) * 0.75f);
+                string e = w.PlaceTrain(at, kinds[k % kinds.Length], new Vector3(-Mathf.Sin(a), 0f, Mathf.Cos(a)), out _);
+                if (e == null) placed++; else why = e;
+            }
+            Check(placed == 12, $"Twelve trains go on one big loop - no set limit ({placed} placed{(why != null ? ", " + why : "")})");
+            foreach (var tr in w.Trains.Trains) tr.Running = true;
+            var (gap, off) = RunTrains(w, 30f);
+            Check(gap > 0.004f && off < 0.004f, $"...and run together without touching or leaving the rails (closest {gap * 100f:0.0} cm, {off * 1000f:0.0} mm off the rails)");
+            // A long goods train on a loop of its own.
+            var w2 = Scratch("Long train", 1460f);
+            w2.BuildTrack(Loop(w2.Terrain, 0.85f, 0.75f, 0.97f, false));
+            w2.PlaceTrain(w2.Terrain.PointAt(0f, -0.75f), TrainKind.Goods, Vector3.right, out var goods);
+            string grow = goods == null ? "no train" : null;
+            for (int n = goods != null ? TrainSystem.CarsOf(goods) + 1 : 99; goods != null && n <= 20 && grow == null; n++) grow = w2.Trains.SetCars(goods, n);
+            int wagons = goods != null ? TrainSystem.CarsOf(goods) : 0;
+            Check(wagons == 20, $"A goods train couples up to twenty wagons ({wagons}{(grow != null ? ": " + grow : "")})");
+            if (goods != null) goods.Running = true;
+            var (_, offLong) = RunTrains(w2, 40f);
+            Check(offLong < 0.004f && goods != null && TrainSystem.CarsOf(goods) == 20, $"...and runs round the curves with every wagon on the rails ({offLong * 1000f:0.0} mm at worst)");
+            UnityEngine.Object.DestroyImmediate(w.gameObject);
+            UnityEngine.Object.DestroyImmediate(w2.gameObject);
+            BuildGrid.Snap = gridWas;
         }
 
         /// <summary>Just the railway on the grid: Logs/gridrail-results.txt.</summary>
