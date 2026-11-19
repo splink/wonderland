@@ -392,13 +392,16 @@ namespace Wonderland
                 }
             }
             var all = new List<RoadJunction>();
+            var bounds = new Rect[Lines.Count];   // (only the roads whose bounds it is in can run through it)
+            for (int li = 0; li < Lines.Count; li++) bounds[li] = AreaOf(Lines[li], 0.012f);
             foreach (var p in found)
             {
                 var j = new RoadJunction { At = p };
                 float half = 0f;
-                foreach (var l in Lines)
+                for (int li = 0; li < Lines.Count; li++)
                 {
-                    if (!IsCarWay(l.kind) || Distance(l, p) > 0.012f) continue;
+                    var l = Lines[li];
+                    if (!IsCarWay(l.kind) || !bounds[li].Contains(p) || Distance(l, p) > 0.012f) continue;
                     j.Members.Add(l);
                     half = Mathf.Max(half, HalfWidth(l.kind));
                 }
@@ -427,18 +430,23 @@ namespace Wonderland
             foreach (var j in all)
             {
                 if (j.Arms.Count < 3) continue;
-                // One flat surface, at the highest ground under it (like the roads' flat cross-sections).
-                float y = RoadHeight(j.At, out _);
-                for (int k = 0; k < 16; k++)
-                    foreach (float f in new[] { 0.4f, 0.75f, 1f })
-                    {
-                        float ang = k / 16f * Mathf.PI * 2f;
-                        y = Mathf.Max(y, RoadHeight(j.At + new Vector2(Mathf.Cos(ang), Mathf.Sin(ang)) * j.Radius * f, out _));
-                    }
-                j.Y = y;
+                j.Y = LevelOf(j);
                 j.Group();
                 Junctions.Add(j);
             }
+        }
+
+        /// <summary>A junction is one flat surface, at the highest ground under it (like the roads' flat cross-sections).</summary>
+        private float LevelOf(RoadJunction j)
+        {
+            float y = RoadHeight(j.At, out _);
+            for (int k = 0; k < 16; k++)
+                foreach (float f in new[] { 0.4f, 0.75f, 1f })
+                {
+                    float ang = k / 16f * Mathf.PI * 2f;
+                    y = Mathf.Max(y, RoadHeight(j.At + new Vector2(Mathf.Cos(ang), Mathf.Sin(ang)) * j.Radius * f, out _));
+                }
+            return y;
         }
 
         /// <summary>The arms of a junction (the directions its roads leave in), and the radius its roads stop at.</summary>
@@ -782,8 +790,9 @@ namespace Wonderland
         /// straight on, the kerb carries straight on too), a stop line across the lanes coming in, and traffic lights on
         /// every arm.
         /// </summary>
-        private void JunctionSurfaces(MeshBuilder b, MeshBuilder props)
+        private List<Piece> JunctionPieces()
         {
+            var pieces = new List<Piece>();
             for (int ji = 0; ji < Junctions.Count; ji++)
             {
                 var j = Junctions[ji];
@@ -793,6 +802,18 @@ namespace Wonderland
                 for (int k = 0; k < j.Arms.Count; k++)
                     if (!ms.Exists(x => Vector2.Dot(x.o, j.Arms[k]) > 0.9f)) ms.Add((j.At + j.Arms[k] * j.Radius, j.Arms[k], j.ArmKind[k]));
                 if (ms.Count < 2) continue;
+                var piece = JunctionPiece(j, ms, out bool build);
+                if (build) JunctionSurface(piece.Ground, piece.Props, ji, j, ms, piece);
+                pieces.Add(piece);
+                foreach (var (arm, head, facing) in piece.Lights) LightHeads.Add((ji, arm, head, facing));
+            }
+            return pieces;
+        }
+
+        /// <summary>One junction's asphalt, kerbs, stop lines and traffic lights (the lights' heads noted in its piece).</summary>
+        private void JunctionSurface(MeshBuilder b, MeshBuilder props, int ji, RoadJunction j, List<(Vector2 p, Vector2 o, int kind)> ms, Piece piece)
+        {
+            {
                 ms.Sort((x, y) => Mathf.Atan2(x.p.y - j.At.y, x.p.x - j.At.x).CompareTo(Mathf.Atan2(y.p.y - j.At.y, y.p.x - j.At.x)));
                 float y = j.Y + RoadLift;
                 var outline = new List<Vector2>();
@@ -854,7 +875,7 @@ namespace Wonderland
                     props.Push(head, Quaternion.LookRotation(-facing, Vector3.up));
                     props.AddBox(new Vector3(0f, 0f, 0.0012f), new Vector3(0.0055f, 0.0145f, 0.0035f), Pal.Hex("#24272C"));
                     props.Pop();
-                    LightHeads.Add((ji, arm, head, facing));
+                    piece.Lights.Add((arm, head, facing));
                 }
             }
         }

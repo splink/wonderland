@@ -103,8 +103,16 @@ namespace Wonderland
         /// <summary>Advances the traffic (also driven by the scripted tests).</summary>
         private float stepDt;
 
+        // Vehicles still to find their way on changed roads (a few a step, so a new road doesn't stall the frame).
+        private readonly List<Vehicle> rerouting = new();
+
         public void Step(float dt)
         {
+            for (int k = 0; k < 4 && rerouting.Count > 0; k++)
+            {
+                var v = rerouting[^1]; rerouting.RemoveAt(rerouting.Count - 1);
+                if (Vehicles.Contains(v) && v.State != Mode.Parked && !Reroute(v)) GoHome(v, true);
+            }
             stepDt = dt;
             checkTimer -= dt;
             if (checkTimer <= 0f)
@@ -302,7 +310,9 @@ namespace Wonderland
             foreach (var v in Vehicles) if (!keep.Contains(v) && !v.Roams) Destroy(v);
             foreach (var v in Vehicles) if (v.Roams) keep.Add(v);   // the player's own vehicles stay
             Vehicles.Clear(); Vehicles.AddRange(keep);
-            foreach (var v in Vehicles) if (v.State != Mode.Parked) { if (!Reroute(v)) GoHome(v, true); }
+            // The ones on the move find their way on the new roads a few at a time (their routes are drivable meanwhile).
+            rerouting.Clear();
+            foreach (var v in Vehicles) if (v.State != Mode.Parked) rerouting.Add(v);
             AbandonOrphans();
         }
 

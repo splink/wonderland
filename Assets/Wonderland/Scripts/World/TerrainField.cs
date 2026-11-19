@@ -146,6 +146,7 @@ namespace Wonderland
 
         private void Allocate(RectInt c)
         {
+            changedAll = true;
             GX0 = c.x; GZ0 = c.y; Nx = c.width; Nz = c.height;
             int n = Nx * Nz;
             Height = new float[n]; Surface = new float[n]; Land = new float[n]; Edge = new float[n]; Lock = new float[n]; Soil = new float[n]; Pad = new float[n];
@@ -461,8 +462,38 @@ namespace Wonderland
         /// <summary>Rim shaping: 0 at the shore, 1 well inland.</summary>
         public static float Shape(float edge) => edge * edge * (3f - 2f * edge);
 
+        // Where the ground has changed since the ways last rebuilt (local space; overlapping changes merged), or everywhere.
+        private readonly List<Rect> changed = new();
+        private bool changedAll = true;
+
+        /// <summary>Whether the ground has changed in (or a cell beside) <paramref name="area"/> since <see cref="ForgetChanges"/>.</summary>
+        public bool ChangedNear(Rect area)
+        {
+            if (changedAll) return true;
+            foreach (var r in changed) if (r.Overlaps(area)) return true;
+            return false;
+        }
+
+        /// <summary>The ways have caught up with the ground.</summary>
+        public void ForgetChanges() { changed.Clear(); changedAll = false; }
+
+        private void NoteChanged(Rect area)
+        {
+            for (int k = changed.Count - 1; k >= 0; k--)
+            {
+                var r = changed[k];
+                if (!r.Overlaps(area)) continue;
+                area = Rect.MinMaxRect(Mathf.Min(r.xMin, area.xMin), Mathf.Min(r.yMin, area.yMin), Mathf.Max(r.xMax, area.xMax), Mathf.Max(r.yMax, area.yMax));
+                changed.RemoveAt(k);
+            }
+            changed.Add(area);
+            if (changed.Count > 64) changedAll = true;
+        }
+
         public void UpdateSurface(RectInt r)
         {
+            if (r.width > 0 && r.height > 0 && !changedAll)
+                NoteChanged(Rect.MinMaxRect(LocalX(r.xMin) - Cell, LocalZ(r.yMin) - Cell, LocalX(r.xMax) + Cell, LocalZ(r.yMax) + Cell));
             for (int z = r.yMin; z < r.yMax; z++)
             for (int x = r.xMin; x < r.xMax; x++)
             {

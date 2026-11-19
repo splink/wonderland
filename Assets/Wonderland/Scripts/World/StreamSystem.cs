@@ -277,7 +277,9 @@ namespace Wonderland
             foreach (var p in s.points) { minX = Mathf.Min(minX, p.x); maxX = Mathf.Max(maxX, p.x); minZ = Mathf.Min(minZ, p.z); maxZ = Mathf.Max(maxZ, p.z); }
             float widest = (HalfWidth + Bank) * s.MaxWidth + Margin;
             bool wetStart = InPond(terrain, s.points[0].x, s.points[0].z) || s.JoinsAtStart, wetEnd = InPond(terrain, s.points[^1].x, s.points[^1].z) || s.JoinsAtEnd;
-            var region = terrain.RegionAround(new Vector2((minX + maxX) / 2f, (minZ + maxZ) / 2f), Mathf.Max(maxX - minX, maxZ - minZ) / 2f + widest + 0.02f);
+            // (its own bounds, not a square round it: a long stream's region is a strip)
+            RectInt lo = terrain.RegionAround(new Vector2(minX, minZ), widest + 0.02f), hi = terrain.RegionAround(new Vector2(maxX, maxZ), widest + 0.02f);
+            var region = new RectInt(lo.xMin, lo.yMin, Mathf.Max(0, hi.xMax - lo.xMin), Mathf.Max(0, hi.yMax - lo.yMin));
             var near = new List<StreamPath>();
             if (others != null)
                 foreach (var o in others)
@@ -286,12 +288,15 @@ namespace Wonderland
                     foreach (var q in o.points) if (q.x > minX - 0.1f && q.x < maxX + 0.1f && q.z > minZ - 0.1f && q.z < maxZ + 0.1f) { near.Add(o); break; }
                 }
             float length = PathLength(s);
+            // (each cell looks only at the stretches of stream in its neighbourhood, not along the whole stream)
+            var grid = new Segments(s, widest);
+            var nearGrids = near.ConvertAll(o => new Segments(o, widest));
             for (int z = region.yMin; z < region.yMax; z++)
             for (int x = region.xMin; x < region.xMax; x++)
             {
                 var c = new Vector2(terrain.LocalX(x), terrain.LocalZ(z));
                 if (c.x < minX - widest || c.x > maxX + widest || c.y < minZ - widest || c.y > maxZ + widest) continue;
-                float d = Nearest(s, c, out float level, out float along);
+                float d = grid.Nearest(c, out float level, out float along);
                 float width = s.WidthAlong(along);
                 float reach = (HalfWidth + Bank) * width + Margin;
                 if (d >= reach) continue;
@@ -308,7 +313,7 @@ namespace Wonderland
                 else
                 {
                     bool inOther = false;
-                    foreach (var o in near) if (Nearest(o, c, out _, out float oa) < HalfWidth * o.WidthAlong(oa) + Margin) { inOther = true; break; }
+                    for (int k = 0; k < near.Count && !inOther; k++) if (nearGrids[k].Nearest(c, out _, out float oa) < HalfWidth * near[k].WidthAlong(oa) + Margin) inOther = true;
                     if (inOther) continue;
                     float w = 1f - (d - hw) / (reach - hw);
                     // The bank starts just under the water (the ribbon's edge dips into it) and rises gently.
@@ -412,6 +417,56 @@ namespace Wonderland
 
         /// <summary>A river's channel is deeper too (not in proportion: a creek is still a little channel).</summary>
         private static float DepthScale(float width) => Mathf.Lerp(1f, width, 0.6f);
+
+        /// <summary>
+        /// A stream's stretches filed by where they are (cells of at least the reach asked about), so the nearest stretch
+        /// to a point within that reach is found among its neighbours instead of along the whole stream.
+        /// </summary>
+        private sealed class Segments
+        {
+            private readonly StreamPath s;
+            private readonly float cell;
+            private readonly Dictionary<long, List<int>> cells = new();
+
+            public Segments(StreamPath stream, float reach)
+            {
+                s = stream; cell = Mathf.Max(reach, Spacing * 2f);
+                for (int i = 0; i < s.points.Count - 1; i++)
+                {
+                    var a = s.points[i]; var b = s.points[i + 1];
+                    int x0 = Mathf.FloorToInt(Mathf.Min(a.x, b.x) / cell), x1 = Mathf.FloorToInt(Mathf.Max(a.x, b.x) / cell);
+                    int z0 = Mathf.FloorToInt(Mathf.Min(a.z, b.z) / cell), z1 = Mathf.FloorToInt(Mathf.Max(a.z, b.z) / cell);
+                    for (int z = z0; z <= z1; z++)
+                    for (int x = x0; x <= x1; x++)
+                    {
+                        long k = ((long)x << 32) ^ (uint)z;
+                        if (!cells.TryGetValue(k, out var list)) cells[k] = list = new List<int>();
+                        list.Add(i);
+                    }
+                }
+            }
+
+            /// <summary>As <see cref="StreamSystem.Nearest"/>, for points within the reach (beyond it: infinity, or farther).</summary>
+            public float Nearest(Vector2 p, out float level, out float along)
+            {
+                float best = float.MaxValue; level = 0f; along = 0f;
+                int cx = Mathf.FloorToInt(p.x / cell), cz = Mathf.FloorToInt(p.y / cell);
+                for (int dz = -1; dz <= 1; dz++)
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    if (!cells.TryGetValue(((long)(cx + dx) << 32) ^ (uint)(cz + dz), out var list)) continue;
+                    foreach (int i in list)
+                    {
+                        var a = new Vector2(s.points[i].x, s.points[i].z); var b = new Vector2(s.points[i + 1].x, s.points[i + 1].z);
+                        var ab = b - a;
+                        float t = Mathf.Clamp01(Vector2.Dot(p - a, ab) / Mathf.Max(ab.sqrMagnitude, 1e-9f));
+                        float d = (p - (a + ab * t)).sqrMagnitude;
+                        if (d < best) { best = d; level = Mathf.Lerp(s.points[i].y, s.points[i + 1].y, t); along = (i + t) * Spacing; }
+                    }
+                }
+                return Mathf.Sqrt(best);
+            }
+        }
 
         /// <summary>Horizontal distance from a point to a stream, with the water level and arc length there.</summary>
         public static float Nearest(StreamPath s, Vector2 p, out float level, out float along)

@@ -282,21 +282,51 @@ namespace Wonderland
             if (pathsDirty && Time.realtimeSinceStartup - pathsUpdated > 0.3f) { pathsDirty = false; pathsUpdated = Time.realtimeSinceStartup; RefreshBridges(); }
         }
 
-        /// <summary>Sculpting near a stream: re-level it on its course (still flowing downhill) and re-carve its channel.</summary>
+        // The streams a brush has come near since they were last re-levelled (none: all of them).
+        private readonly HashSet<StreamPath> streamsTouched = new();
+
+        /// <summary>
+        /// Sculpting near a stream: re-level it on its course (still flowing downhill) and re-carve its channel - only the
+        /// streams the brush came near (and the ones they run into or out of), not every stream in the world.
+        /// </summary>
         public void UpdateStreamsFromTerrain()
         {
             streamsDirty = false;
             streamsUpdated = Time.realtimeSinceStartup;
-            var region = new RectInt(0, 0, 0, 0);
+            var which = new List<StreamPath>();
             foreach (var st in Streams.Streams)
+                if (streamsTouched.Count == 0 || streamsTouched.Contains(st) || JoinsTouched(st)) which.Add(st);
+            streamsTouched.Clear();
+            foreach (var st in which)
             {
                 StreamSystem.Relevel(st, Terrain, Streams.Streams);
                 var r = StreamSystem.Carve(Terrain, st, Streams.Streams);
                 TerrainView.Rebuild(r);
+                MarkCoverDirty(r);
             }
             Streams.Rebuild();
-            Cover.MarkAllDirty();
             if (Track.HasTrack) trackDirty = true;
+        }
+
+        // A stream starting or ending on a touched one (its level follows the other's).
+        private bool JoinsTouched(StreamPath st)
+        {
+            if (!st.JoinsAtStart && !st.JoinsAtEnd) return false;
+            foreach (var o in streamsTouched)
+            {
+                if (o == st || o.points.Count < 2) continue;
+                foreach (var p in new[] { st.points[0], st.points[^1] })
+                    if (StreamSystem.Nearest(o, new Vector2(p.x, p.z), out _, out _) < 0.03f) return true;
+            }
+            return false;
+        }
+
+        /// <summary>The ground cover over a region of the terrain grid is laid again.</summary>
+        private void MarkCoverDirty(RectInt r)
+        {
+            if (r.width <= 0 || r.height <= 0) return;
+            var a = new Vector2(Terrain.LocalX(r.xMin), Terrain.LocalZ(r.yMin)); var b = new Vector2(Terrain.LocalX(r.xMax), Terrain.LocalZ(r.yMax));
+            Cover.MarkDirtyRegion((a + b) * 0.5f, (b - a).magnitude * 0.5f);
         }
 
         // ------------------------------------------------------------------ terrain
@@ -336,7 +366,9 @@ namespace Wonderland
             People.WorldChanged();
             if (Track.HasTrack && brush != TerrainBrush.Grow && brush != TerrainBrush.Trim && TouchesTrack(centre, radius)) trackDirty = true;
             if (Paths.Lines.Count > 0 && Paths.Covers(centre, radius + 0.04f)) pathsDirty = true;
-            if (Streams.Streams.Count > 0 && brush != TerrainBrush.Grow && brush != TerrainBrush.Trim && Streams.DistanceTo(centre, out _) < radius + 0.05f) streamsDirty = true;
+            if (Streams.Streams.Count > 0 && brush != TerrainBrush.Grow && brush != TerrainBrush.Trim)
+                foreach (var st in Streams.Streams)
+                    if (st.points.Count > 1 && StreamSystem.Nearest(st, centre, out _, out _) < radius + 0.05f) { streamsTouched.Add(st); streamsDirty = true; }
             // Land edits move the shore (and its taper) up to a rim width beyond the brush.
             float reach = brush == TerrainBrush.Grow || brush == TerrainBrush.Trim ? radius + TerrainField.RimWidth : radius;
             Forest.MarkDirtyRegion(centre, reach);

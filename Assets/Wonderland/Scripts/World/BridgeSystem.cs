@@ -259,6 +259,21 @@ namespace Wonderland
         /// Whether a local point is on the deck of a road or path bridge: its height there, and whether the path's own
         /// surface should give way to the bridge's (footbridges and stepping stones draw their own).
         /// </summary>
+        /// <summary>A key for the road and path decks overlapping an area: it changes when any of them does.</summary>
+        public int KeyNear(Rect area)
+        {
+            var h = new System.HashCode();
+            foreach (var b in Bridges)
+                foreach (var m in b.Members)
+                {
+                    if (m.Track || !m.Bounds.Overlaps(area)) continue;
+                    h.Add(b.Style); h.Add(b.Length); h.Add(m.Bounds);
+                    foreach (var q in m.Points) h.Add(q);
+                    foreach (bool w in m.Wet) h.Add(w);
+                }
+            return h.ToHashCode();
+        }
+
         public bool Deck(Vector2 p, out float height, out bool hide, float margin = 0f)
         {
             height = 0f; hide = false;

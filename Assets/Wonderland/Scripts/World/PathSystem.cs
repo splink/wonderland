@@ -401,16 +401,26 @@ namespace Wonderland
         public void Rebuild()
         {
             graph = null;
+            PiecesBuilt = 0;
             Index();
-            var ground = new MeshBuilder(); var barriers = new MeshBuilder();
+            // The junctions: found again when the ways have changed, else only levelled again where the ground has.
+            bool restructured = Restructured();
+            if (restructured) FindJunctions(); else Relevel();
             // Ways in a fixed order, widest first, each kind a hair higher, so junctions overlap cleanly.
-            FindJunctions();
+            var pieces = new List<Piece>();
             foreach (var kind in new[] { PathKind.Highway, PathKind.Road, PathKind.Lane, PathKind.Footpath, PathKind.Trail })
-                foreach (var l in Lines) if (l.kind == (int)kind) { if (IsRoad(l.kind)) RoadSurface(ground, barriers, l); else Way(ground, barriers, l); }
-            JunctionSurfaces(ground, barriers);
+                foreach (var l in Lines) if (l.kind == (int)kind) pieces.Add(WayPiece(l));
+            pieces.AddRange(JunctionPieces());
+            // (nothing redone and nothing moved: the ways' ground stays as it is)
+            if (restructured || PiecesBuilt > 0)
+            {
+                Gather(ground, pieces, p => p.Ground);
+                ground.ToMesh("Ways", groundMesh); groundMesh.RecalculateBounds();
+            }
+            Gather(barriers, pieces, p => p.Props);
             foreach (var l in Lines) if (IsBarrier(l.kind)) Barrier(barriers, l);
             FindLevelCrossings(barriers);
-            ground.ToMesh("Ways", groundMesh); groundMesh.RecalculateBounds();
+            ForgetPieces();
             barriers.ToMesh("Fences and hedges", barrierMesh); barrierMesh.RecalculateBounds();
         }
 

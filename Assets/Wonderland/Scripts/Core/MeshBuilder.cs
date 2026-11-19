@@ -97,6 +97,15 @@ namespace Wonderland
 
         public void AddTriangle(int a, int b, int c) { Triangles.Add(a); Triangles.Add(b); Triangles.Add(c); }
 
+        /// <summary>Copies another builder's geometry in, as it is.</summary>
+        public void Append(MeshBuilder other)
+        {
+            int start = VertexCount;
+            Vertices.AddRange(other.Vertices); Normals.AddRange(other.Normals); Colors.AddRange(other.Colors); Uvs.AddRange(other.Uvs);
+            var t = other.Triangles;
+            for (int i = 0; i < t.Count; i++) Triangles.Add(t[i] + start);
+        }
+
         /// <summary>Copies a finished mesh in (placed by <paramref name="at"/>).</summary>
         public void AddMesh(Mesh mesh, Matrix4x4 at)
         {
