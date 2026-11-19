@@ -95,9 +95,13 @@ whole network), **Random**, or **Manual**.
 level), **Stream** is drawn like the railway and flows only downhill, carving a channel, and **Drain** takes water
 away (tap a stream to remove it). Reeds and lily pads grow at the water's edge.
 
-**Build (41 places in 7 categories).** Pick a category chip (Homes, Town, Farm, Fun, Travel, Nature, Small), then an
-item in the row below. With the grid on (the **Grid** chip, on by default), a building near a road turns to face it
-and lines up along it just behind the kerb; elsewhere it sits on the grid in quarter turns:
+**Build: the library.** Pick a category (Homes, Town, Shops, Work, Farm, Leisure, Zoo, Travel, Nature, Details), then a
+family in the row below (Homes: Cottages, Town homes; Travel: Railway, Road, Water...). The family's objects show as
+tiles beside the palette (on its left, out of the pointing hand's way), each with a little model that turns when you
+point at it; under them, what the object is and does: who lives or works there and when, what it makes and takes,
+whether children love it, and where it has to go (beside the railway, by a road, at a pond's edge). With the grid on
+(Settings, on by default), a building near a road turns to face it and lines up along it just behind the kerb;
+elsewhere it sits on the grid in quarter turns:
 - **Homes:** cottage, townhouse, thatched, apartments, chalet
 - **Town:** church, town hall, bakery, café, grocer, school, fire station, fountain
 - **Farm:** barn, windmill with turning sails, silo, greenhouse, fields of wheat, sunflowers or lavender, vegetable garden
@@ -508,7 +512,7 @@ it. Nothing needs connecting by hand, and nothing is invented that the world doe
   - Raising land or digging a pond never pushes through a road or a track.
 - **Harbours** snap to the shore you point at.
 - **Shops** have their own colours and fronts, and bigger roof symbols.
-- **The Build palette** shows long categories seven items a page (‹ ›).
+- **The Build library** shows a family eight tiles a page (‹ ›).
 - **Ponds** have smooth, soft shorelines.
 
 Select anything to see what it's doing:

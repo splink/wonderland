@@ -311,17 +311,27 @@ namespace Wonderland
                     }));
                     break;
                 case Tool.Houses:
-                    for (int c = 0; c < Catalog.CategoryNames.Length; c++)
+                    // The library: a category, then a family (the second row), then the object (its tile beside the palette).
+                    foreach (var cat in Catalog.CategoryOrder)
                     {
-                        var cat = (PlaceCategory)c;
-                        o.Add(new PaletteUI.Option(Catalog.CategoryNames[c], BuildCategory == cat, () => SelectCategory(cat)));
+                        var c = cat;
+                        o.Add(new PaletteUI.Option(Catalog.CategoryNames[(int)c], BuildCategory == c, () => SelectCategory(c)));
                     }
-                    o.Add(GridChip());
-                    foreach (int id in Catalog.InCategory(BuildCategory))
+                    var families = Catalog.Families(BuildCategory);
+                    if (!families.Contains(BuildFamily)) BuildFamily = Catalog.Get(HouseVariant).Category == BuildCategory ? Catalog.Get(HouseVariant).Family : families[0];
+                    foreach (var family in families)
+                    {
+                        string f = family;
+                        items.Add(new PaletteUI.Option(f, BuildFamily == f, () => SelectFamily(f)));
+                    }
+                    var tiles = new List<PaletteUI.LibraryTile>();
+                    foreach (int id in Catalog.InFamily(BuildCategory, BuildFamily))
                     {
                         int v = id;
-                        items.Add(new PaletteUI.Option(Catalog.Get(id).Short, HouseVariant == id && !carrying, () => { HouseVariant = v; carrying = false; houseStyle %= Mathf.Max(1, Catalog.Get(v).Styles); RefreshOptions(); }));
+                        tiles.Add(new PaletteUI.LibraryTile { Id = id, Label = Catalog.Get(id).Name, Model = HouseFactory.Get(id, 0, 1), Selected = HouseVariant == id && !carrying,
+                            OnClick = () => { HouseVariant = v; carrying = false; houseStyle %= Mathf.Max(1, Catalog.Get(v).Styles); RefreshOptions(); } });
                     }
+                    Palette.ShowLibrary($"{Catalog.CategoryNames[(int)BuildCategory]} · {BuildFamily}", tiles, Catalog.Info);
                     break;
                 case Tool.Decor:
                     o.Add(new PaletteUI.Option("People", DecorKind == Villager, () => { DecorKind = Villager; RefreshOptions(); }));
@@ -377,6 +387,7 @@ namespace Wonderland
             if (worldMenu != 0) { items.Clear(); WorldItems(items); }
             Palette.SetOptions(o);
             Palette.SetItems(items);
+            if (Tool != Tool.Houses) Palette.HideLibrary();
             if (infoMode == 2) ShowHelp();
             Palette.SetTitle(WonderlandWorld.CurrentSlot > 0 ? $"Wonderland · World {WonderlandWorld.CurrentSlot}" : "Wonderland");
         }
@@ -407,6 +418,19 @@ namespace Wonderland
             BuildCategory = c;
             var ids = Catalog.InCategory(c);
             if (!ids.Contains(HouseVariant)) HouseVariant = ids[0];
+            BuildFamily = Catalog.Get(HouseVariant).Family;
+            carrying = false;
+            RefreshOptions();
+        }
+
+        /// <summary>The library's family (Cottages, Dining, Railway...): its objects show as tiles beside the palette.</summary>
+        public string BuildFamily { get; private set; }
+
+        private void SelectFamily(string family)
+        {
+            BuildFamily = family;
+            var ids = Catalog.InFamily(BuildCategory, family);
+            if (!ids.Contains(HouseVariant) && ids.Count > 0) HouseVariant = ids[0];
             carrying = false;
             RefreshOptions();
         }
@@ -654,7 +678,8 @@ namespace Wonderland
                 {
                     var ids = Catalog.InCategory(BuildCategory);
                     HouseVariant = ids[(ids.IndexOf(HouseVariant) + 1) % ids.Count];
-                    Say(HouseFactory.Name(HouseVariant)); break;
+                    BuildFamily = Catalog.Get(HouseVariant).Family;
+                    Say(HouseFactory.Name(HouseVariant)); RefreshOptions(); break;
                 }
                 case Tool.Train: ToggleTrain(); break;
                 case Tool.Track: SignalMode = !SignalMode; Say(SignalMode ? "Signals" : "Draw track"); break;

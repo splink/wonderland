@@ -4,7 +4,7 @@ using UnityEngine;
 
 namespace Wonderland
 {
-    public enum PlaceCategory { Homes, Town, Shops, Services, Farm, Fun, Travel, Nature, Small }
+    public enum PlaceCategory { Homes, Town, Shops, Services, Farm, Fun, Travel, Nature, Small, Zoo }
 
     /// <summary>What a place does with the village's produce: farms grow it, shops and the café sell it, stations ship it.</summary>
     public enum Goods { None, Grows, Sells, Ships }
@@ -68,6 +68,14 @@ namespace Wonderland
         public int Tractors;                 // farm machines kept at its edge, worked by its farmer
         public bool Dwelling => Residents > 0;
         public bool Ride => Category == PlaceCategory.Fun && RotorSpeed != 0f && !OwnClock;
+        /// <summary>A day out (a fair, a castle, the zoo): people come from further away for it.</summary>
+        public bool Leisure => Category is PlaceCategory.Fun or PlaceCategory.Zoo;
+        /// <summary>Its family in the library (Cottages, Dining, Railway...): related objects shown together.</summary>
+        public string Family;
+        /// <summary>What it is, in a sentence, for the library.</summary>
+        public string About;
+        /// <summary>Where it must go to work (by a road, beside the railway...), or null.</summary>
+        public string Requires;
         public bool OpenAt(float hour) => Within(hour, Opens, Closes);
         public bool OnShift(float hour) => Job != null && Within(hour, ShiftFrom, ShiftTo);
         /// <summary>Hours that run past midnight are written past 24 (the disco: 20 to 26).</summary>
@@ -81,13 +89,16 @@ namespace Wonderland
     /// Every object brings its own life with it through its activity spots: a café's chairs, a fountain's rim, a carousel's
     /// horses, a shop's counter. People nearby find them and use them; nothing needs configuring.
     /// </summary>
-    public static class Catalog
+    public static partial class Catalog
     {
         public static readonly Blueprint[] All = Build();
         public static int Count => All.Length;
         public static Blueprint Get(int id) => All[Mathf.Clamp(id, 0, All.Length - 1)];
 
-        public static readonly string[] CategoryNames = { "Homes", "Town", "Shops", "Services", "Farm", "Fun", "Travel", "Nature", "Small" };
+        /// <summary>The library's categories, by <see cref="PlaceCategory"/> (shown in <see cref="CategoryOrder"/>).</summary>
+        public static readonly string[] CategoryNames = { "Homes", "Town", "Shops", "Work", "Farm", "Leisure", "Travel", "Nature", "Details", "Zoo" };
+        public static readonly PlaceCategory[] CategoryOrder =
+            { PlaceCategory.Homes, PlaceCategory.Town, PlaceCategory.Shops, PlaceCategory.Services, PlaceCategory.Farm, PlaceCategory.Fun, PlaceCategory.Zoo, PlaceCategory.Travel, PlaceCategory.Nature, PlaceCategory.Small };
 
         public static List<int> InCategory(PlaceCategory c)
         {
@@ -325,6 +336,7 @@ namespace Wonderland
             list[Barn].Lorries = 1; list[Factory].Lorries = 1;
             list[Station].Taxis = 1; list[TaxiRank].Taxis = 2;
             list[WheatField].Tractors = 1;
+            Describe(list);
             return list.ToArray();
         }
 

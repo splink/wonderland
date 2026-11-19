@@ -203,7 +203,7 @@ namespace Wonderland.Editor
             Frame(hand, spot, true); Frame(hand, spot, false);
             Check(world.Buildings.Houses.Count == 1, "Trigger places a house where the pointer is");
             Check(world.Buildings.Houses.Count == 1 && Mathf.Abs(world.Buildings.Houses[0].rotation - 90f) < 0.01f && Mathf.Abs(world.Buildings.Houses[0].x / BuildGrid.Size - Mathf.Round(world.Buildings.Houses[0].x / BuildGrid.Size)) < 0.01f, $"On the grid a flick of the stick turns the house a quarter turn, and it sits on a grid point ({(world.Buildings.Houses.Count > 0 ? world.Buildings.Houses[0].rotation : 0f):0}°)");
-            ClickButton(hand, "Thatch");
+            ClickButton(hand, "Thatched");
             var spot2 = world.transform.TransformPoint(new Vector3(0.18f, world.Terrain.SurfaceAt(0.18f, -0.12f), -0.12f));
             Frame(hand, spot2, true); Frame(hand, spot2, false);
             Check(world.Buildings.Houses.Count == 2 && world.Buildings.Houses[1].variant == 2, "House type chips choose the variant");
@@ -223,19 +223,26 @@ namespace Wonderland.Editor
             ClickButton(hand, "Undo");
             Check(world.Buildings.Houses.Count == 1, "Palette Undo restores it");
 
-            // Build categories: Fun shows its items; placing a fountain from Town.
-            // A long category is shown a page at a time: the disco is on the Fun list's second page.
+            // The library: a category, then a family, then the object's tile (a little model of it) beside the palette;
+            // pointing at a tile says what the object is and does.
             ClickButton(hand, "Build");
-            ClickButton(hand, "Fun");
-            bool firstPage = Find("Disco") == null && palette.ItemPages > 1;
-            ClickButton(hand, $"1/{palette.ItemPages} ›");
-            bool paged = Find("Disco") != null;
-            if (paged) ClickButton(hand, "Disco");
-            Check(firstPage && paged && tools.HouseVariant == Catalog.Disco, $"Long categories have pages: the disco is on the Fun list's second page ({palette.ItemPages} pages, chosen {tools.HouseVariant})");
+            ClickButton(hand, "Leisure");
+            ClickButton(hand, "Evenings");
+            bool shown = palette.LibraryShown && Find("Disco") != null && Find("Disco").GetComponentInChildren<MeshFilter>().sharedMesh != null;
+            ClickButton(hand, "Disco");
+            Check(shown && tools.HouseVariant == Catalog.Disco, $"The library: Leisure, then Evenings, then the disco's tile with its model (chosen {tools.HouseVariant})");
+            var stationTile = (Vector3?)null;
+            ClickButton(hand, "Travel"); ClickButton(hand, "Railway");
+            if (Find("Station") != null) stationTile = Find("Station").transform.position;
+            if (stationTile.HasValue) { Physics.SyncTransforms(); Frame(hand, stationTile.Value, false); palette.SendMessage("Update"); }
+            string about = palette.LibraryInfo ?? "";
+            Check(about.Contains("Station") && about.Contains("beside the railway"), $"Pointing at a tile says what it is, what it does and where it must go (\"{about.Replace("\n", " / ")}\")");
             int[] counts = new int[Catalog.CategoryNames.Length]; foreach (var b in Catalog.All) counts[(int)b.Category]++;
-            int total = 0; foreach (int c in counts) total += c;
-            Check(total == Catalog.Count, $"Every object in the library is in a category ({total} of {Catalog.Count})");
+            int total = 0, unfamilied = 0; foreach (int c in counts) total += c;
+            foreach (var b in Catalog.All) if (b.Family == null || b.Family == "Other" || b.About == null) unfamilied++;
+            Check(total == Catalog.Count && unfamilied == 0, $"Every object in the library is in a category and a family, with a description ({total} of {Catalog.Count}, {unfamilied} without)");
             ClickButton(hand, "Town");
+            ClickButton(hand, "Squares");
             ClickButton(hand, "Fountain");
             var free = new Vector2(0.12f, 0.18f);
             for (int k = 0; k < 60; k++)
@@ -757,6 +764,18 @@ namespace Wonderland.Editor
             Frame(hand, top, false); Frame(hand, top, true); Frame(hand, top, false); Frame(hand, top, false);
             tools.ToggleHelp();
             WonderlandRenders.Capture(cam, "editor-cards-building-help.png", 2400, 1000);
+            // The library: Build, the Town category, its Civic family; the town hall's tile pointed at.
+            tools.CloseCards(); tools.ToggleHelp();
+            tools.SelectTool(Tool.Houses);
+            foreach (var label in new[] { "Town", "Civic" })
+                foreach (var pb in palette.GetComponentsInChildren<PaletteButton>()) if (pb.Text == label) { pb.OnClick(); break; }
+            foreach (var pb in palette.GetComponentsInChildren<PaletteButton>())
+                if (pb.Text == "Town hall") { Physics.SyncTransforms(); Frame(hand, pb.transform.position, false); break; }
+            for (int k = 0; k < 20; k++) palette.SendMessage("Update");
+            cam.transform.position = palette.transform.position - palette.transform.forward * 0.62f;
+            cam.transform.rotation = Quaternion.LookRotation(palette.transform.forward, palette.transform.up);
+            WonderlandRenders.Capture(cam, "editor-library.png", 2400, 1000);
+            tools.ToggleHelp();
             // The label at the pointer, seen from beside the hand: over the bakery in Select, and over a villager in Build.
             tools.CloseCards(); tools.ToggleHelp();
             cam.tag = "MainCamera";

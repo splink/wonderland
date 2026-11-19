@@ -256,7 +256,7 @@ namespace Wonderland
                 if (nightOut) appeal *= 3f;   // the night owls' evening out (and they'll go further for it)
                 if (appeal < 0.02f || !p.Bp.OpenAt(hour) || !p.Bp.OpenAt(hour + 0.3f)) continue;   // closed, or about to close
                 if (p.Bp.Goods == Goods.Sells && p.Stock.Have < SaleSize) appeal *= 0.45f;          // word gets round: bare shelves
-                float d = (p.Centre - a.Position).magnitude, reach = p.Bp.Category == PlaceCategory.Fun ? 1.4f : 0.9f;
+                float d = (p.Centre - a.Position).magnitude, reach = p.Bp.Leisure ? 1.4f : 0.9f;
                 if (d > reach * 2.5f) continue;
                 int spot = FreeSpot(p, a);
                 if (spot < 0) continue;

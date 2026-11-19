@@ -126,7 +126,7 @@ namespace Wonderland
             if (!p.Bp.OpenAt(hour) || p.Approach.Length == 0 && p.Door < 0) return false;
             if (a.Child && (p.Bp.Id == Catalog.Disco || p.Bp.Rhythm != null && hour > 19f)) return false;
             if (a.Avoid != null && a.Avoid.TryGetValue(p.Key, out float until) && Clock.Total < until) return false;
-            if ((p.Centre - a.Home).magnitude > (p.Bp.Category == PlaceCategory.Fun ? 2.2f : 1.6f)) return false;
+            if ((p.Centre - a.Home).magnitude > (p.Bp.Leisure ? 2.2f : 1.6f)) return false;
             if (Grid.SameRegion(region, p.WorkRegion)) return true;
             return regionStation.Contains(region) && regionStation.Contains(p.WorkRegion) && PassengerTrains;   // a train ride away
         }

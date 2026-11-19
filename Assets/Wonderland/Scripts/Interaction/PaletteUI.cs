@@ -53,7 +53,7 @@ namespace Wonderland
     /// options for the current tool, global actions (undo, save, load, move, new) and a status / hint line. Built at
     /// runtime from meshes and TextMeshPro; buttons are hit with the right-hand pointer.
     /// </summary>
-    public sealed class PaletteUI : MonoBehaviour
+    public sealed partial class PaletteUI : MonoBehaviour
     {
         public const int UiLayer = 5;
         public const float Width = 0.33f, Height = 0.195f;
@@ -417,6 +417,7 @@ namespace Wonderland
 
         private void Update()
         {
+            UpdateLibrary();
             if (card == null || !card.Root.gameObject.activeSelf || card.Portrait == null) return;
             // The little model turns slowly about its own middle.
             float yaw = Time.time * 40f;
