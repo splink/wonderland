@@ -10,7 +10,7 @@ namespace Wonderland
     /// <list type="bullet">
     /// <item>Placement (Move, Lift) puts the window somewhere else in the real room; the same land stays in it.</item>
     /// <item>Navigation moves the window across the world: scrolled smoothly (the right stick), or stepped a tenth of its
-    /// size at a time (the arrows round it): the land under it slides along, and new land comes into view.</item>
+    /// size at a time (Navigate; the map jumps): the land under it slides along, and new land comes into view.</item>
     /// </list>
     /// The world root's own transform is the world's frame (local coordinates are world coordinates, so nothing built
     /// ever moves in them); the placement is the point of it at the window's centre, which stays put in the room.
@@ -18,7 +18,7 @@ namespace Wonderland
     public sealed partial class WonderlandWorld
     {
         public const float SlideTime = 0.45f;
-        /// <summary>How far an arrow steps the window: a tenth of its size.</summary>
+        /// <summary>How far a step moves the window: a tenth of its size.</summary>
         public const float StepFraction = 0.1f;
         /// <summary>How fast the stick scrolls at full tilt: this much of the window's size a second.</summary>
         public const float PanSpeed = 0.4f;
@@ -33,8 +33,6 @@ namespace Wonderland
             set { PlayerPrefs.SetFloat(WindowKey, value); PlayerPrefs.Save(); }
         }
 
-        /// <summary>The arrows round the window.</summary>
-        public WindowNavigator Navigator { get; private set; }
         /// <summary>How far the world is lifted off the real floor (metres; Move sets it, the room anchor keeps it).</summary>
         public float Lift;
 
@@ -211,42 +209,80 @@ namespace Wonderland
 
         // ------------------------------------------------------------------ size from the room
 
+        /// <summary>The placement moved by itself (the window shifted to where the room has space): the app re-pins it.</summary>
+        public event Action PlacementShifted;
+
         /// <summary>
-        /// The window's size in this room: <see cref="MaxWindow"/> square, or the largest rectangle up to that which fits
-        /// the room's floor around the placement (each side shrunk on its own: a long narrow room gets a long narrow window).
+        /// The window's size in this room: <see cref="MaxWindow"/> square (in the room's metres, whatever the world's own
+        /// scale), or the largest rectangle up to that which fits the room's floor. Placed near a wall the window doesn't
+        /// shrink to stay centred where it was put: it shifts (up to a metre and a half) to where the biggest square fits,
+        /// nearest the placement first, and each side then grows on its own as far as the room allows - a long narrow
+        /// room gets a long narrow window.
         /// </summary>
         private void FitWindowToRoom()
         {
-            float most = MaxWindow;
+            float scale = Mathf.Max(0.01f, transform.lossyScale.x);
+            float most = MaxWindow / scale;   // (local metres)
             var size = new Vector2(most, most);
+            var centre = WindowCenter;
             if (roomLocal != null)
             {
-                var c = WindowCenter;
-                bool Fits(Vector2 s)
+                bool Fits(Vector2 c, Vector2 s)
                 {
                     for (int i = 0; i <= 8; i++)
                     {
                         float u = i / 8f - 0.5f;
-                        foreach (var p in new[] { new Vector2(u * s.x, -s.y * 0.5f), new Vector2(u * s.x, s.y * 0.5f), new Vector2(-s.x * 0.5f, u * s.y), new Vector2(s.x * 0.5f, u * s.y) })
-                            if (!RoomFootprint.Inside(roomLocal.Floor, c + p)) return false;
+                        if (!RoomFootprint.Inside(roomLocal.Floor, c + new Vector2(u * s.x, -s.y * 0.5f)) || !RoomFootprint.Inside(roomLocal.Floor, c + new Vector2(u * s.x, s.y * 0.5f))
+                            || !RoomFootprint.Inside(roomLocal.Floor, c + new Vector2(-s.x * 0.5f, u * s.y)) || !RoomFootprint.Inside(roomLocal.Floor, c + new Vector2(s.x * 0.5f, u * s.y))) return false;
                     }
                     return true;
                 }
-                // Shrink evenly until it fits, then let each side grow back as far as the room allows.
-                float k = 1f;
-                while (k > 0.2f && !Fits(size * k)) k -= 0.05f;
-                size *= k;
+                float Largest(Vector2 c)
+                {
+                    if (!RoomFootprint.Inside(roomLocal.Floor, c)) return 0f;
+                    float lo = 0f, hi = most;
+                    if (Fits(c, new Vector2(hi, hi))) return hi;
+                    for (int k = 0; k < 10; k++) { float mid = (lo + hi) / 2f; if (Fits(c, new Vector2(mid, mid))) lo = mid; else hi = mid; }
+                    return lo;
+                }
+                // The best place for the biggest square near where it was put.
+                float best = Largest(centre), step = 0.15f / scale, reach = 1.5f / scale;
+                var at = centre;
+                if (best < most - 1e-4f)
+                    for (float dz = -reach; dz <= reach + 1e-4f; dz += step)
+                    for (float dx = -reach; dx <= reach + 1e-4f; dx += step)
+                    {
+                        var c = centre + new Vector2(dx, dz);
+                        float k = Largest(c);
+                        // (a bigger window wins; an equal one nearer the placement)
+                        if (k > best + 0.02f / scale || (k > best - 1e-4f && (c - centre).sqrMagnitude < (at - centre).sqrMagnitude)) { best = k; at = c; }
+                    }
+                size = new Vector2(Mathf.Max(best, 0.3f / scale), Mathf.Max(best, 0.3f / scale));
                 for (int axis = 0; axis < 2; axis++)
                     while (size[axis] < most)
                     {
-                        var bigger = size; bigger[axis] = Mathf.Min(most, size[axis] + 0.05f);
-                        if (!Fits(bigger)) break;
+                        var bigger = size; bigger[axis] = Mathf.Min(most, size[axis] + 0.05f / scale);
+                        if (!Fits(at, bigger)) break;
                         size = bigger;
                     }
+                if ((at - centre).sqrMagnitude > 1e-6f)
+                {
+                    // Shift the window in the room (the same land stays in it): the placement moves.
+                    var shifted = transform.TransformPoint(new Vector3(at.x, 0f, at.y));
+                    var placed = PlacementPosition;
+                    Place(new Vector3(shifted.x, placed.y, shifted.z), PlacementRotation);
+                    roomLocal = room.ToLocal(transform);   // (the room as seen from where the world is now)
+                    PlacementShiftedBy = at - centre;
+                    PlacementShifted?.Invoke();
+                }
             }
-            size = new Vector2(Mathf.Max(0.6f, Mathf.Floor(size.x / BuildGrid.Size) * BuildGrid.Size), Mathf.Max(0.6f, Mathf.Floor(size.y / BuildGrid.Size) * BuildGrid.Size));
+            float grid = BuildGrid.Size;
+            size = new Vector2(Mathf.Max(0.6f, Mathf.Floor(size.x / grid) * grid), Mathf.Max(0.6f, Mathf.Floor(size.y / grid) * grid));
             if (size != WindowSize) { WindowSize = size; windowDirty = true; }
         }
+
+        /// <summary>How far the last fit moved the window in the room (local metres; tests).</summary>
+        public Vector2 PlacementShiftedBy { get; private set; }
 
         // ------------------------------------------------------------------ drawing just the window
 

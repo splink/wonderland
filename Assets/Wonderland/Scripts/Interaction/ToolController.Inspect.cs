@@ -694,7 +694,7 @@ namespace Wonderland
                 Tool.Select => "Trigger: on anything with a gold ring under it - a villager, a building, a train, a switch, the track - its card, with buttons for what you can do with it\nVillagers: their card follows them with their camera · trains: Camera rides along at the front\nCameras: their picture on the monitor - the buttons round it or the left stick turn it, the trigger on the land points it (put one up: Build, Small, Camera)\nCam / Train chips: open a camera · A: next camera",
                 _ => "Trigger on anything you built: take it away · hold over trees: clear them",
             };
-            return here + "\n\nEverywhere: Right stick: scroll the world (the arrows round it step, hold to keep going; the map: tap a place) · Move: put the world elsewhere, Higher / Lower lift it · Label: beside the pointer, what each button does to what you point at · Grip: pick it up and move it (track bends) · B undo (Redo below) · point at the palette and pull the trigger to choose\nSave / Load: Worlds 1-6 · Move: place the world elsewhere · New: start again (press twice) · Sound: on / quiet / muted · Stats: frame rate and the world's numbers";
+            return here + "\n\nEverywhere: Right stick: scroll the world (the map: tap a place to go there) · Move: put the world elsewhere, Higher / Lower lift it · Label: beside the pointer, what each button does to what you point at · Grip: pick it up and move it (track bends) · B undo (Redo below) · point at the palette and pull the trigger to choose\nSave / Load: Worlds 1-6 · Move: place the world elsewhere · New: start again (press twice) · Sound: on / quiet / muted · Stats: frame rate and the world's numbers";
         }
     }
 }

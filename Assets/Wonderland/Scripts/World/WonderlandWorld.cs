@@ -81,8 +81,6 @@ namespace Wonderland
             if (endless) Terrain.Store = new TerrainStore();
             TerrainView = Child<TerrainRenderer>("Terrain");
             TerrainView.CutMaterial = materials.Lit;
-            Navigator = Child<WindowNavigator>("Window arrows");
-            Navigator.Init(this, materials.UI);
             TerrainView.Init(Terrain, materials.Terrain);
             Forest = Child<ForestSystem>("Forest");
             Forest.Init(Terrain, materials.Lit, seed);

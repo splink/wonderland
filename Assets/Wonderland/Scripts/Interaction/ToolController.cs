@@ -533,30 +533,6 @@ namespace Wonderland
             }
             else Palette.ClearHover();
 
-            // 1b. The arrows round the window: slide across the world that way.
-            int arrow = !stroking && drawn.Count == 0 && !Holding && !PlacingWorld ? World.Navigator.Pick(ray) : -1;
-            World.Navigator.Hover(arrow);
-            if (arrow >= 0)
-            {
-                World.TerrainView.HideBrush();
-                ghost.gameObject.SetActive(false);
-                if (input.TriggerDown)
-                {
-                    arrowHeld = 0f;
-                    if (World.Navigate(WindowNavigator.Directions[arrow])) { Say($"Off {WindowNavigator.Names[arrow]} - hold the trigger to keep going, or scroll with the right stick"); Haptic(0.4f, 0.04f); }
-                    else Say("The world doesn't go further that way yet");
-                }
-                // Held: on and on that way, smoothly.
-                else if (input.Trigger && (arrowHeld += dt) > 0.35f)
-                {
-                    var d = ((Vector2)WindowNavigator.Directions[arrow]).normalized;
-                    World.Pan(d * WonderlandWorld.PanSpeed * Mathf.Max(World.WindowSize.x, World.WindowSize.y) * Mathf.Clamp01((arrowHeld - 0.35f) * 2f), dt);
-                }
-                var spot = World.Navigator.SpotOf(arrow);
-                DrawPointer(ray, Vector3.Distance(ray.origin, World.transform.TransformPoint(new Vector3(spot.x, 0f, spot.y))), new Color(1f, 0.9f, 0.6f, 0.9f), true);
-                return;
-            }
-
             if (input.SecondaryDown && !stroking) { if (World.Undo()) { Say("Undone"); Haptic(0.3f, 0.03f); RefreshOptions(); } else Say("Nothing to undo"); }
 
             // 2. World-space hit.
@@ -1375,7 +1351,6 @@ namespace Wonderland
         }
 
         private bool scrollSaid;
-        private float arrowHeld;
 
         // ------------------------------------------------------------------ named worlds
 

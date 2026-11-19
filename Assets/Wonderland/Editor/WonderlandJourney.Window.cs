@@ -33,7 +33,9 @@ namespace Wonderland.Editor
             if (Application.isBatchMode) EditorApplication.Exit(failures == 0 ? 0 : 1);
         }
 
-        private static WonderlandWorld Endless(string name, float x)
+        private static readonly Vector2Int[] Ways = { new(1, 0), new(1, 1), new(0, 1), new(-1, 1), new(-1, 0), new(-1, -1), new(0, -1), new(1, -1) };
+
+                private static WonderlandWorld Endless(string name, float x)
         {
             var w = new GameObject(name).AddComponent<WonderlandWorld>();
             w.transform.SetPositionAndRotation(new Vector3(x, 0f, 0f), Quaternion.Euler(0f, 25f, 0f));
@@ -71,6 +73,27 @@ namespace Wonderland.Editor
             WonderlandWorld.MaxWindow = 3f; w.FitToRoom();
             Check(w.WindowSize == new Vector2(3f, 3f), $"In Settings it can be 3 x 3 m ({w.WindowSize})");
             UnityEngine.Object.DestroyImmediate(w.gameObject);
+            // In a 4 x 4 m room, put down 40 cm from a wall: the window doesn't shrink to stay centred there - it shifts
+            // into the room, full size; the size setting changes it; a smaller world keeps its window the size in the room.
+            WonderlandWorld.MaxWindow = 2f;
+            var rw = new GameObject("Wall window").AddComponent<WonderlandWorld>();
+            rw.transform.position = new Vector3(1000f, 0f, 1.6f);
+            var room = new RoomFootprint();
+            foreach (var c in new[] { new Vector2(-2f, -2f), new Vector2(2f, -2f), new Vector2(2f, 2f), new Vector2(-2f, 2f) }) room.Floor.Add(new Vector3(1000f + c.x, 0f, c.y));
+            rw.Create(2f, Materials(), 7, false, endless: true);
+            rw.UseWindow(true);
+            rw.Room = room;
+            var p = rw.PlacementPosition;
+            bool inside = Mathf.Abs(p.x - 1000f) + rw.WindowSize.x / 2f <= 2.001f && Mathf.Abs(p.z) + rw.WindowSize.y / 2f <= 2.001f;
+            Check(rw.WindowSize == new Vector2(2f, 2f) && inside && rw.PlacementShiftedBy.magnitude > 0.5f,
+                $"Put down 40 cm from a wall, the window shifts into the room at full size instead of shrinking ({rw.WindowSize.x:0.00} x {rw.WindowSize.y:0.00} m, moved {rw.PlacementShiftedBy.magnitude * 100f:0} cm)");
+            var sizes = new List<float>();
+            foreach (float want in new[] { 3f, 1.5f, 2f }) { WonderlandWorld.MaxWindow = want; rw.FitToRoom(); sizes.Add(rw.WindowSize.x); }
+            Check(sizes[0] == 3f && sizes[1] == 1.5f && sizes[2] == 2f, $"The Window setting changes the window in the room (3 m: {sizes[0]:0.0}, 1.5 m: {sizes[1]:0.0}, 2 m: {sizes[2]:0.0})");
+            rw.transform.localScale = Vector3.one * 0.6f; rw.FitToRoom();
+            float physical = rw.WindowSize.x * 0.6f;
+            Check(Mathf.Abs(physical - 2f) < 0.06f, $"With the world drawn at 60 %, the window is still 2 m across in the room ({physical:0.00} m)");
+            UnityEngine.Object.DestroyImmediate(rw.gameObject);
         }
 
         private static void WindowJourney()
@@ -142,7 +165,7 @@ namespace Wonderland.Editor
             bool all = true;
             for (int d = 0; d < 8; d++)
             {
-                var dir = WindowNavigator.Directions[d];
+                var dir = Ways[d];
                 w.Navigate(dir, 0.5f); w.FinishSlide();
                 all &= w.WindowCenter == new Vector2(dir.x * 1.5f, dir.y * 1.5f);
                 w.Navigate(-dir, 0.5f); w.FinishSlide();
@@ -155,16 +178,6 @@ namespace Wonderland.Editor
             Check(steps >= 3 && covered && t.LandAt(w.WindowCenter.x, w.WindowCenter.y), $"Step after step north-east, there is always land under the window ({steps} steps to {w.WindowCenter}; {w.WhereLabel()})");
             w.NavigateHome(); w.FinishSlide(); w.SendMessage("LateUpdate");
             Check(w.WindowCenter == Vector2.zero && w.WhereLabel().StartsWith("at home"), "Home goes back to where the world started");
-
-            // 7. The arrows: each lies outside the edge it leads over, and pointing at it finds it.
-            bool arrows = true;
-            for (int d = 0; d < 8; d++)
-            {
-                var spot = w.Navigator.SpotOf(d);
-                var from = w.transform.TransformPoint(new Vector3(spot.x, 0.6f, spot.y));
-                arrows &= !w.InWindow(spot) && w.Navigator.Pick(new Ray(from, -w.transform.up)) == d;
-            }
-            Check(arrows, "Eight arrows lie round the window, each found by pointing at it");
 
             // 8. Lifted off the floor: navigating keeps the height.
             w.Lift = 0.4f;
@@ -457,10 +470,9 @@ namespace Wonderland.Editor
             for (int i = 0; i < 6; i++) Put(w, i % 3, -1.0f + i * 0.35f, -0.75f, 180f);
             for (int k = 0; k < 10; k++) w.PaintForest(new Vector3(0.6f, 0f, 1.1f), 0.5f, 1f, 0.2f);
             w.Forest.RebuildDirty(); w.Cover.RebuildDirty();
-            w.SendMessage("LateUpdate"); w.Navigator.SendMessage("LateUpdate");
-            w.Navigator.Hover(0);
+            w.SendMessage("LateUpdate");
             WonderlandRenders.Capture(cam, "editor-window-home.png", 1280, 800);
-            w.Navigate(new Vector2Int(1, 0), 0.5f); w.FinishSlide(); w.SendMessage("LateUpdate"); w.Navigator.SendMessage("LateUpdate");
+            w.Navigate(new Vector2Int(1, 0), 0.5f); w.FinishSlide(); w.SendMessage("LateUpdate");
             w.Forest.RebuildDirty(); w.Cover.RebuildDirty();
             WonderlandRenders.Capture(cam, "editor-window-east.png", 1280, 800);
             cam.transform.position = new Vector3(1.9f, 0.35f, -1.9f); cam.transform.LookAt(new Vector3(1.2f, 0.02f, -1.2f));

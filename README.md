@@ -368,9 +368,8 @@ stick turns it (left/right) or lifts it (up/down). Settings shows the height too
 ready to be shaped with the usual tools. What you see is a window of up to **2 x 2 m** (Settings: **Window** 2, 3 or
 1.5 m; smaller when the room is: each side shrinks on its own to fit the floor), cut off cleanly at its edges like a
 piece sawn out of a bigger model landscape, with soil showing at the cut.
-- **Going further:** the **right stick** scrolls the window smoothly over the land. Eight arrows also lie on the floor
-  just outside the cut edge - one mid-side each way, one at each corner: pull the trigger on one to step a tenth of the
-  window that way (20 cm), hold it to keep going. Everything keeps its place in the world; only the window moves.
+- **Going further:** the **right stick** scrolls the window smoothly over the land; the map takes you anywhere.
+  Everything keeps its place in the world; only the window moves.
   **Home** (palette) slides back to where the world started.
 - **Building across the edge:** roads, track, streams and forests carry on across the old edge as if it had never been
   there - extending a line from one window into the next makes one line. The building grid is the same everywhere.
