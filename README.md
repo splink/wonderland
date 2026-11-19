@@ -492,6 +492,10 @@ it. Nothing needs connecting by hand, and nothing is invented that the world doe
   - A harbour alone on its pond stays quiet.
 - **Shops, pubs and attractions.** The ice cream parlour is busiest on afternoons, and the pub in the evenings.
   - The hotel houses guests.
+  - **New in the library:** a farmhouse (Homes > Country: long and low under a sweeping half-hipped roof, its barn
+    wing attached) and a theatre (Town > Civic: a temple front, THEATRE in lights, the tall fly tower behind; an
+    audience every evening). The station is a proper station now - a booking hall under a clock tower, wings either
+    side, an iron-and-glass canopy along the platform - and the apartments a modern block with balconies.
   - **Bus stops** (Build > Travel > Road): put one beside a road and the buses call there - they draw in, stand a
     few seconds while the people waiting get on, and pull away.
   - **Junctions** are drawn as one piece where roads meet: each road stops at the junction's mouth, the kerbs and

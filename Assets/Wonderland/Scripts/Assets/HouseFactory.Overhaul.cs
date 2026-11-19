@@ -16,7 +16,8 @@ namespace Wonderland
     {
         /// <summary>Whether a building has its own design here (and its signs with it).</summary>
         private static bool IsOverhauled(int id) => id is Catalog.Bakery or Catalog.Cafe or Catalog.Grocer or Catalog.Restaurant or Catalog.FurnitureShop or Catalog.IceCream
-            or Catalog.Pub or Catalog.PostOffice or Catalog.School or Catalog.FireStation or Catalog.Police or Catalog.Hospital or Catalog.Hotel;
+            or Catalog.Pub or Catalog.PostOffice or Catalog.School or Catalog.FireStation or Catalog.Police or Catalog.Hospital or Catalog.Hotel
+            or Catalog.Apartments or Catalog.Farmhouse or Catalog.Theatre;
 
         private static float Overhauled(MeshBuilder b, ref Rng rng, Style s, int id, int style, out bool warp)
         {
@@ -40,7 +41,12 @@ namespace Wonderland
                 case Catalog.Police: return PoliceBlock(b, ref rng);
                 case Catalog.Hospital: return HospitalWings(b, ref rng);
                 case Catalog.Hotel: return GrandHotel(b, ref rng, s);
+                case Catalog.Apartments: return ApartmentBlock(b, ref rng, s, style);
+                case Catalog.Theatre: return TheatreHouse(b, ref rng, s);
             }
+            warp = true;
+            if (id == Catalog.Farmhouse) return FarmhouseLong(b, ref rng, s);
+            warp = false;
             return -1f;
         }
 
@@ -605,6 +611,178 @@ namespace Wonderland
                 b.Pop();
             }
             return 0.004f + wallH + 0.05f;
+        }
+
+        // ---------------------------------------------------------------- the rest of the town
+
+        /// <summary>
+        /// The railway station: a two-storey booking hall under a hipped roof with its clock tower and lantern, a
+        /// single-storey wing either side, and along the platform (the front, -Z) an iron-and-glass canopy on cast columns
+        /// with brackets, a clock hanging from it, the nameboard, benches and the way out through tall arched doors.
+        /// </summary>
+        private static float RailwayStation(MeshBuilder b, ref Rng rng, Style s)
+        {
+            const float back = 0.01f;   // (the building stands back from the platform's edge, under the canopy)
+            var brick = Pal.Hex("#B4644A"); var stone = Pal.Hex("#EDE3CC"); var iron = Pal.Hex("#2E4A3E"); var roof = Pal.Hex("#4A4E5A");
+            b.AddBox(new Vector3(0f, 0.002f, back), new Vector3(0.12f, 0.004f, 0.052f), Pal.Hex("#B9B2A4"));
+            // The hall and its wings.
+            b.AddBox(new Vector3(0f, 0.004f + 0.03f, back + 0.006f), new Vector3(0.05f, 0.06f, 0.04f), brick, brick, brick);
+            HipRoof(b, new Vector3(0f, 0.064f, back + 0.006f), 0.05f, 0.04f, 0.022f, roof);
+            foreach (int sx in new[] { -1, 1 })
+            {
+                b.AddBox(new Vector3(sx * 0.042f, 0.004f + 0.018f, back + 0.008f), new Vector3(0.034f, 0.036f, 0.034f), brick, brick, brick);
+                HipRoof(b, new Vector3(sx * 0.042f, 0.04f, back + 0.008f), 0.034f, 0.034f, 0.014f, roof);
+                for (int k = 0; k < 2; k++) WallWindow(b, ref rng, s, new Vector3(sx * 0.042f + (k - 0.5f) * 0.016f, 0.022f, back - 0.0092f), Vector3.back, 0.009f, 0.016f, false, false, true);
+            }
+            b.AddBox(new Vector3(0f, 0.04f, back - 0.014f), new Vector3(0.052f, 0.002f, 0.001f), stone);   // a string course
+            foreach (int sx in new[] { -1, 0, 1 })
+                if (sx == 0) WallDoor(b, ref rng, s, new Vector3(0f, 0.004f, back - 0.014f), Vector3.back, 0.014f, 0.03f, true);
+                else WallWindow(b, ref rng, s, new Vector3(sx * 0.016f, 0.024f, back - 0.014f), Vector3.back, 0.01f, 0.02f, false, false, true);
+            for (int k = 0; k < 3; k++) WallWindow(b, ref rng, s, new Vector3((k - 1) * 0.016f, 0.052f, back - 0.014f), Vector3.back, 0.008f, 0.012f);
+            // The clock tower with its lantern.
+            var tower = new Vector3(0f, 0.07f, back + 0.006f);
+            b.AddBox(tower + Vector3.up * 0.015f, new Vector3(0.018f, 0.03f, 0.018f), brick, brick, brick);
+            b.Push(tower + new Vector3(0f, 0.02f, -0.0092f), Quaternion.FromToRotation(Vector3.up, Vector3.back));
+            b.AddCylinder(Vector3.zero, 0.0065f, 0.0065f, 0.001f, 16, Pal.Brass, Pal.Glow(Pal.Hex("#FFF6E0")), true);
+            b.Pop();
+            b.AddBox(tower + Vector3.up * 0.031f, new Vector3(0.021f, 0.002f, 0.021f), stone);
+            foreach (int sx in new[] { -1, 1 }) foreach (int sz in new[] { -1, 1 }) b.AddBox(tower + new Vector3(sx * 0.007f, 0.037f, sz * 0.007f), new Vector3(0.0018f, 0.01f, 0.0018f), stone);
+            b.AddCylinder(tower + Vector3.up * 0.042f, 0.012f, 0.0008f, 0.018f, 4, roof, Pal.Shade(roof, 1.2f), true, false, false, Mathf.PI / 4f);
+            WeatherVane(b, tower + Vector3.up * 0.06f);
+            // The platform canopy: glass on iron, columns with brackets, a valance of saw-tooth boards.
+            const float cz = -0.026f, cw = 0.12f;
+            b.Push(new Vector3(0f, 0.034f, cz + 0.006f), Quaternion.Euler(-8f, 0f, 0f));
+            b.AddBox(Vector3.zero, new Vector3(cw, 0.0012f, 0.028f), new Color(0.78f, 0.88f, 0.9f, 1f));
+            if (!b.TooSmall(0.002f)) for (int k = 0; k <= 12; k++) b.AddBox(new Vector3(-cw / 2 + k * cw / 12f, 0.0008f, 0f), new Vector3(0.0009f, 0.0009f, 0.028f), iron);
+            b.Pop();
+            for (int k = 0; k < 5; k++)
+            {
+                float x = -cw / 2 + 0.008f + k * (cw - 0.016f) / 4f;
+                b.AddCylinder(new Vector3(x, 0.004f, cz - 0.004f), 0.0011f, 0.0009f, 0.029f, 8, iron, iron, false);
+                if (!b.TooSmall(0.002f)) { b.Push(new Vector3(x, 0.03f, cz - 0.002f), Quaternion.Euler(45f, 0f, 0f)); b.AddBox(Vector3.zero, new Vector3(0.0008f, 0.008f, 0.0008f), iron); b.Pop(); }
+            }
+            if (!b.TooSmall(0.002f)) for (int k = 0; k < 24; k++) b.AddTriangleOutward(new Vector3(-cw / 2 + k * cw / 24f, 0.032f, cz - 0.0075f), new Vector3(-cw / 2 + (k + 1) * cw / 24f, 0.032f, cz - 0.0075f), new Vector3(-cw / 2 + (k + 0.5f) * cw / 24f, 0.028f, cz - 0.0075f), new Vector3(0f, 0.03f, 0f), Pal.Hex("#F2E3C2"));
+            // The hanging clock, the nameboard, benches.
+            b.AddBox(new Vector3(0.02f, 0.03f, cz - 0.002f), new Vector3(0.0006f, 0.004f, 0.0006f), iron);
+            b.AddCylinder(new Vector3(0.02f, 0.027f, cz - 0.0045f), 0.0035f, 0.0035f, 0.005f, 14, Pal.Hex("#F7F1E6"), Pal.Hex("#F7F1E6"), true, true, true);
+            Lettering.Board(b, "STATION", new Vector3(-0.02f, 0.024f, cz - 0.004f), Vector3.back, 0.0034f, Pal.Hex("#1F3E7A"), Pal.Hex("#F7F1E6"), iron);
+            foreach (float x in new[] { -0.042f, 0.042f }) { b.AddBox(new Vector3(x, 0.008f, cz + 0.004f), new Vector3(0.016f, 0.0012f, 0.005f), Pal.Hex("#8A5A34")); b.AddBox(new Vector3(x, 0.011f, cz + 0.0065f), new Vector3(0.016f, 0.004f, 0.0009f), Pal.Hex("#8A5A34")); }
+            return 0.11f;
+        }
+
+        /// <summary>
+        /// Apartments: a modern four-storey block, flat-roofed, its front a grid of windows and balconies with railings
+        /// and plants, a glass stair tower to one side, an entrance canopy, and a water tank and lift housing on the roof.
+        /// </summary>
+        private static float ApartmentBlock(MeshBuilder b, ref Rng rng, Style s, int style)
+        {
+            const float w = 0.1f, d = 0.07f, h = 0.1f;
+            var walls = new[] { Pal.Hex("#E8E2D6"), Pal.Hex("#D9C8B4"), Pal.Hex("#C8D4D8"), Pal.Hex("#E2D2C2") };
+            var wall = walls[style % 4]; var accent = new[] { Pal.Hex("#C8653A"), Pal.Hex("#3E6A8A"), Pal.Hex("#5A8A4A"), Pal.Hex("#8A4A5A") }[style % 4];
+            b.AddBox(new Vector3(0f, 0.002f, 0f), new Vector3(w + 0.024f, 0.004f, d + 0.006f), Pal.Hex("#A6AAB0"));
+            b.AddBox(new Vector3(-0.008f, 0.004f + h / 2, 0f), new Vector3(w - 0.016f, h, d), wall, wall, wall);
+            FlatRoof(b, new Vector3(-0.008f, 0.004f + h, 0f), w - 0.016f, d, wall, Pal.Hex("#C8CCD2"));
+            for (int f = 0; f < 4; f++)
+            {
+                float y = 0.004f + 0.006f + f * 0.024f;
+                b.AddBox(new Vector3(-0.008f, y - 0.004f, 0f), new Vector3(w - 0.014f, 0.0014f, d + 0.002f), accent);
+                for (int k = 0; k < 3; k++)
+                {
+                    float x = -0.008f - 0.03f + k * 0.03f;
+                    if (f == 0 && k == 1) { b.AddFace(new Vector3(x, y + 0.008f, -d / 2 - 0.0003f), Vector3.back, Vector3.up, 0.007f, 0.01f, Pal.Hex("#5A7A9A")); continue; }
+                    WallWindow(b, ref rng, s, new Vector3(x, y + 0.01f, -d / 2), Vector3.back, 0.014f, 0.012f);
+                    if (f == 0) continue;
+                    // A balcony: a slab, a railing and a pot plant.
+                    b.AddBox(new Vector3(x, y + 0.002f, -d / 2 - 0.006f), new Vector3(0.022f, 0.0014f, 0.012f), wall);
+                    b.AddBox(new Vector3(x, y + 0.006f, -d / 2 - 0.0118f), new Vector3(0.022f, 0.006f, 0.0008f), new Color(0.78f, 0.9f, 0.95f, 1f));
+                    if (!b.TooSmall(0.003f)) b.AddBlob(new Vector3(x + 0.008f, y + 0.005f, -d / 2 - 0.006f), Vector3.one * 0.0022f, 1, 0.2f, f * 3 + k, (_, __) => Pal.Hex("#5E9A4A"));
+                }
+            }
+            foreach (int sx in new[] { -1, 1 }) for (int f = 0; f < 4; f++) for (int k = 0; k < 2; k++) b.AddFace(new Vector3(-0.008f + sx * (w - 0.016f) / 2f + sx * 0.0003f, 0.004f + 0.016f + f * 0.024f, (k - 0.5f) * 0.03f), sx > 0 ? Vector3.right : Vector3.left, Vector3.up, 0.006f, 0.006f, Pal.Glow(Pal.WindowGlow));
+            // The stair tower: glass on the front, a little taller.
+            var st = new Vector3(w / 2 - 0.004f, 0f, -0.012f);
+            b.AddBox(st + Vector3.up * (0.004f + (h + 0.012f) / 2), new Vector3(0.018f, h + 0.012f, 0.026f), wall, wall, wall);
+            b.AddFace(st + new Vector3(0f, 0.004f + (h + 0.012f) / 2, -0.0133f), Vector3.back, Vector3.up, 0.006f, (h + 0.004f) / 2, new Color(0.62f, 0.78f, 0.88f, 1f));
+            // The canopy over the entrance, the roof's tank and lift housing.
+            b.AddBox(new Vector3(-0.008f, 0.026f, -d / 2 - 0.007f), new Vector3(0.024f, 0.0016f, 0.014f), accent);
+            b.AddCylinder(new Vector3(-0.03f, 0.004f + h, 0.015f), 0.008f, 0.008f, 0.014f, 12, Pal.Hex("#9AA0A8"), Pal.Hex("#B8BEC4"), true);
+            b.AddBox(new Vector3(0.015f, 0.004f + h + 0.008f, 0.01f), new Vector3(0.018f, 0.016f, 0.016f), wall);
+            return 0.004f + h + 0.016f;
+        }
+
+        /// <summary>
+        /// The farmhouse: a long, low house under a deep half-hipped roof sweeping down almost to the ground floor, a
+        /// timber barn wing attached at the side with its big doors, a porch with a bench along the front, a pump, a
+        /// vegetable patch and a woodpile.
+        /// </summary>
+        private static float FarmhouseLong(MeshBuilder b, ref Rng rng, Style s)
+        {
+            const float w = 0.1f, d = 0.06f, wallH = 0.032f;
+            var white = Pal.Hex("#F2ECE0"); var timber = Pal.Hex("#7A4E2C");
+            Foundation(b, ref rng, w + 0.05f, d);
+            b.AddBox(new Vector3(-0.02f, 0.004f + wallH / 2, 0f), new Vector3(w, wallH, d), white, white, white);
+            HipRoof(b, new Vector3(-0.02f, 0.004f + wallH, 0f), w, d, 0.045f, Pal.Hex("#8E4A34"), 0.008f);
+            // The half-hips: gable triangles in the roof's ends.
+            foreach (int sx in new[] { -1, 1 })
+            {
+                var c = new Vector3(-0.02f + sx * (w / 2 - 0.006f), 0.004f + wallH + 0.02f, 0f);
+                b.AddTriangleOutward(c + new Vector3(0f, -0.012f, -0.014f), c + new Vector3(0f, -0.012f, 0.014f), c + new Vector3(0f, 0.012f, 0f), c - new Vector3(sx * 0.02f, 0f, 0f), white);
+            }
+            // The barn wing.
+            var barn = new Vector3(0.055f, 0f, 0.004f);
+            b.AddBox(barn + Vector3.up * (0.004f + 0.022f), new Vector3(0.04f, 0.044f, 0.052f), timber, timber, timber);
+            if (!b.TooSmall(0.002f)) for (int k = 0; k < 8; k++) b.AddBox(barn + new Vector3(-0.0175f + k * 0.005f, 0.026f, -0.0262f), new Vector3(0.0008f, 0.044f, 0.0006f), Pal.Shade(timber, 0.75f));
+            GableRoofColoured(b, barn + Vector3.up * 0.048f, 0.046f, 0.058f, 0.024f, Pal.Hex("#6A6A66"), timber, alongZ: true);
+            b.AddFace(barn + new Vector3(0f, 0.02f, -0.0262f), Vector3.back, Vector3.up, 0.012f, 0.016f, Pal.Hex("#B8483E"));
+            if (!b.TooSmall(0.002f)) foreach (int sx in new[] { -1, 1 }) { b.Push(barn + new Vector3(sx * 0.006f, 0.02f, -0.0266f), Quaternion.Euler(0f, 0f, sx * 53f)); b.AddBox(Vector3.zero, new Vector3(0.0012f, 0.03f, 0.0006f), white); b.Pop(); }
+            // Windows with shutters, the door, the porch.
+            for (int k = 0; k < 4; k++)
+            {
+                float x = -0.06f + k * 0.027f;
+                if (k == 2) WallDoor(b, ref rng, s, new Vector3(x, 0.004f, -d / 2), Vector3.back, 0.011f, 0.025f);
+                else WallWindow(b, ref rng, s, new Vector3(x, 0.02f, -d / 2), Vector3.back, 0.01f, 0.012f, true, true);
+            }
+            b.AddBox(new Vector3(-0.02f, 0.005f, -d / 2 - 0.008f), new Vector3(0.09f, 0.002f, 0.016f), Pal.Hex("#A8743E"));
+            for (int k = 0; k < 5; k++) b.AddBox(new Vector3(-0.062f + k * 0.021f, 0.018f, -d / 2 - 0.015f), new Vector3(0.0016f, 0.026f, 0.0016f), timber);
+            b.Push(new Vector3(-0.02f, 0.031f, -d / 2 - 0.009f), Quaternion.Euler(-20f, 0f, 0f));
+            b.AddBox(Vector3.zero, new Vector3(0.094f, 0.0014f, 0.02f), Pal.Hex("#8E4A34"));
+            b.Pop();
+            b.AddBox(new Vector3(-0.045f, 0.009f, -d / 2 - 0.004f), new Vector3(0.016f, 0.0012f, 0.005f), timber);
+            // The pump, the woodpile and the vegetable patch.
+            b.AddCylinder(new Vector3(-0.072f, 0f, -0.045f), 0.0015f, 0.0015f, 0.014f, 6, Pal.Hex("#3A5A4A"), Pal.Hex("#3A5A4A"), true);
+            for (int k = 0; k < 6; k++) b.AddCylinder(new Vector3(0.08f, 0.0025f + (k / 3) * 0.004f, -0.015f + (k % 3) * 0.004f), 0.0018f, 0.0018f, 0.012f, 6, Pal.Hex("#A8743E"), Pal.Hex("#C8945E"), true, true, true);
+            return 0.004f + wallH + 0.045f;
+        }
+
+        /// <summary>
+        /// The theatre: a temple front of six columns under a great pediment, a marquee over the doors framed in light
+        /// bulbs with THEATRE on it, posters either side, and behind it all the tall plain fly tower that every theatre has.
+        /// </summary>
+        private static float TheatreHouse(MeshBuilder b, ref Rng rng, Style s)
+        {
+            var stone = Pal.Hex("#EDE0C8"); var red = Pal.Hex("#8E2F3A"); var gold = Pal.Hex("#E0B040");
+            b.AddBox(new Vector3(0f, 0.003f, 0f), new Vector3(0.124f, 0.006f, 0.1f), Pal.Shade(stone, 0.9f));
+            for (int k = 0; k < 3; k++) b.AddBox(new Vector3(0f, 0.001f + k * 0.002f, -0.054f - k * 0.003f), new Vector3(0.07f, 0.002f, 0.004f), Pal.Shade(stone, 0.95f));
+            // The auditorium and, behind it, the fly tower.
+            b.AddBox(new Vector3(0f, 0.006f + 0.035f, 0.005f), new Vector3(0.11f, 0.07f, 0.07f), stone, stone, stone);
+            HipRoof(b, new Vector3(0f, 0.076f, 0.005f), 0.11f, 0.07f, 0.018f, Pal.Hex("#5EA88A"));
+            b.AddBox(new Vector3(0f, 0.006f + 0.06f, 0.034f), new Vector3(0.07f, 0.12f, 0.03f), Pal.Shade(stone, 0.92f), Pal.Shade(stone, 0.96f), stone);
+            // The portico.
+            for (int k = 0; k < 6; k++) b.AddCylinder(new Vector3(-0.04f + k * 0.016f, 0.006f, -0.042f), 0.003f, 0.0026f, 0.052f, 12, stone, stone, true);
+            b.AddBox(new Vector3(0f, 0.061f, -0.038f), new Vector3(0.094f, 0.007f, 0.014f), stone);
+            var top = new Vector3(0f, 0.088f, -0.045f); var l = new Vector3(-0.048f, 0.065f, -0.045f); var r = new Vector3(0.048f, 0.065f, -0.045f);
+            b.AddTriangleOutward(l, r, top, top + Vector3.forward * 0.02f + Vector3.down * 0.01f, stone);
+            b.AddTriangleOutward(l, top, top + Vector3.forward * 0.012f, new Vector3(0.03f, 0.07f, -0.04f), Pal.Shade(stone, 0.92f));
+            b.AddTriangleOutward(r, top + Vector3.forward * 0.012f, top, new Vector3(-0.03f, 0.07f, -0.04f), Pal.Shade(stone, 0.92f));
+            b.AddBlob(new Vector3(0f, 0.073f, -0.0455f), new Vector3(0.006f, 0.004f, 0.0008f), 1, 0f, 4, (_, __) => gold);   // the masks
+            // Doors, the marquee in bulbs, posters.
+            for (int k = -1; k <= 1; k++) WallDoor(b, ref rng, new Style { Door = red, Trim = s.Trim, Plaster = stone, Curtain = s.Curtain, Flower = s.Flower, Shutter = s.Shutter, Roof = s.Roof, Timber = s.Timber }, new Vector3(k * 0.02f, 0.006f, -0.0302f), Vector3.back, 0.012f, 0.028f, true);
+            b.AddBox(new Vector3(0f, 0.038f, -0.05f), new Vector3(0.07f, 0.012f, 0.012f), red, red, red);
+            Lettering.Add(b, "THEATRE", new Vector3(0f, 0.038f, -0.0562f), Vector3.back, 0.0055f, 0.0005f, gold);
+            if (!b.TooSmall(0.002f))
+                for (int k = 0; k < 18; k++) { float x = -0.034f + k * 0.004f; foreach (float y in new[] { 0.0322f, 0.0438f }) b.AddBlob(new Vector3(x, y, -0.0563f), Vector3.one * 0.0007f, 0, 0f, k, (_, __) => Pal.Glow(Pal.Hex("#FFE9B0"))); }
+            foreach (int sx in new[] { -1, 1 }) b.AddFace(new Vector3(sx * 0.05f, 0.025f, -0.0302f), Vector3.back, Vector3.up, 0.006f, 0.009f, sx < 0 ? Pal.Hex("#2E4E7A") : Pal.Hex("#C8392E"));
+            return 0.126f;
         }
     }
 }

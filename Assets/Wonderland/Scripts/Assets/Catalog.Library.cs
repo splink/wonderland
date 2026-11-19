@@ -34,10 +34,12 @@ namespace Wonderland
             D(Thatched, "Cottages", "A long, low house under a deep straw roof - home to one villager");
             D(Chalet, "Cottages", "A timber mountain chalet with a wide balcony and a bench outside");
             D(Townhouse, "Town homes", "A narrow, tall town house - home to one villager");
-            D(Apartments, "Town homes", "A block of flats over several floors - home to two households");
+            D(Farmhouse, "Country", "A long, low farmhouse under a sweeping roof, its barn wing attached - home to a farming family");
+            D(Apartments, "Town homes", "A modern block of flats, balconies on every floor - home to two households");
             // Town.
             D(TownHall, "Civic", "The seat of the village: a clock tower over a pillared front, the clerk at work inside");
             D(Church, "Civic", "A church with a tall spire and a clock - people gather on its steps");
+            D(Theatre, "Civic", "Columns, a pediment, THEATRE in lights and the tall fly tower behind: an audience every evening");
             D(Museum, "Civic", "Halls of curiosities behind a columned portico, a dinosaur in the courtyard");
             D(Hotel, "Civic", "A grand hotel: guests stay and go sightseeing round the village", "near the shops and sights");
             D(Fountain, "Squares", "A fountain for the village square - people meet round its rim");

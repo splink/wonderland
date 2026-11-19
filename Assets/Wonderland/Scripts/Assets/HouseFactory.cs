@@ -81,7 +81,7 @@ namespace Wonderland
                 case 0: height = Cottage(b, ref rng, s); break;
                 case 1: height = Townhouse(b, ref rng, s); break;
                 case 2: height = Thatched(b, ref rng, s); break;
-                case 3: height = StationHouse(b, ref rng, s); break;
+                case 3: height = RailwayStation(b, ref rng, s); break;
                 default:
                     height = Place(b, ref rng, s, variant, style, out bool warp);
                     if (!warp) { Signage(b, variant); return b.ToMesh($"Place_{Catalog.Get(variant).Name}_{style}"); }

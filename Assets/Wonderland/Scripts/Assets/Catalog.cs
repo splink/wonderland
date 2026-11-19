@@ -117,7 +117,7 @@ namespace Wonderland
             Camera = 50, Balloon = 51, Jetty = 52, RowingBoat = 53, SailingBoat = 54, Steamer = 55, Halt = 56, TaxiRank = 57,
             Sawmill = 58, FurnitureShop = 59, IceCream = 60, Pub = 61, Hotel = 62, PostOffice = 63, Letterbox = 64, CarPark = 65, FreightYard = 66, Harbour = 67, Zoo = 68, FairyCastle = 69, Stadium = 70, Zebra = 71,
             ZooGate = 72, ZooPlaza = 73, Savanna = 74, ElephantHouse = 75, LionRock = 76, PenguinPool = 77, MonkeyIsland = 78, Aviary = 79, TropicalHouse = 80,
-            PettingZoo = 81, ZooKiosk = 82, SafariCafe = 83, ZooGarden = 84, BusStop = 85;
+            PettingZoo = 81, ZooKiosk = 82, SafariCafe = 83, ZooGarden = 84, BusStop = 85, Farmhouse = 86, Theatre = 87;
 
         /// <summary>A station of any size (the big one, or a country halt): trains stop beside it.</summary>
         public static bool IsStation(int variant) => variant == Station || variant == Halt || variant == FreightYard;
@@ -292,6 +292,10 @@ namespace Wonderland
             list.Add(new() { Name = "Bus stop", Short = "Bus stop", Category = PlaceCategory.Travel, Half = new Vector2(0.024f, 0.012f), Height = 0.045f, Pad = false, Small = true, Styles = 1,
                 Hint = "buses call here - put it beside a road",
                 Spots = new[] { new ActivitySpot(-0.007f, -0.004f, SpotKind.Sit, 180f), new ActivitySpot(0.007f, -0.004f, SpotKind.Sit, 180f), new ActivitySpot(0.018f, -0.018f, SpotKind.Gather, 90f) } });
+            list.Add(new() { Name = "Farmhouse", Short = "Farmhouse", Category = PlaceCategory.Homes, Half = new Vector2(0.088f, 0.05f), Height = 0.085f, Residents = 2, Styles = 4,
+                Spots = new[] { Door(0.034f, 0.05f), new ActivitySpot(-0.045f, -0.06f, SpotKind.Sit, 180f) } });
+            list.Add(new() { Name = "Theatre", Short = "Theatre", Category = PlaceCategory.Town, Half = new Vector2(0.064f, 0.062f), Height = 0.13f, Styles = 1, Hint = "an audience every evening",
+                Spots = new[] { Door(0f, 0.062f), new ActivitySpot(-0.03f, -0.075f, SpotKind.Gather), new ActivitySpot(0f, -0.08f, SpotKind.Gather), new ActivitySpot(0.03f, -0.075f, SpotKind.Gather), new ActivitySpot(0.045f, -0.068f, SpotKind.Watch, -20f) } });
             for (int i = 0; i < list.Count; i++) list[i].Id = i;
             // What each place is for: the needs it satisfies decide who comes and when (see Needs).
             foreach (var b in list)
@@ -306,6 +310,7 @@ namespace Wonderland
                     ZooKiosk or SafariCafe => Need.Food,
                     ZooPlaza => Need.Rest,
                     BusStop => Need.Social,
+                    Theatre => Need.Fun,
                     Bench or LogPile or HayBales => Need.Rest,
                     _ => b.Category == PlaceCategory.Homes ? Need.Rest : Need.None,
                 };
@@ -345,6 +350,8 @@ namespace Wonderland
             Work(Hotel, "hotel keeper", 7f, 21f);
             Hours(PostOffice, 9f, 17.5f); Work(PostOffice, "postmaster", 8f, 17.5f);
             Hours(Zoo, 9f, 18f); Work(Zoo, "zookeeper", 8f, 18f);
+            Hours(Theatre, 18f, 23f); Work(Theatre, "usher", 17.5f, 23f, true);
+            list[Theatre].Rhythm = new[] { 0f, 0f, 0f, 0f, 0f, 0.05f, 0.9f, 1f, 0.4f };   // the evening performance
             foreach (int id in new[] { ZooGate, Savanna, ElephantHouse, LionRock, PenguinPool, MonkeyIsland, Aviary, TropicalHouse, PettingZoo, ZooKiosk, SafariCafe }) Hours(id, 9f, 18f);
             Work(ZooGate, "ticket seller", 8.5f, 18f); Work(ElephantHouse, "elephant keeper", 7.5f, 17.5f); Work(Savanna, "zookeeper", 8f, 18f);
             Work(ZooKiosk, "kiosk keeper", 9f, 18f, false, Goods.Sells); Work(SafariCafe, "cook", 9f, 18f, false, Goods.Sells);
