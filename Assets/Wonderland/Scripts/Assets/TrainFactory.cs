@@ -42,10 +42,10 @@ namespace Wonderland
         private static Color CoachColour(int livery, int variant) => Pal.Hex(Liveries[Mod(livery), 2 + (variant & 1)]);
         private static int Mod(int livery) => ((livery % Liveries.GetLength(0)) + Liveries.GetLength(0)) % Liveries.GetLength(0);
 
-        private static Mesh Cached(int kind, int a, int b, System.Func<Mesh> build)
+        private static Mesh Cached(int kind, int a, int b, System.Func<Mesh> build, int detail = 0)
         {
-            int key = kind * 1000000 + a * 1000 + b;
-            if (!Cache.TryGetValue(key, out var mesh)) Cache[key] = mesh = build();
+            int key = (detail + 1) * 100000000 + kind * 1000000 + a * 1000 + b;
+            if (!Cache.TryGetValue(key, out var mesh)) Cache[key] = mesh = detail == 0 ? build() : MeshBuilder.At(detail, 1f, build);
             return mesh;
         }
 
@@ -97,18 +97,18 @@ namespace Wonderland
             Chimney = new Vector3(0f, 0.077f, 0.058f * TankScale),
         };
 
-        public static Mesh LocoMesh(int livery = 0) => Cached(1, Mod(livery), 0, () => BuildLoco(Mod(livery)));
-        public static Mesh DieselMesh(int livery = 0) => Cached(6, Mod(livery), 0, () => BuildDiesel(Mod(livery)));
-        public static Mesh TankMesh(int livery = 0) => Cached(7, Mod(livery), 0, () =>
+        public static Mesh LocoMesh(int livery = 0, int detail = 0) => Cached(1, Mod(livery), 0, () => BuildLoco(Mod(livery)), detail);
+        public static Mesh DieselMesh(int livery = 0, int detail = 0) => Cached(6, Mod(livery), 0, () => BuildDiesel(Mod(livery)), detail);
+        public static Mesh TankMesh(int livery = 0, int detail = 0) => Cached(7, Mod(livery), 0, () =>
         {
             var b = new MeshBuilder();
-            b.AddMesh(LocoMesh(livery), Matrix4x4.Scale(new Vector3(0.96f, 0.97f, TankScale)));
+            b.AddMesh(LocoMesh(livery, detail), Matrix4x4.Scale(new Vector3(0.96f, 0.97f, TankScale)));
             return b.ToMesh("Tank engine" + livery);
-        });
+        }, detail);
         public static Mesh RodMesh => rods ??= BuildRods();
-        public static Mesh CoachMesh(int variant, int livery = 0) => Cached(2, Mod(livery), variant & 1, () => BuildCoach(variant & 1, Mod(livery)));
-        public static Mesh WagonMesh(int variant) => Cached(3, variant % WagonVariants, 0, () => BuildWagon(variant % WagonVariants));
-        public static Mesh RailcarMesh(int livery = 0) => Cached(4, Mod(livery), 0, () => BuildRailcar(Mod(livery)));
+        public static Mesh CoachMesh(int variant, int livery = 0, int detail = 0) => Cached(2, Mod(livery), variant & 1, () => BuildCoach(variant & 1, Mod(livery)), detail);
+        public static Mesh WagonMesh(int variant, int detail = 0) => Cached(3, variant % WagonVariants, 0, () => BuildWagon(variant % WagonVariants), detail);
+        public static Mesh RailcarMesh(int livery = 0, int detail = 0) => Cached(4, Mod(livery), 0, () => BuildRailcar(Mod(livery)), detail);
 
         public static Mesh AxleMesh(float radius, int livery = 0) =>
             Cached(5, Mathf.RoundToInt(radius * 10000f), Mod(livery), () => BuildAxle(radius, LiveryColour(livery)));

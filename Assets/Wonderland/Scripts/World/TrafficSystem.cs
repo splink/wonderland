@@ -309,6 +309,7 @@ namespace Wonderland
             go.AddComponent<MeshFilter>().sharedMesh = VehicleFactory.Get(kind, colour);
             var r = go.AddComponent<MeshRenderer>();
             r.sharedMaterial = material; r.shadowCastingMode = ShadowCastingMode.On;
+            Lod.Attach(r, d => VehicleFactory.Get(kind, colour, d), VehicleFactory.Length(kind));
             var at = VehicleFactory.Beacons(kind);
             var beacons = new Transform[at.Length];
             for (int i = 0; i < at.Length; i++)
@@ -718,6 +719,7 @@ namespace Wonderland
             go.AddComponent<MeshFilter>().sharedMesh = VehicleFactory.Get(kind, colour);
             var r = go.AddComponent<MeshRenderer>();
             r.sharedMaterial = material; r.shadowCastingMode = ShadowCastingMode.On;
+            Lod.Attach(r, d => VehicleFactory.Get(kind, colour, d), VehicleFactory.Length(kind));
             var v = new Vehicle { Kind = kind, Root = go.transform, Beacons = System.Array.Empty<Transform>(), Home = graph[n].P, Roams = true, Colour = colour, Rng = new Rng(Mathf.RoundToInt(at.x * 9973f + at.y * 7717f) + Vehicles.Count) };
             // Facing the way it was pointed along the road, in the right-hand lane.
             var d = Direction(n);

@@ -147,13 +147,13 @@ namespace Wonderland
             return c;
         }
 
-        private static Mesh CarMesh(TrainKind kind, int index, int livery) => kind switch
+        private static Mesh CarMesh(TrainKind kind, int index, int livery, int detail = 0) => kind switch
         {
-            TrainKind.Goods => index == 0 ? TrainFactory.LocoMesh(livery) : TrainFactory.WagonMesh((index - 1) % TrainFactory.WagonVariants),
-            TrainKind.Railcar => TrainFactory.RailcarMesh(livery),
-            TrainKind.Express => index == 0 ? TrainFactory.DieselMesh(livery) : TrainFactory.CoachMesh(index - 1, livery),
-            TrainKind.Tank => index == 0 ? TrainFactory.TankMesh(livery) : TrainFactory.CoachMesh(index - 1, livery),
-            _ => index == 0 ? TrainFactory.LocoMesh(livery) : TrainFactory.CoachMesh(index - 1, livery),
+            TrainKind.Goods => index == 0 ? TrainFactory.LocoMesh(livery, detail) : TrainFactory.WagonMesh((index - 1) % TrainFactory.WagonVariants, detail),
+            TrainKind.Railcar => TrainFactory.RailcarMesh(livery, detail),
+            TrainKind.Express => index == 0 ? TrainFactory.DieselMesh(livery, detail) : TrainFactory.CoachMesh(index - 1, livery, detail),
+            TrainKind.Tank => index == 0 ? TrainFactory.TankMesh(livery, detail) : TrainFactory.CoachMesh(index - 1, livery, detail),
+            _ => index == 0 ? TrainFactory.LocoMesh(livery, detail) : TrainFactory.CoachMesh(index - 1, livery, detail),
         };
 
         public static float LengthOf(TrainKind kind, int cars = -1)
@@ -1313,6 +1313,9 @@ namespace Wonderland
                 if (i > 0) fromFront += Gap;
                 fromFront += layout.Front;
                 var body = Part(CarMesh(t.Kind, i, t.Livery), t.Root);
+                // Its five levels of detail, like the buildings: the body is simpler further away, moving or not.
+                int index = i; var kind = t.Kind; int livery = t.Livery;
+                Lod.Attach(body.GetComponent<MeshRenderer>(), d => CarMesh(kind, index, livery, d), layout.Front - layout.Rear);
                 var car = new Train.Car { Body = body, Layout = layout, FromFront = fromFront, Axles = new Transform[layout.Axles.Length], Radius = layout.WheelRadius };
                 for (int a = 0; a < layout.Axles.Length; a++)
                 {

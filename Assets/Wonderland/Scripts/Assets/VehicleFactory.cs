@@ -26,10 +26,18 @@ namespace Wonderland
             VehicleKind.Van => 0.056f, VehicleKind.Bus => 0.1f, VehicleKind.Truck => 0.088f, VehicleKind.Tanker => 0.088f, VehicleKind.Flatbed => 0.088f, VehicleKind.Tractor => 0.034f, _ => 0.05f,
         };
 
-        public static Mesh Get(VehicleKind k, int colour = 0)
+        public static Mesh Get(VehicleKind k, int colour = 0) => Get(k, colour, 0);
+
+        private static readonly System.Collections.Generic.Dictionary<int, Mesh> levels = new();
+
+        /// <summary>A vehicle at a level of detail (see <see cref="MeshBuilder.Detail"/>).</summary>
+        public static Mesh Get(VehicleKind k, int colour, int detail)
         {
             int key = (int)k * 4 + (k is VehicleKind.Car or VehicleKind.Van or VehicleKind.Truck or VehicleKind.Flatbed ? colour % 4 : 0);
-            return meshes[key] ??= Build(k, colour % 4);
+            if (detail == 0) return meshes[key] ??= Build(k, colour % 4);
+            int at = key * 8 + detail + 1;
+            if (!levels.TryGetValue(at, out var mesh)) levels[at] = mesh = MeshBuilder.At(detail, 1f, () => Build(k, colour % 4));
+            return mesh;
         }
 
         /// <summary>Where the blue lights sit (local), for vehicles that have them.</summary>

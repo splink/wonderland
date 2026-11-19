@@ -104,6 +104,7 @@ namespace Wonderland
                 p.Root.localPosition = new Vector3(h.x, world.Buildings.SitHeight(h, out _), h.z);
                 p.Root.localRotation = Quaternion.Euler(0f, h.rotation, 0f);
                 p.Jib = Part("Crane", p.Root, HouseFactory.CraneMesh());
+                Lod.Attach(p.Jib.GetComponent<MeshRenderer>(), HouseFactory.CraneMesh, HouseFactory.CraneHeight);
                 p.Trolley = Part("Trolley", p.Jib, HouseFactory.TrolleyMesh());
                 var cable = new MeshBuilder(); cable.AddBox(new Vector3(0f, -0.5f, 0f), new Vector3(0.0006f, 1f, 0.0006f), Pal.TrainBlack);
                 p.Cable = Part("Cable", p.Trolley, cable.ToMesh("Cable"));
@@ -125,6 +126,7 @@ namespace Wonderland
                     if (route == null) continue;
                     var s = new Ship { Name = "MV " + Names[ships.Count % Names.Length], A = a.House, B = b.House, Route = route, Pos = from, Heading = heading, ToB = true, Docked = true, Cargo = 4, Wait = 2f };
                     s.Root = Part("Container ship", transform, HouseFactory.ShipMesh());
+                    Lod.Attach(s.Root.GetComponent<MeshRenderer>(), HouseFactory.ShipMesh, 0.16f);
                     s.Deck = Part("Deck", s.Root, null).GetComponent<MeshFilter>();
                     ships.Add(s);
                     Pose(s);

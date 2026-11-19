@@ -78,6 +78,7 @@ namespace Wonderland
                 c.Root.localPosition = new Vector3(h.x, world.Terrain.SurfaceAt(h.x, h.z), h.z);
                 c.Root.localRotation = Quaternion.Euler(0f, h.rotation, 0f);
                 c.Jib = Part("Crane", c.Root, HouseFactory.CraneMesh());
+                Lod.Attach(c.Jib.GetComponent<MeshRenderer>(), HouseFactory.CraneMesh, HouseFactory.CraneHeight);
                 c.Jib.localPosition = new Vector3(0f, 0.002f, HouseFactory.CraneRailZ);
                 c.Trolley = Part("Trolley", c.Jib, HouseFactory.TrolleyMesh());
                 c.Cable = Part("Cable", c.Trolley, null);

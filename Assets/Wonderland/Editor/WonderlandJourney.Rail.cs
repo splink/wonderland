@@ -387,6 +387,17 @@ namespace Wonderland.Editor
             int wagons = goods != null ? TrainSystem.CarsOf(goods) : 0;
             Check(wagons == 20, $"A goods train couples up to twenty wagons ({wagons}{(grow != null ? ": " + grow : "")})");
             if (goods != null) goods.Running = true;
+            // Every carriage has its five levels of detail, simpler with distance (moving or not).
+            int groups = 0, simpler = 0;
+            foreach (var g in w2.Trains.GetComponentsInChildren<LODGroup>())
+            {
+                if (g.lodCount != MeshBuilder.Levels) continue;
+                groups++;
+                var lods = g.GetLODs();
+                int near = lods[0].renderers[0].GetComponent<MeshFilter>().sharedMesh.vertexCount, far = lods[^1].renderers[0].GetComponent<MeshFilter>().sharedMesh.vertexCount;
+                if (far < near) simpler++;
+            }
+            Check(groups >= 21 && simpler == groups, $"Every carriage of the long train has five levels of detail, simpler further away ({groups} carriages with levels, {simpler} simpler far off)");
             var (_, offLong) = RunTrains(w2, 40f);
             Check(offLong < 0.004f && goods != null && TrainSystem.CarsOf(goods) == 20, $"...and runs round the curves with every wagon on the rails ({offLong * 1000f:0.0} mm at worst)");
             UnityEngine.Object.DestroyImmediate(w.gameObject);

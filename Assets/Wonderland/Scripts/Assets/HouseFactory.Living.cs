@@ -271,6 +271,14 @@ namespace Wonderland
         /// A little container ship (bow +Z, the waterline at y = 0): a red and black hull, the white bridge aft with its
         /// funnel, and a deck for up to eight containers (see <see cref="ShipDeck"/>).
         /// </summary>
+        private static readonly Mesh[] shipLevels = new Mesh[MeshBuilder.Levels], craneLevels = new Mesh[MeshBuilder.Levels];
+
+        /// <summary>The container ship at a level of detail.</summary>
+        public static Mesh ShipMesh(int detail) => detail == 0 ? ShipMesh() : shipLevels[detail + 1] ??= MeshBuilder.At(detail, 1f, () => { var was = ship; ship = null; try { return ShipMesh(); } finally { ship = was; } });
+
+        /// <summary>The crane at a level of detail.</summary>
+        public static Mesh CraneMesh(int detail) => detail == 0 ? CraneMesh() : craneLevels[detail + 1] ??= MeshBuilder.At(detail, 1f, () => { var was = crane; crane = null; try { return CraneMesh(); } finally { crane = was; } });
+
         public static Mesh ShipMesh()
         {
             if (ship != null) return ship;
