@@ -1395,7 +1395,7 @@ namespace Wonderland
                 {
                     if (c?.Body == null) continue;
                     var p = c.Body.localPosition;
-                    bool show = shown(new Vector2(p.x, p.z), 0.08f);
+                    bool show = shown(new Vector2(p.x, p.z), Mathf.Max(c.Layout.Front, -c.Layout.Rear) + 0.004f);
                     if (c.Body.gameObject.activeSelf != show) c.Body.gameObject.SetActive(show);
                 }
             }

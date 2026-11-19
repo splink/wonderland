@@ -279,7 +279,17 @@ namespace Wonderland
         /// lives - trains run, people go about their day, cars drive - it just isn't shown. Ground just outside is built in
         /// advance, so what slides into view is there.
         /// </summary>
-        private Func<Vector2, float, bool> inWindow, nearWindow, everywhere, keptNear;
+        private Func<Vector2, float, bool> inWindow, nearWindow, everywhere, keptNear, whole;
+
+        /// <summary>
+        /// Things this big or smaller (metres from their middle to their furthest point) aren't cut by the window's edge:
+        /// a house, a car, a carriage half in view vanishes until it is wholly in. Bigger ones - the castle, the zoo's
+        /// savanna, the stadium - are cut cleanly as the land is (they would be startling to see pop in and out).
+        /// </summary>
+        public const float VanishRadius = 0.12f;
+
+        /// <summary>Whether an object of <paramref name="radius"/> at a point shows: small ones only wholly inside, big ones whenever any of them is.</summary>
+        public bool ShowsWhole(Vector2 p, float radius) => !Windowed || (radius <= VanishRadius ? InWindow(p, -radius) : InWindow(p, radius));
         private int cullFrame;
         private bool windowMovedSinceCull = true;
         private Func<Vector3, bool> figureInWindow;
@@ -290,12 +300,14 @@ namespace Wonderland
             nearWindow ??= (p, r) => InWindow(p, r + 0.6f);
             everywhere ??= (p, r) => true;
             keptNear ??= (p, r) => InWindow(p, r + 2f);
-            figureInWindow ??= p => InWindow(transform.InverseTransformPoint(p), 0.03f);
+            whole ??= ShowsWhole;
+            figureInWindow ??= p => InWindow(transform.InverseTransformPoint(p), -0.006f);   // (a figure steps out of view at the edge, not cut in half)
             var shown = Windowed ? inWindow : everywhere;
             Forest.Shown = Cover.Shown = Windowed ? nearWindow : null;   // (built a little ahead)
             FigureBatch.Window = Windowed ? figureInWindow : null;
             windowMovedSinceCull = false;
-            Forest.Cull(shown, Windowed ? keptNear : null); Cover.Cull(shown, Windowed ? keptNear : null); Buildings.Cull(shown); Trains.Cull(shown); Traffic.Cull(shown); Boats.Cull(shown);
+            var things = Windowed ? whole : everywhere;
+            Forest.Cull(shown, Windowed ? keptNear : null); Cover.Cull(shown, Windowed ? keptNear : null); Buildings.Cull(things); Trains.Cull(things); Traffic.Cull(things); Boats.Cull(things);
             if (Moving) { Forest.RebuildDirty(6); Cover.RebuildDirty(6); }
         }
     }

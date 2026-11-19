@@ -356,6 +356,15 @@ namespace Wonderland.Editor
             int shownChunks = 0, hiddenChunks = 0;
             foreach (Transform c in w.Forest.transform) { if (c.gameObject.activeSelf) shownChunks++; else hiddenChunks++; }
             Check(near == null && far == null && activeHouses == 1 && hiddenHouses == 1, $"The house beyond the window isn't drawn, the one in it is ({activeHouses} shown, {hiddenHouses} hidden)");
+            // On the edge: a cottage half in view vanishes; the castle half in view is cut, not hidden.
+            int edgeHouse = w.Buildings.Houses.Count;
+            string onEdge = w.PlaceHouse(new HouseInstance { x = 1.5f, z = 0.9f, variant = Catalog.Cottage });
+            int edgeCastle = w.Buildings.Houses.Count;
+            string castle = w.PlaceHouse(new HouseInstance { x = -1.5f, z = -0.3f, variant = Catalog.FairyCastle });
+            w.RefreshVisibility();
+            bool houseGone = onEdge == null && !w.Buildings.transform.GetChild(edgeHouse).gameObject.activeSelf;
+            bool castleCut = castle == null && w.Buildings.transform.GetChild(edgeCastle).gameObject.activeSelf;
+            Check(houseGone && castleCut, $"On the window's edge a cottage half in view vanishes, while the big castle is cut cleanly ({onEdge ?? "cottage hidden " + houseGone}, {castle ?? "castle shown " + castleCut})");
             Check(shownChunks > 0 && w.Forest.Trees.Exists(tr => tr.x > 3.5f) && hiddenChunks + 0 >= 0 && !HasActiveBeyond(w.Forest.transform, 1.6f),
                 $"Trees beyond the window are neither drawn nor built ({shownChunks} chunks shown, {hiddenChunks} hidden)");
             // The train runs east out of the window and keeps going.

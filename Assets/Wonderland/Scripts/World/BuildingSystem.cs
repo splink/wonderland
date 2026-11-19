@@ -140,7 +140,7 @@ namespace Wonderland
                 if (!renderers[i]) continue;
                 var h = Houses[i];
                 var half = Catalog.Get(h.variant).Half;
-                bool show = shown(new Vector2(h.x, h.z), Mathf.Max(half.x, half.y) * 1.5f + 0.05f);
+                bool show = shown(new Vector2(h.x, h.z), half.magnitude);   // (its radius: see WonderlandWorld.ShowsWhole)
                 if (renderers[i].gameObject.activeSelf != show) renderers[i].gameObject.SetActive(show);
             }
         }

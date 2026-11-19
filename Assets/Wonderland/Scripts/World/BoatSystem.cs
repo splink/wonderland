@@ -48,7 +48,7 @@ namespace Wonderland
             foreach (var b in Boats)
             {
                 if (b.Root == null) continue;
-                bool show = shown(b.Pos, 0.08f);
+                bool show = shown(b.Pos, 0.065f);
                 if (b.Root.gameObject.activeSelf != show) b.Root.gameObject.SetActive(show);
             }
         }

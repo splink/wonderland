@@ -77,7 +77,7 @@ namespace Wonderland
             foreach (var v in Vehicles)
             {
                 if (v.Root == null) continue;
-                bool show = shown(v.Position, 0.08f);
+                bool show = shown(v.Position, VehicleFactory.Length(v.Kind) * 0.5f + 0.004f);
                 if (v.Root.gameObject.activeSelf != show) v.Root.gameObject.SetActive(show);
             }
         }
