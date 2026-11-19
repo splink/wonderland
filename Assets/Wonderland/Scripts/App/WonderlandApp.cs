@@ -82,6 +82,12 @@ namespace Wonderland
 
             Tools = new GameObject("Tools").AddComponent<ToolController>();
             Tools.Init(World, Palette, Rig != null ? Rig.rightControllerAnchor : null);
+            // The map above the palette: the whole world from above, the trains and cars moving on it.
+            var map = new GameObject("Mini map") { layer = PaletteUI.UiLayer }.AddComponent<MiniMap>();
+            map.transform.SetParent(Palette.transform, false);
+            map.transform.localPosition = new Vector3(0f, PaletteUI.Height * 0.5f + MiniMap.Size * 0.5f + 0.012f, 0f);
+            map.Init(World, Materials.Screen);
+            Tools.Map = map;
             Tools.ResetRequested = () => { World.Create(StartSize, Materials, endless: true); World.UseWindow(true); WonderlandWorld.CurrentSlot = 0; Tools.SelectTool(Tool.Terrain); Tools.Say("A fresh landscape - Save it as a world to keep it"); };
             Palette.AddGlobal("Undo", () => Tools.Say(World.Undo() ? "Undone (B does this too)" : "Nothing to undo"));
             Palette.AddGlobal("Redo", () => Tools.Say(World.Redo() ? "Redone" : "Nothing to redo"));

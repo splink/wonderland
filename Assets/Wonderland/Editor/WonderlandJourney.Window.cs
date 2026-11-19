@@ -18,7 +18,7 @@ namespace Wonderland.Editor
         {
             Report.Clear(); failures = 0;
             bool gridWas = BuildGrid.Snap;
-            try { WindowJourney(); StreamingJourney(); VisibilityJourney(); }
+            try { WindowJourney(); StreamingJourney(); VisibilityJourney(); MapJourney(); }
             catch (Exception e) { Fail("Exception: " + e); }
             finally { BuildGrid.Snap = gridWas; Shader.SetGlobalFloat("_WL_WindowOn", 0f); }
             Report.AppendLine(failures == 0 ? "RESULT: PASS" : $"RESULT: FAIL ({failures})");
@@ -360,6 +360,40 @@ namespace Wonderland.Editor
                 if (r != null && r.bounds.size.sqrMagnitude > 0f && c.parent.InverseTransformPoint(r.bounds.center).x > x) return true;
             }
             return false;
+        }
+
+        /// <summary>The map: the whole world built so far, the trains on it, the window framed - and pointing at it goes there.</summary>
+        private static void MapJourney()
+        {
+            var w = Endless("Map", 1400f);
+            var t = w.Terrain;
+            BuildGrid.Snap = true;
+            Put(w, 0, 0.5f, -0.9f);
+            Put(w, 0, 7.2f, 3.4f);
+            var line = w.BuildTrack(Line(t, new Vector2(-1.3f, 0.3f), new Vector2(6.5f, 0.3f)));
+            w.BuildPath(Line(t, new Vector2(-1.3f, -0.4f), new Vector2(6.5f, -0.4f)), PathKind.Road);
+            w.PlaceTrain(t.PointAt(-1.0f, 0.3f), TrainKind.Passenger, Vector3.right, out var train);
+            var map = new GameObject("Map") .AddComponent<MiniMap>();
+            map.transform.SetPositionAndRotation(new Vector3(1400f, 1f, -1f), Quaternion.identity);
+            map.Init(w, Materials().Screen);
+            map.Refresh(true);
+            var f = map.Shows;
+            Check(f.Contains(new Vector2(7.2f, 3.4f)) && f.Contains(new Vector2(-1.3f, -1.5f)) && f.width >= 9f, $"The map shows everything built and the window ({f})");
+            var house = map.ColourAt(new Vector2(7.2f, 3.4f)); var rail = map.ColourAt(new Vector2(3.0f, 0.3f)); var land = map.ColourAt(new Vector2(3.0f, 2.5f));
+            var loco = train != null ? w.Trains.LocoPosition(train) : Vector3.zero;
+            var dot = map.ColourAt(new Vector2(loco.x, loco.z));
+            Check(house.r > 150 && house.g < 120 && rail.r > 100 && rail.b < 80 && land.g > 140 && dot.r > 240 && dot.g > 200 && dot.b < 100,
+                $"Houses, the railway, the land and the train show on it (house {house}, rail {rail}, land {land}, train {dot})");
+            // Pointing at the map's right half, a little up: the window slides there.
+            var aim = new Vector2(f.xMin + f.width * 0.8f, f.yMin + f.height * 0.6f);
+            var from = map.transform.TransformPoint(new Vector3((0.8f - 0.5f) * MiniMap.Size, (0.6f - 0.5f) * MiniMap.Size, -0.3f));
+            bool picked = map.Pick(new Ray(from, map.transform.forward), out var at, out _);
+            bool went = picked && w.NavigateTo(at); w.FinishSlide();
+            Check(picked && (at - aim).magnitude < f.width / MiniMap.Pixels * 2f && went && (w.WindowCenter - aim).magnitude < 0.06f,
+                $"Pointing at the map slides the window there (aimed at {aim}, picked {at}, now at {w.WindowCenter})");
+            File.WriteAllBytes(Path.Combine(WonderlandRenders.Output, "editor-minimap.png"), map.Texture.EncodeToPNG());
+            UnityEngine.Object.DestroyImmediate(map.gameObject);
+            UnityEngine.Object.DestroyImmediate(w.gameObject);
         }
 
         /// <summary>The window seen from a player's eye height: the cut edge, the arrows, half a window after going east.</summary>

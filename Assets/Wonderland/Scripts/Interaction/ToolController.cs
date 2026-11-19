@@ -28,6 +28,8 @@ namespace Wonderland
         /// <summary>The world was put down somewhere new (Move): the app pins it to the room there.</summary>
         public System.Action WorldPlaced;
         public bool HapticsEnabled = true;
+        /// <summary>The map above the palette (the app adds it).</summary>
+        public MiniMap Map;
 
         private readonly float[] radius = { 0.16f, 0.12f, 0.13f, 0.03f, 0.05f, 0.05f, 0.05f, 0.03f, 0.03f, 0.06f };
         public const int Villager = AnimalFactory.KindCount;
@@ -470,6 +472,22 @@ namespace Wonderland
             float rayLength = 2.5f;
             var colour = new Color(1f, 1f, 1f, 0.7f);
             pointerOnPalette = false;
+
+            // 0. The map above the palette: point at a place and pull the trigger to slide the window there.
+            if (!stroking && drawn.Count == 0 && Map != null && Palette.gameObject.activeInHierarchy && Map.Pick(ray, out var mapAt, out float mapDistance))
+            {
+                World.TerrainView.HideBrush();
+                ghost.gameObject.SetActive(false);
+                Palette.ClearHover();
+                if (input.TriggerDown)
+                {
+                    if (World.NavigateTo(mapAt)) { Say("Off there - now " + World.WhereLabel()); Haptic(0.4f, 0.04f); }
+                    else Say("The world doesn't go that far");
+                }
+                pointerOnPalette = true;
+                DrawPointer(ray, mapDistance, new Color(1f, 0.9f, 0.6f, 0.9f), true);
+                return;
+            }
 
             // 1. The palette takes the ray first (unless a stroke is in progress).
             if (!stroking && drawn.Count == 0 && Palette.gameObject.activeInHierarchy)
