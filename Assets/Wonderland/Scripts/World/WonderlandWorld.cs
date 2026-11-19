@@ -591,8 +591,8 @@ namespace Wonderland
             return !Buildings.Contains(p, footprint * 0.6f);
         }
 
-        public int PaintForest(Vector3 local, float radius, float density, float dt) =>
-            Forest.Paint(new Vector2(local.x, local.z), radius, density, dt, CanGrowTree);
+        public int PaintForest(Vector3 local, float radius, float density, float dt, ForestType type = ForestType.Mixed) =>
+            Forest.Paint(new Vector2(local.x, local.z), radius, density, dt, CanGrowTree, type);
 
         public int EraseForest(Vector3 local, float radius, float strength, float dt) =>
             Forest.Erase(new Vector2(local.x, local.z), radius, strength, dt);

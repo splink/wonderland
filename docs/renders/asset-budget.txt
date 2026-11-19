@@ -16,19 +16,33 @@ Wonderland asset vertex budget:
   tree Bush 1: 1164 verts
   tree Bush 2: 1158 verts
   tree Bush 3: 406 verts
+  tree Birch 0: 1791 verts
+  tree Birch 1: 3170 verts
+  tree Birch 2: 1535 verts
+  tree Willow 0: 4560 verts
+  tree Willow 1: 3612 verts
+  tree Palm 0: 1010 verts
+  tree Palm 1: 1220 verts
+  tree Palm 2: 834 verts
+  tree Maple 0: 1817 verts
+  tree Maple 1: 1817 verts
+  tree Maple 2: 1786 verts
+  tree Pine 0: 1244 verts
+  tree Pine 1: 1488 verts
+  tree Pine 2: 1181 verts
   house Cottage: 10958 verts
   house Townhouse: 14200 verts
   house Thatched: 7075 verts
-  house Station: 7455 verts
-  house Apartments: 13728 verts
+  house Station: 5976 verts
+  house Apartments: 3022 verts
   house Chalet: 7533 verts
   house Church: 8124 verts
-  house Town hall: 11519 verts
-  house Bakery: 7500 verts
-  house Café: 7000 verts
-  house Grocer: 6952 verts
-  house School: 8273 verts
-  house Fire station: 5219 verts
+  house Town hall: 13439 verts
+  house Bakery: 7062 verts
+  house Café: 7642 verts
+  house Grocer: 3639 verts
+  house School: 4766 verts
+  house Fire station: 4104 verts
   house Fountain: 1508 verts
   house Barn: 1346 verts
   house Windmill: 1650 verts
@@ -45,7 +59,7 @@ Wonderland asset vertex budget:
   house Campsite: 394 verts
   house Water tower: 522 verts
   house Signal box: 2907 verts
-  house Fuel station: 468 verts
+  house Fuel station: 1268 verts
   house Boulders: 738 verts
   house Crag: 723 verts
   house Log pile: 500 verts
@@ -57,5 +71,56 @@ Wonderland asset vertex budget:
   house Signpost: 101 verts
   house Picnic table: 214 verts
   house Hay bales: 174 verts
+  house Park: 9781 verts
+  house Museum: 5007 verts
+  house Restaurant: 7726 verts
+  house Disco: 2806 verts
+  house Hospital: 2668 verts
+  house Police station: 1612 verts
+  house Factory: 4012 verts
+  house Football pitch: 1116 verts
+  house Monitoring studio: 4540 verts
+  house CCTV camera: 90 verts
+  house Hot-air balloon: 384 verts
+  house Landing stage: 680 verts
+  house Rowing boat: 496 verts
+  house Sailing boat: 524 verts
+  house Paddle steamer: 872 verts
+  house Country halt: 328 verts
+  house Taxi rank: 1102 verts
+  house Sawmill: 2180 verts
+  house Furniture shop: 4668 verts
+  house Ice cream parlour: 2434 verts
+  house Pub: 5862 verts
+  house Hotel: 20974 verts
+  house Post office: 3505 verts
+  house Letterbox: 142 verts
+  house Car park: 784 verts
+  house Freight yard: 164 verts
+  house Harbour: 2828 verts
+  house Zoo: 3624 verts
+  house Fairy-tale castle: 29480 verts
+  house Football stadium: 2564 verts
+  house Zebra crossing: 392 verts
+  house Zoo entrance: 7502 verts
+  house Zoo plaza: 1030 verts
+  house Savanna: 4740 verts
+  house Elephant house: 3976 verts
+  house Lion rock: 2200 verts
+  house Penguin pool: 2024 verts
+  house Monkey island: 2920 verts
+  house Aviary: 2498 verts
+  house Tropical house: 5180 verts
+  house Petting zoo: 3002 verts
+  house Zoo kiosk: 1710 verts
+  house Safari café: 2610 verts
+  house Palms and rocks: 752 verts
+  house Bus stop: 904 verts
+  house Farmhouse: 4264 verts
+  house Theatre: 3795 verts
+  house Parking garage: 2840 verts
+  house Container yard: 14208 verts
+  house Warehouse: 6408 verts
+  house Harbour gate: 4537 verts
   villager: 642 verts
   sheep: 828 verts, cow: 574 verts

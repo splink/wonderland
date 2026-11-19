@@ -157,6 +157,36 @@ namespace Wonderland.Editor
             var kinds = new HashSet<int>(); foreach (var tr in world.Forest.Trees) kinds.Add(tr.kind);
             Check(trees > 120, $"Forest brush paints clusters ({trees} trees, {kinds.Count} species)");
             Check(kinds.Count >= 4, "Painted forest mixes species");
+            // Forest types: each plants its own kinds of tree (the orchard in rows); undone again afterwards.
+            world.Checkpoint();
+            var typed = new List<string>();
+            bool typesOk = true;
+            foreach (var (type, want) in new (ForestType, System.Func<TreeInstance, bool>)[]
+            {
+                (ForestType.Pine, x => (TreeKind)x.kind is TreeKind.Conifer or TreeKind.Pine),
+                (ForestType.Birch, x => (TreeKind)x.kind == TreeKind.Birch),
+                (ForestType.Autumn, x => (TreeKind)x.kind == TreeKind.Maple || x.variant == 2 && (TreeKind)x.kind is TreeKind.Oak or TreeKind.Birch),
+                (ForestType.Palms, x => (TreeKind)x.kind == TreeKind.Palm),
+                (ForestType.Orchard, x => (TreeKind)x.kind == TreeKind.Oak && x.variant == 3 || (TreeKind)x.kind == TreeKind.Blossom),
+            })
+            {
+                world.Forest.RemoveWhere(tree => new Vector2(tree.x - 0.45f, tree.z + 0.45f).magnitude < 0.3f);
+                int already = world.Forest.Trees.Count;
+                Hold(() => world.PaintForest(new Vector3(0.45f, 0f, -0.45f), 0.18f, 0.7f, Dt, type), 1.5f);
+                var added = world.Forest.Trees.GetRange(already, world.Forest.Trees.Count - already);
+                int match = added.FindAll(tree => want(tree)).Count;
+                bool rows = true;
+                if (type == ForestType.Orchard)
+                    foreach (var tree in added)
+                    {
+                        float step = Mathf.Lerp(0.085f, 0.06f, 0.7f);
+                        rows &= Mathf.Abs(tree.x / step - Mathf.Round(tree.x / step)) * step < 0.004f && Mathf.Abs(tree.z / step - Mathf.Round(tree.z / step)) * step < 0.004f;
+                    }
+                typesOk &= added.Count >= 6 && match >= added.Count * (type == ForestType.Orchard ? 1f : 0.6f) && rows;
+                typed.Add($"{ForestSystem.ForestNames[(int)type]} {match}/{added.Count}{(rows ? "" : " not in rows")}");
+            }
+            world.Undo();
+            Check(typesOk, $"Forest types plant their own trees: {string.Join(", ", typed)}");
             Hold(() => world.EraseForest(new Vector3(-0.45f, 0f, 0.45f), 0.08f, 1f, Dt), 1f);
             Check(world.Forest.Trees.Count < trees, $"Forest eraser removes trees ({trees} -> {world.Forest.Trees.Count})");
 

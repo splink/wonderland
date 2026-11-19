@@ -5,6 +5,9 @@ using UnityEngine.Rendering;
 
 namespace Wonderland
 {
+    /// <summary>What a stroke of the forest brush plants.</summary>
+    public enum ForestType { Mixed = 0, Leafy = 1, Pine = 2, Birch = 3, Autumn = 4, Orchard = 5, Riverside = 6, Palms = 7 }
+
     [Serializable]
     public struct TreeInstance
     {
@@ -215,6 +218,56 @@ namespace Wonderland
             return d;
         }
 
+        public static readonly string[] ForestNames = { "Mixed wood", "Leafy wood", "Pine forest", "Birch grove", "Autumn wood", "Orchard", "Riverside", "Palm grove" };
+        public static readonly string[] ForestAbout =
+        {
+            "Oaks, spruces, birches and blossom in groves that follow the land: spruce up the hills",
+            "Oaks, lindens and birches with bushes underneath: a green summer wood",
+            "Spruces and Scots pines, ferns underfoot, a birch here and there",
+            "Silver birches, some growing in pairs, light and airy",
+            "Red, orange and yellow maples, golden oaks and birches, leaves on the ground",
+            "Apple and cherry trees planted in neat rows",
+            "Weeping willows by the water, poplars and birches further back",
+            "Coconut, date and fan palms with flowering bushes",
+        };
+
+        /// <summary>
+        /// A tree for a forest type at a place: its species and variant (-1: the species' usual mix). The mixed wood keeps
+        /// its coherent groves; the riverside's willows crowd to the water.
+        /// </summary>
+        public (TreeKind kind, int variant) PickTree(float x, float z, ForestType type, ref Rng r)
+        {
+            float roll = r.Value;
+            (TreeKind, int) Weighted(params (TreeKind kind, int variant, float weight)[] options)
+            {
+                float total = 0f; foreach (var o in options) total += o.weight;
+                float pick = roll * total;
+                foreach (var o in options) if ((pick -= o.weight) < 0f) return (o.kind, o.variant);
+                return (options[^1].kind, options[^1].variant);
+            }
+            switch (type)
+            {
+                case ForestType.Leafy: return Weighted((TreeKind.Oak, 0, 0.8f), (TreeKind.Oak, 1, 0.6f), (TreeKind.Birch, 0, 0.45f), (TreeKind.Bush, 0, 0.4f), (TreeKind.Bush, 3, 0.15f), (TreeKind.Blossom, 1, 0.08f));
+                case ForestType.Pine: return Weighted((TreeKind.Conifer, -1, 1.3f), (TreeKind.Pine, 0, 0.8f), (TreeKind.Pine, 2, 0.3f), (TreeKind.Bush, 3, 0.35f), (TreeKind.Birch, 0, 0.1f));
+                case ForestType.Birch: return Weighted((TreeKind.Birch, 0, 1.2f), (TreeKind.Birch, 1, 0.5f), (TreeKind.Bush, 0, 0.35f), (TreeKind.Bush, 3, 0.15f), (TreeKind.Conifer, -1, 0.1f));
+                case ForestType.Autumn: return Weighted((TreeKind.Maple, 0, 0.55f), (TreeKind.Maple, 1, 0.55f), (TreeKind.Maple, 2, 0.45f), (TreeKind.Oak, 2, 0.5f), (TreeKind.Birch, 2, 0.45f), (TreeKind.Bush, 0, 0.25f));
+                case ForestType.Orchard: return Weighted((TreeKind.Oak, 3, 1f), (TreeKind.Blossom, 1, 0.45f), (TreeKind.Blossom, 0, 0.25f));
+                case ForestType.Palms: return Weighted((TreeKind.Palm, 0, 0.7f), (TreeKind.Palm, 1, 0.6f), (TreeKind.Palm, 2, 0.4f), (TreeKind.Bush, 1, 0.25f), (TreeKind.Bush, 2, 0.2f));
+                case ForestType.Riverside:
+                {
+                    float near = 0f;   // (how much water there is round about)
+                    for (int k = 0; k < 8; k++) { float a = k * Mathf.PI / 4f; near = Mathf.Max(near, terrain.WaterAt(x + Mathf.Cos(a) * 0.08f, z + Mathf.Sin(a) * 0.08f)); }
+                    return Weighted((TreeKind.Willow, -1, 0.3f + 1.8f * near), (TreeKind.Cypress, 2, 0.6f), (TreeKind.Birch, 0, 0.4f), (TreeKind.Bush, 0, 0.45f));
+                }
+                default:
+                {
+                    var kind = PickKind(x, z, ref r);
+                    if (kind == TreeKind.Oak && r.Value < 0.18f) kind = TreeKind.Birch;   // (birches among the oaks)
+                    return (kind, -1);
+                }
+            }
+        }
+
         /// <summary>Species choice from position: coherent groves rather than random confetti.</summary>
         public TreeKind PickKind(float x, float z, ref Rng r)
         {
@@ -239,7 +292,7 @@ namespace Wonderland
         /// One frame of forest painting: a handful of placement attempts inside the brush, each accepted only where trees
         /// keep their spacing (density sets how close) and <paramref name="canPlace"/> allows. Returns trees added.
         /// </summary>
-        public int Paint(Vector2 centre, float radius, float density, float dt, Func<Vector2, float, bool> canPlace)
+        public int Paint(Vector2 centre, float radius, float density, float dt, Func<Vector2, float, bool> canPlace, ForestType type = ForestType.Mixed)
         {
             float area = Mathf.PI * radius * radius;
             int attempts = Mathf.Max(1, Mathf.RoundToInt((25f + area * 900f) * dt * (0.4f + density)));
@@ -248,16 +301,22 @@ namespace Wonderland
             for (int a = 0; a < attempts && added < room; a++)
             {
                 var p = centre + rng.InsideUnitCircle() * radius;
-                var kind = PickKind(p.x, p.y, ref rng);
-                float scale = rng.Range(0.75f, 1.25f) * (kind == TreeKind.Bush ? rng.Range(0.8f, 1.3f) : 1f);
+                if (type == ForestType.Orchard)
+                {
+                    // In rows: on a lattice (closer with more density), a hair off true.
+                    float step = Mathf.Lerp(0.085f, 0.06f, density);
+                    p = new Vector2(Mathf.Round(p.x / step) * step, Mathf.Round(p.y / step) * step) + rng.InsideUnitCircle() * 0.002f;
+                }
+                var (kind, variant) = PickTree(p.x, p.y, type, ref rng);
+                float scale = type == ForestType.Orchard ? rng.Range(0.9f, 1.05f) : rng.Range(0.75f, 1.25f) * (kind == TreeKind.Bush ? rng.Range(0.8f, 1.3f) : 1f);
                 float footprint = TreeFactory.Radius(kind) * scale;
                 if (!canPlace(p, footprint)) continue;
                 if (terrain.EdgeAt(p.x, p.y) < 0.35f) continue;
-                if (Crowded(p, footprint, spacing)) continue;
+                if (Crowded(p, footprint, type == ForestType.Orchard ? 0.75f : spacing)) continue;
                 var tree = new TreeInstance
                 {
                     x = p.x, z = p.y, scale = scale, rotation = rng.Range(0f, 360f), kind = (byte)kind,
-                    variant = (byte)TreeFactory.PickVariant(kind, ref rng), tint = rng.Range(0.88f, 1.1f),
+                    variant = (byte)(variant >= 0 ? variant : TreeFactory.PickVariant(kind, ref rng)), tint = rng.Range(0.88f, 1.1f),
                 };
                 Trees.Add(tree);
                 Cell(ChunkKey(p.x, p.y)).Add(tree);

@@ -2,23 +2,25 @@ using UnityEngine;
 
 namespace Wonderland
 {
-    public enum TreeKind { Oak = 0, Conifer = 1, Cypress = 2, Blossom = 3, Bush = 4 }
+    public enum TreeKind { Oak = 0, Conifer = 1, Cypress = 2, Blossom = 3, Bush = 4, Birch = 5, Willow = 6, Palm = 7, Maple = 8, Pine = 9 }
 
     /// <summary>
     /// Seeded procedural storybook trees. Canopies are built from clustered leaf puffs arranged in tiers, so the outline
     /// is scalloped and leafy; trunks are gnarled with root flares and branches reaching into the crown; each tree
     /// stands in its own little undergrowth (grass, ferns, flowers, now and then a toadstool). Species x variants:
     /// oak (storybook oak, linden, golden oak, apple tree), spruce (three tiered firs), cypress (flame cypress, poplar),
-    /// blossom (cherry, white cherry, weeping cherry) and bushes (leafy, pink, yellow, fern). Meshes are built once and
+    /// blossom (cherry, white cherry, weeping cherry), bushes (leafy, pink, yellow, fern), birch (silver, twin, golden),
+    /// willow (weeping, small weeping), palm (coconut, date, fan), maple (red, orange, yellow autumn) and pine (Scots
+    /// pine, stone pine, young pine). Meshes are built once and
     /// shared; placement varies scale, rotation and tint. Pivot at the trunk base; 4-14 cm tall at scale 1.
     /// </summary>
     public static class TreeFactory
     {
-        public const int KindCount = 5;
+        public const int KindCount = 10;
         public const int MaxVariants = 4;
         private static readonly Mesh[] Cache = new Mesh[KindCount * MaxVariants * MeshBuilder.Levels];
 
-        public static int Variants(TreeKind kind) => kind == TreeKind.Oak || kind == TreeKind.Bush ? 4 : 3;
+        public static int Variants(TreeKind kind) => kind switch { TreeKind.Oak or TreeKind.Bush => 4, TreeKind.Willow => 2, _ => 3 };
 
         /// <summary>Variant choice with art-directed odds: golden oaks and weeping cherries are accents, not the norm.</summary>
         public static int PickVariant(TreeKind kind, ref Rng rng)
@@ -54,7 +56,8 @@ namespace Wonderland
         public static float Radius(TreeKind kind) => kind switch
         {
             TreeKind.Oak => 0.034f, TreeKind.Blossom => 0.036f, TreeKind.Conifer => 0.026f,
-            TreeKind.Cypress => 0.018f, _ => 0.02f,
+            TreeKind.Cypress => 0.018f, TreeKind.Birch => 0.022f, TreeKind.Willow => 0.042f, TreeKind.Palm => 0.03f,
+            TreeKind.Maple => 0.033f, TreeKind.Pine => 0.028f, _ => 0.02f,
         };
 
         public static Mesh Build(TreeKind kind, int variant)
@@ -67,6 +70,11 @@ namespace Wonderland
                 case TreeKind.Blossom: BuildBlossom(b, ref rng, variant); break;
                 case TreeKind.Conifer: BuildConifer(b, ref rng, variant); break;
                 case TreeKind.Cypress: BuildCypress(b, ref rng, variant); break;
+                case TreeKind.Birch: BuildBirch(b, ref rng, variant); break;
+                case TreeKind.Willow: BuildWillow(b, ref rng, variant); break;
+                case TreeKind.Palm: BuildPalm(b, ref rng, variant); break;
+                case TreeKind.Maple: BuildMaple(b, ref rng, variant); break;
+                case TreeKind.Pine: BuildPine(b, ref rng, variant); break;
                 default: BuildBush(b, ref rng, variant); break;
             }
             return b.ToMesh($"Tree_{kind}_{variant}");
@@ -357,6 +365,199 @@ namespace Wonderland
             }
             b.Sway = 0f;
             Flora.Undergrowth(b, 0.016f, ref rng, false);
+        }
+
+        private static void BuildBirch(MeshBuilder b, ref Rng rng, int variant)
+        {
+            // 0 silver birch, 1 two stems from one root, 2 golden autumn birch.
+            var bark = Pal.Hex("#ECE8DE");
+            Color deep = Pal.Hex("#4E8A3A"), mid = Pal.Hex("#7DB04A"), light = Pal.Hex("#B6D46A"), sun = Pal.Hex("#DDE68A");
+            if (variant == 2) { deep = Pal.Hex("#9A7A22"); mid = Pal.Hex("#D2A93A"); light = Pal.Hex("#F0CF5A"); sun = Pal.Hex("#FFE58A"); }
+            int stems = variant == 1 ? 2 : 1;
+            for (int s = 0; s < stems; s++)
+            {
+                var foot = stems == 1 ? Vector3.zero : new Vector3(s == 0 ? -0.004f : 0.004f, 0f, 0f);
+                float lean = stems == 1 ? 0f : (s == 0 ? -10f : 9f);
+                float h = (stems == 1 ? 0.075f : 0.066f - s * 0.01f) * rng.Range(0.92f, 1.08f);
+                b.Push(foot, Quaternion.Euler(0f, 0f, lean));
+                b.Sway = 0f;
+                b.AddCylinder(Vector3.zero, 0.0032f, 0.0018f, h, 7, Pal.Shade(bark, 0.82f), bark, true);
+                // The black marks of birch bark.
+                for (int k = 0; k < 9; k++)
+                {
+                    float y = rng.Range(0.004f, h * 0.85f), a = rng.Range(0f, 6.28f), r = Mathf.Lerp(0.0032f, 0.0018f, y / h);
+                    b.AddBlob(new Vector3(Mathf.Cos(a) * r, y, Mathf.Sin(a) * r), new Vector3(0.0016f, 0.0005f, 0.0016f), 0, 0f, k, (_, __) => Pal.Hex("#2A2622"));
+                }
+                // A small, high, airy crown: the white trunk shows beneath it.
+                var top = new Vector3(0f, h, 0f);
+                var size = new Vector3(0.014f, 0.022f, 0.014f) * (stems == 1 ? 1f : 0.85f);
+                var centre = top - Vector3.up * size.y * 0.1f;
+                var paint = Foliage(deep, mid, light, sun, centre, size.magnitude * 1.6f, rng.Range(0, 999), 0.11f);
+                Crown(b, ref rng, top - Vector3.up * size.y * 0.6f, centre, size, new[] { 4, 3, 1 }, 0.0085f, bark, paint, 0.0011f);
+                b.Pop();
+            }
+            Flora.Undergrowth(b, 0.016f, ref rng, variant != 2);
+        }
+
+        private static void BuildWillow(MeshBuilder b, ref Rng rng, int variant)
+        {
+            // 0 a big weeping willow, 1 a smaller one: a broad dome with curtains of leaves down to the grass.
+            float scale = variant == 0 ? 1f : 0.75f;
+            var top = Trunk(b, ref rng, 0.03f * scale, 0.006f * scale, Pal.BarkDark, 0.3f);
+            var size = new Vector3(0.04f, 0.026f, 0.04f) * scale;
+            var centre = top + Vector3.up * size.y * 0.4f;
+            var paint = Foliage(Pal.Hex("#4E7A2E"), Pal.Hex("#7FA640"), Pal.Hex("#B5CC62"), Pal.Hex("#D8E07E"), centre, size.magnitude * 1.4f, rng.Range(0, 999));
+            Crown(b, ref rng, top, centre, size, new[] { 5, 3, 1 }, 0.017f * scale, Pal.BarkDark, paint, 0.0024f * scale);
+            int strands = variant == 0 ? 16 : 11;
+            for (int s = 0; s < strands; s++)
+            {
+                float a = s / (float)strands * Mathf.PI * 2f + rng.Range(-0.15f, 0.15f);
+                var p = centre + new Vector3(Mathf.Cos(a) * size.x * 1.05f, -size.y * 0.1f, Mathf.Sin(a) * size.z * 1.05f);
+                int beads = Mathf.RoundToInt(rng.Range(4f, 6f) * scale);
+                for (int k = 0; k < beads && p.y > 0.006f; k++)
+                {
+                    b.Sway = 1f;
+                    float r = 0.0048f * scale * (1f - k * 0.08f);
+                    b.AddBlob(p, new Vector3(r * 0.8f, r * 1.5f, r * 0.8f), 1, 0.15f, s * 10 + k, (d, q) => paint(d, q));
+                    p += new Vector3(Mathf.Cos(a) * 0.0015f, -0.0085f * scale, Mathf.Sin(a) * 0.0015f);
+                }
+            }
+            b.Sway = 0f;
+            Flora.Undergrowth(b, 0.022f, ref rng, false);
+        }
+
+        private static void BuildPalm(MeshBuilder b, ref Rng rng, int variant)
+        {
+            // 0 coconut palm (a leaning, curving trunk), 1 date palm (straight, a full head), 2 fan palm (short and bushy).
+            var bark = Pal.Hex("#9A7A55"); var ring = Pal.Hex("#7A5E40");
+            float height = variant switch { 1 => 0.085f, 2 => 0.03f, _ => 0.095f };
+            float bend = variant == 0 ? 22f : 3f;
+            int segments = variant == 2 ? 3 : 8;
+            var p = Vector3.zero;
+            float r = variant == 2 ? 0.0045f : 0.0036f;
+            float heading = rng.Range(0f, 360f);
+            b.Sway = 0f;
+            for (int i = 0; i < segments; i++)
+            {
+                float t = i / (float)segments;
+                var dir = Quaternion.Euler(0f, heading, 0f) * Quaternion.Euler(bend * t, 0f, 0f) * Vector3.up;
+                float h = height / segments;
+                b.Sway = t * 0.4f;
+                b.Push(p, Quaternion.FromToRotation(Vector3.up, dir));
+                b.AddCylinder(Vector3.zero, r, r * 0.94f, h * 1.02f, 7, i % 2 == 0 ? ring : bark, bark, false);
+                b.Pop();
+                p += dir * h; r *= 0.96f;
+            }
+            // Fronds: long arching leaves, each a row of flattened leaflets drooping as it goes.
+            int fronds = variant switch { 1 => 11, 2 => 9, _ => 8 };
+            var green = variant == 2 ? Pal.Hex("#3E8A44") : Pal.Hex("#4C9A3C"); var tip = variant == 2 ? Pal.Hex("#6FB25A") : Pal.Hex("#8CC255");
+            float length = variant switch { 1 => 0.04f, 2 => 0.03f, _ => 0.046f };
+            for (int f = 0; f < fronds; f++)
+            {
+                float a = f / (float)fronds * Mathf.PI * 2f + rng.Range(-0.2f, 0.2f);
+                var out1 = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
+                float rise = variant == 1 ? rng.Range(0.4f, 0.9f) : rng.Range(0.1f, 0.6f);
+                var q = p;
+                int leaves = 7;
+                for (int k = 0; k < leaves; k++)
+                {
+                    float t = k / (float)(leaves - 1);
+                    b.Sway = 0.6f + 0.4f * t;
+                    var step = (out1 + Vector3.up * (rise - t * 1.6f)).normalized * (length / leaves);
+                    q += step;
+                    float w = Mathf.Lerp(0.0055f, 0.0018f, t);
+                    var c = Color.Lerp(green, tip, t);
+                    b.Push(q, Quaternion.LookRotation(step.normalized, Vector3.up));
+                    b.AddBlob(Vector3.zero, new Vector3(w, 0.0007f, length / leaves * 0.75f), 0, 0f, f * 10 + k, (d, _) => Pal.Shade(c, 0.85f + 0.2f * Mathf.Max(0f, d.y)));
+                    b.Pop();
+                }
+            }
+            if (variant == 0)
+            {
+                // Coconuts under the head.
+                for (int i = 0; i < 4; i++)
+                {
+                    float a = i * 1.6f;
+                    b.Sway = 0.4f;
+                    b.AddBlob(p + new Vector3(Mathf.Cos(a) * 0.003f, -0.003f, Mathf.Sin(a) * 0.003f), Vector3.one * 0.0022f, 1, 0f, i, (_, __) => Pal.Hex("#6A4A2A"));
+                }
+            }
+            if (variant == 1)
+            {
+                // Dates hanging in amber bunches.
+                for (int i = 0; i < 3; i++)
+                {
+                    float a = i * 2.1f;
+                    b.Sway = 0.4f;
+                    b.AddBlob(p + new Vector3(Mathf.Cos(a) * 0.004f, -0.006f, Mathf.Sin(a) * 0.004f), new Vector3(0.002f, 0.0035f, 0.002f), 1, 0.3f, i, (_, __) => Pal.Hex("#D08A2A"));
+                }
+            }
+            b.Sway = 0f;
+            Flora.Undergrowth(b, 0.014f, ref rng, false);
+        }
+
+        private static void BuildMaple(MeshBuilder b, ref Rng rng, int variant)
+        {
+            // Autumn maples: 0 red, 1 orange, 2 yellow, with fallen leaves round the foot.
+            Color deep, mid, light, sun;
+            switch (variant)
+            {
+                case 0: deep = Pal.Hex("#7A1E1A"); mid = Pal.Hex("#C23A26"); light = Pal.Hex("#E86A3A"); sun = Pal.Hex("#FF9A5A"); break;
+                case 1: deep = Pal.Hex("#8A4012"); mid = Pal.Hex("#D9742A"); light = Pal.Hex("#F5A23E"); sun = Pal.Hex("#FFC86A"); break;
+                default: deep = Pal.Hex("#8A7012"); mid = Pal.Hex("#D8B42A"); light = Pal.Hex("#F4D650"); sun = Pal.Hex("#FFEC8A"); break;
+            }
+            var top = Trunk(b, ref rng, 0.034f, 0.0048f, Pal.BarkDark, 0.25f);
+            var size = new Vector3(0.033f, 0.034f, 0.033f);
+            var centre = top + Vector3.up * size.y * 0.6f;
+            var paint = Foliage(deep, mid, light, sun, centre, size.magnitude * 1.2f, rng.Range(0, 999), 0.1f);
+            Crown(b, ref rng, top, centre, size, new[] { 4, 3, 1 }, 0.019f, Pal.BarkDark, paint, 0.0021f);
+            for (int i = 0; i < 20; i++)
+            {
+                var q = new Vector3(rng.Range(-0.04f, 0.04f), 0.0011f, rng.Range(-0.04f, 0.04f));
+                b.AddDisc(q, rng.Range(0.0012f, 0.0019f), 5, Color.Lerp(mid, light, rng.Value), true, rng.Value);
+            }
+            Flora.Undergrowth(b, 0.018f, ref rng, true);
+        }
+
+        private static void BuildPine(MeshBuilder b, ref Rng rng, int variant)
+        {
+            // 0 Scots pine (tall, bare orange trunk, tufts at the top), 1 stone pine (a flat umbrella), 2 young pine.
+            var bark = Pal.Hex("#B0643A"); var barkLow = Pal.Hex("#6E4A32");
+            float height = variant switch { 1 => 0.07f, 2 => 0.03f, _ => 0.09f };
+            b.Sway = 0f;
+            b.AddCylinder(Vector3.zero, 0.0048f, 0.0034f, height * 0.4f, 7, barkLow, Pal.Shade(bark, 0.85f), false);
+            b.AddCylinder(new Vector3(0f, height * 0.4f, 0f), 0.0034f, 0.0022f, height * 0.6f, 7, Pal.Shade(bark, 0.85f), bark, true);
+            var top = new Vector3(0f, height, 0f);
+            Color deep = Pal.Hex("#1F4A30"), mid = Pal.Hex("#2F6A3E"), light = Pal.Hex("#5E9256"), sun = Pal.Hex("#8DB46A");
+            var paint = Foliage(deep, mid, light, sun, top, 0.04f, rng.Range(0, 999), 0.1f);
+            if (variant == 2)
+            {
+                // Young: a loose cone of tufts all the way up.
+                for (int i = 0; i < 6; i++)
+                {
+                    float t = i / 5f, a = i * 2.3f;
+                    var c = new Vector3(Mathf.Cos(a) * 0.006f * (1f - t), 0.012f + t * 0.028f, Mathf.Sin(a) * 0.006f * (1f - t));
+                    b.Sway = 0.4f + 0.6f * t;
+                    Flora.LeafCluster(b, c, Mathf.Lerp(0.011f, 0.005f, t), c - new Vector3(0f, c.y, 0f) + Vector3.up * 0.01f, 4, ref rng, paint, 0.75f);
+                }
+            }
+            else
+            {
+                // Branches out from the upper trunk to flat tufts; stone pine one wide umbrella.
+                int tufts = variant == 1 ? 7 : 5;
+                float spread = variant == 1 ? 0.03f : 0.018f;
+                for (int i = 0; i < tufts; i++)
+                {
+                    float a = i / (float)tufts * Mathf.PI * 2f + rng.Range(-0.3f, 0.3f);
+                    float d = i == 0 && variant == 0 ? 0f : spread * rng.Range(0.6f, 1f);
+                    var c = top + new Vector3(Mathf.Cos(a) * d, rng.Range(-0.012f, 0.004f) * (variant == 1 ? 0.3f : 1f), Mathf.Sin(a) * d);
+                    Branch(b, top - Vector3.up * 0.012f, c, 0.0014f, bark);
+                    b.Sway = 0.8f;
+                    Flora.LeafCluster(b, c, variant == 1 ? 0.014f : 0.012f, Vector3.up + (c - top) * 20f, 5, ref rng, paint, 0.55f);
+                }
+            }
+            b.Sway = 0f;
+            Flora.Undergrowth(b, 0.018f, ref rng, variant == 0);
         }
     }
 }

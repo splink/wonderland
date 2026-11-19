@@ -77,15 +77,22 @@ namespace Wonderland
                 case Tool.Forest:
                 {
                     caption = "Trees";
-                    var plant = new Group { Name = "Plant", About = "Paint trees onto the land", Opened = () => ForestErase = false };
+                    var woods = new Group { Name = "Woods", About = "Kinds of wood to plant: mixed, leafy, pine, birch, autumn", Opened = () => { ForestErase = false; if ((int)ForestType > 4) ForestType = ForestType.Mixed; } };
+                    var special = new Group { Name = "Special", About = "Orchards in rows, willows by the water, palms", Opened = () => { ForestErase = false; if ((int)ForestType <= 4) ForestType = ForestType.Orchard; } };
+                    var thick = new Group { Name = "Density", About = "How close together the trees grow", Opened = () => ForestErase = false };
                     var clear = new Group { Name = "Clear", About = "Take trees away", Opened = () => ForestErase = true };
-                    void Density(string name, float d, string about) => plant.Rows.Add(Row(Choice(name, !ForestErase && Mathf.Abs(density - d) < 0.12f, () => { ForestErase = false; density = d; RefreshOptions(); }), about));
+                    for (int k = 0; k < ForestSystem.ForestNames.Length; k++)
+                    {
+                        var type = (ForestType)k;
+                        (k <= 4 ? woods : special).Rows.Add(Row(Choice(ForestSystem.ForestNames[k], !ForestErase && ForestType == type, () => { ForestErase = false; ForestType = type; RefreshOptions(); }), ForestSystem.ForestAbout[k]));
+                    }
+                    void Density(string name, float d, string about) => thick.Rows.Add(Row(Choice(name, !ForestErase && Mathf.Abs(density - d) < 0.12f, () => { ForestErase = false; density = d; RefreshOptions(); }), about));
                     Density("Sparse", 0.3f, "A few trees scattered over meadows");
-                    Density("Wood", 0.6f, "A mixed wood with clearings");
+                    Density("Wood", 0.6f, "Trees with clearings between");
                     Density("Dense", 0.95f, "A thick forest, trees close together");
                     clear.Rows.Add(Row(Choice("Clear trees", ForestErase, () => { ForestErase = true; RefreshOptions(); }), "Hold the trigger over trees to clear them"));
-                    groups.Add(plant); groups.Add(clear);
-                    open = ForestErase ? 1 : 0;
+                    groups.Add(woods); groups.Add(special); groups.Add(thick); groups.Add(clear);
+                    open = ForestErase ? 3 : (int)ForestType > 4 ? 1 : 0;
                     footer = $"Brush {Radius * 100f:0} cm, density {density * 100f:0}%  ·  left stick ↔ size, ↕ density";
                     break;
                 }
@@ -249,7 +256,9 @@ namespace Wonderland
             }
             if (groups.Count > 0)
             {
-                if (!openGroup.TryGetValue(Tool, out int was) || Tool is Tool.Terrain or Tool.Water or Tool.Forest or Tool.Paths or Tool.Track || Tool == Tool.Decor && was < 3) openGroup[Tool] = open;
+                if (!openGroup.TryGetValue(Tool, out int was) || Tool is Tool.Terrain or Tool.Water or Tool.Paths or Tool.Track || Tool == Tool.Decor && was < 3
+                    || Tool == Tool.Forest && (was != 2 || ForestErase))   // (Density shows no state of its own: it stays open till left)
+                    openGroup[Tool] = open;
                 int g = Mathf.Clamp(openGroup[Tool], 0, groups.Count - 1);
                 var chips = new List<PaletteUI.Option>();
                 for (int k = 0; k < groups.Count; k++)

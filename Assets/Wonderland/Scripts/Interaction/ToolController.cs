@@ -24,6 +24,8 @@ namespace Wonderland
         public Tool Tool { get; private set; } = Tool.Terrain;
         public TerrainBrush TerrainMode { get; private set; } = TerrainBrush.Raise;
         public bool ForestErase { get; private set; }
+        /// <summary>What the forest brush plants.</summary>
+        public ForestType ForestType { get; set; }
         public int HouseVariant { get; private set; }
         public float Radius => radius[(int)Tool];
         public bool PlacingWorld;
@@ -302,7 +304,7 @@ namespace Wonderland
             },
             Tool.Water => StreamMode ? "Hold trigger and draw a stream - it flows downhill and the railway bridges it  ·  A: next mode"
                 : Draining ? "Hold trigger over water to drain it (tap a stream to remove it)  ·  A: next mode" : "Hold trigger to dig a pond; start in a pond to make it bigger  ·  A: next mode  ·  left stick: size",
-            Tool.Forest => ForestErase ? "Hold trigger to clear trees  ·  A: paint" : "Hold trigger to paint a forest  ·  A: erase  ·  left stick: size / density",
+            Tool.Forest => ForestErase ? "Hold trigger to clear trees  ·  A: paint" : $"Hold trigger to plant: {ForestSystem.ForestNames[(int)ForestType].ToLower()}  ·  A: erase  ·  left stick: size / density",
             Tool.Track => SignalMode ? "Trigger beside the track: put up a stop signal  ·  tap a signal: red / green  ·  A: draw"
                 : grabbable ? "On the track: trigger and draw to branch off  ·  GRIP and move: bend this piece of track  ·  tap a switch to throw it"
                 : World.Track.HasTrack ? (World.Bridges.Bridges.Count > 0 ? "Tap a bridge to change its style  ·  draw from the track to branch, from an end to extend  ·  tap a switch to throw it  ·  grip: bend track"
@@ -762,7 +764,7 @@ namespace Wonderland
             if (input.TriggerDown && hit) { World.Checkpoint(); stroking = true; }
             if (stroking && input.Trigger && hit)
             {
-                int n = ForestErase ? World.EraseForest(local, Radius, strength + 0.4f, dt) : World.PaintForest(local, Radius, density, dt);
+                int n = ForestErase ? World.EraseForest(local, Radius, strength + 0.4f, dt) : World.PaintForest(local, Radius, density, dt, ForestType);
                 if (n > 0) Buzz(0.2f);
                 if (!ForestErase && n == 0 && World.Forest.Full is { } full) Say(full);
             }

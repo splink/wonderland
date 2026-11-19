@@ -7,8 +7,8 @@ PASS  A switches Raise -> Lower
 PASS  Grow chip selects the land brush
 PASS  Aiming at the floor beyond the shore grows land (2.73 -> 3.00 m2)
 PASS  Clicking the Forest tile selects the forest brush
-PASS  Painting with the trigger grows trees (30)
-PASS  The forest takes far more than the old 450 trees: the island wooded all over (879, 879 in the window)
+PASS  Painting with the trigger grows trees (32)
+PASS  The forest takes far more than the old 450 trees: the island wooded all over (939, 939 in the window)
 PASS  Track tool selected
 PASS  Drawing a loop with the trigger lays a closed railway (2.82 m)
 PASS  Drawing from the track outwards branches off with a switch (1 switch, 2 pieces; "New branch with a switch - it runs the way its arrows point; join its end back to the railway so trains can use it")
@@ -56,7 +56,7 @@ PASS  Resting the pointer on a button shows its tooltip ("Takes back the last ch
 PASS  Settings beside the palette: switches (Tips, Labels, Grid) show their state by their light and a tap changes it; World stats and Performance open panels
 PASS  Stats opens the performance panel; Grass cycles to Off (no tufts) and Defaults brings them back (5538 tufts)
 PASS  Help and Stats open beside the palette (with the world's own numbers) and close again
-PASS  No blocky stand-ins anywhere: further away the same buildings and trees are drawn with less detail (60 simpler levels)
+PASS  No blocky stand-ins anywhere: further away the same buildings and trees are drawn with less detail (56 simpler levels)
 PASS  Select: the trigger on a villager opens their card (Pia)
 PASS  Selecting a villager turns on their camera: the monitor over the palette shows them over their shoulder (6 pictures)
 PASS  The card's Camera button turns it off (the card stays)

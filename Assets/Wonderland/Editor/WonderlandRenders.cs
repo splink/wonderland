@@ -38,15 +38,25 @@ namespace Wonderland.Editor
 
             // Trees: kinds in rows, variants in columns.
             var root = new GameObject("Gallery").transform;
-            for (int k = 0; k < TreeFactory.KindCount; k++)
+            for (int k = 0; k < 5; k++)
             for (int v = 0; v < TreeFactory.Variants((TreeKind)k); v++)
                 Place(root, TreeFactory.Get((TreeKind)k, v), lit, new Vector3((v - 1.5f) * 0.11f, 0f, (k - 2) * 0.11f), Quaternion.Euler(0f, k * 40f + v * 70f, 0f));
+            // The second five (birch, willow, palm, maple, pine) in a picture of their own.
+            var more = new GameObject("Gallery").transform;
+            for (int k = 5; k < TreeFactory.KindCount; k++)
+            for (int v = 0; v < TreeFactory.Variants((TreeKind)k); v++)
+                Place(more, TreeFactory.Get((TreeKind)k, v), lit, new Vector3((v - 1f) * 0.12f, 0f, (k - 7) * 0.12f), Quaternion.Euler(0f, k * 40f + v * 70f, 0f));
+            more.gameObject.SetActive(false);
             var cam = CreateCamera(new Vector3(0.0f, 0.46f, -0.62f), new Vector3(0f, 0.03f, 0.02f), 34f);
             Capture(cam, "warmup.png", 64, 64); File.Delete(Path.Combine(Output, "warmup.png"));
             Capture(cam, "editor-trees.png", 1800, 1350);
             cam.transform.position = new Vector3(-0.05f, 0.09f, -0.37f); cam.transform.LookAt(new Vector3(-0.07f, 0.05f, -0.22f)); cam.fieldOfView = 34f;
             Capture(cam, "editor-trees-closeup.png", 1800, 1100);
             Object.DestroyImmediate(root.gameObject);
+            more.gameObject.SetActive(true);
+            cam.transform.position = new Vector3(0.0f, 0.42f, -0.6f); cam.transform.LookAt(new Vector3(0f, 0.03f, 0.0f)); cam.fieldOfView = 36f;
+            Capture(cam, "editor-trees-more.png", 1800, 1350);
+            Object.DestroyImmediate(more.gameObject);
 
             // Houses: types in rows, the four colour styles in columns.
             root = new GameObject("Gallery").transform;
