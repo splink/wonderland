@@ -442,7 +442,7 @@ namespace Wonderland
             {
                 float deckH = 0f; bool hide = false;
                 bool onDeck = Bridges != null && Bridges.Deck(l.points[i], out deckH, out hide);
-                hidden[i] = onDeck && hide;
+                hidden[i] = onDeck && hide || IsCarWay(l.kind) && InJunction(l.points[i], -0.003f);   // (a lane inside a junction: the junction's asphalt)
                 var p = l.points[i];
                 var t = l.points[l.closed ? (i + 1) % n : Mathf.Min(i + 1, n - 1)] - l.points[l.closed ? (i - 1 + n) % n : Mathf.Max(i - 1, 0)];
                 t = t.sqrMagnitude > 1e-10f ? t.normalized : Vector2.up;
