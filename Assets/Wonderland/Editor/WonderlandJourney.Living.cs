@@ -442,6 +442,34 @@ namespace Wonderland.Editor
             Check(w.Harbours.Voyages >= 1 && w.Harbours.Lifted >= 4 && !overLand && said.Exists(x => x.Contains("unloading")),
                 $"The ship is unloaded by the crane, sails over the water to the other harbour and is unloaded there ({w.Harbours.Voyages} voyages, {w.Harbours.Lifted} containers lifted): {string.Join(" / ", said)} [{w.Harbours.ShipState()}]");
             Check(w.People.StockAt(ib) >= 1f || w.People.StockAt(ia) >= 1f, $"...the containers wait on the quay for the harbour's lorry ({w.People.StockAt(ia):0} and {w.People.StockAt(ib):0})");
+            // A road bridge across the lake between them, too low for a ship: the ship doesn't sail through it, it goes,
+            // and the card says why. Boats keep to their side of it too.
+            w.Checkpoint();
+            var t = w.Terrain;
+            string road = w.BuildPath(new List<Vector3> { t.PointAt(0f, -0.42f), t.PointAt(0f, 0f), t.PointAt(0f, 0.42f) }, PathKind.Road);
+            float room = w.Bridges.Headroom(new Vector2(0f, 0f));
+            w.Harbours.Step(5.1f);
+            string why = w.Harbours.HarbourFor(ib) ?? "";
+            Check(road == null && w.Bridges.Bridges.Count > 0 && room < HarbourSystem.AirDraft && w.Harbours.ShipCount == 0 && why.Contains("bridge"),
+                $"A road bridge across the lake too low for a ship ({room * 100f:0.0} cm under it): the ship doesn't sail through it ({w.Harbours.ShipCount} ships; \"{why}\"{(road != null ? ", road: " + road : "")})");
+            var boats = new List<(BoatKind kind, float x)>();
+            foreach (var (kind, x) in new[] { (BoatKind.Sailing, -0.25f), (BoatKind.Steamer, 0.3f), (BoatKind.Rowing, -0.12f) })
+            {
+                var boat = new BoatInstance { x = x, z = 0f, heading = x < 0f ? 90f : -90f, kind = (int)kind, seed = 3 };
+                if (w.Boats.Validate(new Vector2(boat.x, boat.z), boat.heading, boat.kind) == null) { w.Boats.Add(boat); boats.Add((kind, x)); }
+            }
+            bool crossed = false;
+            for (int i = 0; i < (int)(240f / Dt); i++)
+            {
+                w.Boats.Step(Dt);
+                for (int k = 0; k < w.Boats.Boats.Count; k++) if (Mathf.Sign(w.Boats.Boats[k].Pos.x) != Mathf.Sign(boats[k].x) && Mathf.Abs(w.Boats.Boats[k].Pos.x) > 0.04f) crossed = true;
+            }
+            string under = w.Boats.Validate(new Vector2(0f, 0f), 90f, (int)BoatKind.Sailing);
+            Check(boats.Count == 3 && !crossed && under != null && under.Contains("bridge"), $"Sailing boats, steamers and rowing boats keep to their side of a low bridge ({boats.Count} boats, crossed {crossed}; under it: \"{under}\")");
+            foreach (var _ in boats) w.Boats.RemoveAt(w.Boats.Boats.Count - 1);
+            w.Undo();
+            w.Harbours.Step(5.1f);
+            Check(w.Bridges.Bridges.Count == 0 && w.Harbours.ShipCount == 1, $"...and with the bridge gone a ship sails again ({w.Harbours.ShipCount} ships)");
             // A harbour on a pond of its own: no ship, and its card says why.
             var w2 = Scratch("Pond harbour", 280f);
             Lake(w2, -0.1f, 0.1f, 0.2f);

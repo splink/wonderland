@@ -68,13 +68,16 @@ namespace Wonderland
 
         private bool Wet(Vector2 p) => world.Terrain.WaterAt(p.x, p.y) > 0.6f;
 
-        /// <summary>A boat of this kind fits here: water under it and a little round it.</summary>
+        /// <summary>Water a boat of this kind can be on: wet, and no bridge too low for it overhead.</summary>
+        private bool Sailable(Vector2 p, BoatKind k) => Wet(p) && world.Bridges.Headroom(p, 0.004f) >= BoatFactory.AirDraft(k);
+
+        /// <summary>A boat of this kind fits here: water under it and a little round it, and room under any bridge.</summary>
         public bool Afloat(Vector2 p, float heading, BoatKind k)
         {
             float half = BoatFactory.Length(k) * 0.5f + 0.006f;
             var f = new Vector2(Mathf.Sin(heading * Mathf.Deg2Rad), Mathf.Cos(heading * Mathf.Deg2Rad));
             var side = new Vector2(f.y, -f.x) * (half * 0.35f);
-            return Wet(p) && Wet(p + f * half) && Wet(p - f * half) && Wet(p + side) && Wet(p - side);
+            return Sailable(p, k) && Sailable(p + f * half, k) && Sailable(p - f * half, k) && Wet(p + side) && Wet(p - side);
         }
 
         /// <summary>Open water all the way from a to b (for a boat of this size).</summary>
@@ -87,7 +90,7 @@ namespace Wonderland
             for (float t = 0f; t <= len + margin; t += 0.008f)
             {
                 var p = a + dir * Mathf.Min(t, len + margin);
-                if (!Wet(p) || !Wet(p + side) || !Wet(p - side)) return false;
+                if (!Sailable(p, k) || !Wet(p + side) || !Wet(p - side)) return false;
             }
             return true;
         }
@@ -99,6 +102,7 @@ namespace Wonderland
         public string Validate(Vector2 p, float heading, int kind)
         {
             if (world.Terrain.WaterAt(p.x, p.y) < 0.5f) return "Boats go on a pond";
+            if (world.Bridges.Headroom(p, 0.004f) < BoatFactory.AirDraft((BoatKind)kind)) return "The bridge is too low here for it";
             if (!Afloat(p, heading, (BoatKind)kind)) return "Not enough open water here for it";
             foreach (var b in Boats) if ((b.Pos - p).magnitude < (BoatFactory.Length(b.Kind) + BoatFactory.Length((BoatKind)kind)) * 0.5f) return "Another boat is in the way";
             return null;
@@ -259,7 +263,7 @@ namespace Wonderland
             {
                 float a = rng.Range(0f, Mathf.PI * 2f), r = rng.Range(0.06f, 0.5f);
                 var p = b.Pos + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * r;
-                if (Wet(p) && Clear(b.Pos, p, b.Kind)) { b.Target = p; return; }
+                if (Sailable(p, b.Kind) && Clear(b.Pos, p, b.Kind)) { b.Target = p; return; }
             }
             b.Target = b.Pos;   // hemmed in: turn on the spot and try again
             b.Heading += 40f;
@@ -323,7 +327,8 @@ namespace Wonderland
                 b.Speed = Mathf.MoveTowards(b.Speed, cruise, dt * 0.02f);
                 var f = new Vector2(Mathf.Sin(b.Heading * Mathf.Deg2Rad), Mathf.Cos(b.Heading * Mathf.Deg2Rad));
                 var next = b.Pos + f * b.Speed * dt;
-                if (Afloat(next, b.Heading, b.Kind)) b.Pos = next;
+                // (a bridge put up over it: it may still sail out from under)
+                if (Afloat(next, b.Heading, b.Kind) || !Afloat(b.Pos, b.Heading, b.Kind) && Wet(next)) b.Pos = next;
                 else { b.Speed = 0f; if (b.State == State.Cruising || b.State == State.Trip) Wander(b); else b.Heading += 30f * dt; }
             }
             Pose(b, dt);

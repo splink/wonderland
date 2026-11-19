@@ -144,6 +144,17 @@ namespace Wonderland
                 var s = ships[k];
                 bool ok = true;
                 for (int q = 1; q < s.Route.Count - 1; q++) if (!Navigable(s.Route[q])) { ok = false; break; }   // (the moorings themselves lie by the quay)
+                // (and between them: water all the way, and no bridge put up too low over it since)
+                for (int q = 0; ok && q < s.Route.Count - 1; q++)
+                {
+                    var (p0, p1) = (s.Route[q], s.Route[q + 1]);
+                    float len = (p1 - p0).magnitude;
+                    for (float d = 0f; d <= len; d += 0.01f)
+                    {
+                        var p = Vector2.Lerp(p0, p1, d / Mathf.Max(len, 1e-4f));
+                        if (!Wet(p.x, p.y) || world.Bridges.Headroom(p, Clearance) < AirDraft) { ok = false; break; }
+                    }
+                }
                 if (ok) continue;
                 var r = HouseOf(s.A) >= 0 && HouseOf(s.B) >= 0 ? Route(Mooring(s.A, out _), Mooring(s.B, out _)) : null;
                 if (r != null)
@@ -162,9 +173,13 @@ namespace Wonderland
 
         private bool Wet(float x, float z) => world.Terrain.WaterAt(x, z) > 0.6f;
 
-        /// <summary>Open water wide enough for a ship here.</summary>
+        /// <summary>How high a container ship stands above the water (its radar mast): the room it needs under a bridge.</summary>
+        public const float AirDraft = 0.045f;
+
+        /// <summary>Open water wide enough for a ship here, and no bridge too low for it overhead.</summary>
         private bool Navigable(Vector2 p) =>
-            Wet(p.x, p.y) && Wet(p.x + Clearance, p.y) && Wet(p.x - Clearance, p.y) && Wet(p.x, p.y + Clearance) && Wet(p.x, p.y - Clearance);
+            Wet(p.x, p.y) && Wet(p.x + Clearance, p.y) && Wet(p.x - Clearance, p.y) && Wet(p.x, p.y + Clearance) && Wet(p.x, p.y - Clearance)
+            && world.Bridges.Headroom(p, Clearance) >= AirDraft;
 
         /// <summary>
         /// A way over the water from <paramref name="a"/> to <paramref name="b"/> wide enough for a ship (a search over a
@@ -353,7 +368,9 @@ namespace Wonderland
             var h = world.Buildings.Houses[house];
             var at = new Vector2(h.x, h.z);
             var s = ships.Find(x => x.A == at || x.B == at);
-            if (s == null) return "no other harbour the water reaches yet - build one across the lake";
+            if (s == null)
+                return ports.Count > 1 ? $"no other harbour a ship can reach - the water between must be open, and any bridge over it {AirDraft * 100f:0.#} cm high or more"
+                    : "no other harbour the water reaches yet - build one across the lake";
             if (s.Docked && At(s) == at) return s.T >= 0f ? (s.Unloading ? $"the crane is unloading the {s.Name}" : $"the crane is loading the {s.Name}") : $"the {s.Name} is alongside";
             if (s.Docked) return $"the {s.Name} is at the other harbour";
             return (s.ToB ? s.B : s.A) == at ? $"the {s.Name} is on its way here with {s.Cargo} containers" : $"the {s.Name} has sailed with {s.Cargo} containers";

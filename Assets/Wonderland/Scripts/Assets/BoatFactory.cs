@@ -17,6 +17,9 @@ namespace Wonderland
 
         /// <summary>Length (bow to stern) and how many passengers it takes.</summary>
         public static float Length(BoatKind k) => k switch { BoatKind.Rowing => 0.05f, BoatKind.Sailing => 0.07f, _ => 0.12f };
+
+        /// <summary>How high it stands above the water (the rowers' heads, the mast, the funnel): the room it needs under a bridge.</summary>
+        public static float AirDraft(BoatKind k) => k switch { BoatKind.Rowing => 0.028f, BoatKind.Sailing => 0.075f, _ => 0.045f };
         public static int Capacity(BoatKind k) => k switch { BoatKind.Rowing => 1, BoatKind.Sailing => 2, _ => 6 };
         public static float Speed(BoatKind k) => k switch { BoatKind.Rowing => 0.022f, BoatKind.Sailing => 0.034f, _ => 0.03f };
 

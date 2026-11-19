@@ -276,6 +276,35 @@ namespace Wonderland
             return h.ToHashCode();
         }
 
+        /// <summary>
+        /// How much room there is under the bridges over the water at a point (from the water up to the underside of the
+        /// deck), for a boat as wide as <paramref name="margin"/> either side; <see cref="float.MaxValue"/> with no bridge
+        /// overhead.
+        /// </summary>
+        public float Headroom(Vector2 p, float margin = 0f)
+        {
+            float room = float.MaxValue;
+            foreach (var b in Bridges)
+                foreach (var m in b.Members)
+                {
+                    var r = m.Bounds;
+                    if (p.x < r.xMin - margin || p.x > r.xMax + margin || p.y < r.yMin - margin || p.y > r.yMax + margin) continue;
+                    float reach = (m.HalfWidth + margin) * (m.HalfWidth + margin);
+                    for (int i = 0; i < m.Points.Count; i++)
+                    {
+                        var q = m.Points[i];
+                        if (new Vector2(q.x - p.x, q.z - p.y).sqrMagnitude > reach) continue;
+                        float level = waterLevel(new Vector2(q.x, q.z));
+                        if (level < 0f) level = waterLevel(p);
+                        if (level < 0f) continue;
+                        // (stepping stones stand in the water; every other deck is some 6 mm thick, a track's bed more)
+                        float under = b.Style == BridgeStyle.Stones ? level : q.y - (m.Track ? 0.01f : 0.006f);
+                        room = Mathf.Min(room, Mathf.Max(0f, under - level));
+                    }
+                }
+            return room;
+        }
+
         public bool Deck(Vector2 p, out float height, out bool hide, float margin = 0f)
         {
             height = 0f; hide = false;
