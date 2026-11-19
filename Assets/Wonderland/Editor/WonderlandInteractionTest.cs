@@ -117,6 +117,16 @@ namespace Wonderland.Editor
             Check(tools.Tool == Tool.Forest, "Clicking the Forest tile selects the forest brush");
             HoldPath(hand, new Vector3(0.35f, 0f, 0.4f), new Vector3(0.6f, 0f, 0.0f), 2.5f);
             Check(world.Forest.Trees.Count > 20, $"Painting with the trigger grows trees ({world.Forest.Trees.Count})");
+            // No small limit on the forest: the whole island can be wooded (up to what the window can show).
+            var keepTrees = world.Forest.Trees.ToArray();
+            for (int pass = 0; pass < 12 && world.Forest.Full == null; pass++)
+                for (float fx = -0.9f; fx <= 0.9f; fx += 0.15f)
+                for (float fz = -0.9f; fz <= 0.9f; fz += 0.15f)
+                    world.Forest.Paint(new Vector2(fx, fz), 0.12f, 1f, 0.1f, (_, _) => true);
+            int many = world.Forest.Trees.Count, inView = world.Forest.InView();
+            string full = world.Forest.Full;
+            world.Forest.SetTrees(keepTrees); world.Forest.RebuildDirty();
+            Check(many > 600 && inView <= ForestSystem.MaxInView && (full != null) == (inView >= ForestSystem.MaxInView), $"The forest takes far more than the old 450 trees: the island wooded all over ({many}, {inView} in the window{(full != null ? "; " + full : "")})");
 
             // Track: click the tile, draw a loop with the trigger held, release near the start.
             ClickButton(hand, "Track");

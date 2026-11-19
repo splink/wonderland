@@ -21,10 +21,40 @@ namespace Wonderland
     /// </summary>
     public sealed class ForestSystem : MonoBehaviour
     {
-        public const int MaxTrees = 450;
+        /// <summary>Trees in the whole world (it keeps saves and undo small; the window is what costs drawing).</summary>
+        public const int MaxTrees = 12000;
+        /// <summary>Trees the window can hold: what the headset draws at once.</summary>
+        public const int MaxInView = 1500;
         private const float ChunkSize = 0.25f;
 
         public readonly List<TreeInstance> Trees = new();
+        // The trees by chunk: for spacing, drawing a chunk and counting the window's without going through them all.
+        private readonly Dictionary<long, List<TreeInstance>> cells = new();
+
+        private void Reindex()
+        {
+            cells.Clear();
+            foreach (var t in Trees) Cell(ChunkKey(t.x, t.z)).Add(t);
+        }
+
+        private List<TreeInstance> Cell(long k)
+        {
+            if (!cells.TryGetValue(k, out var list)) cells[k] = list = new List<TreeInstance>();
+            return list;
+        }
+
+        /// <summary>The trees in the chunks the window shows (all of them when it shows everywhere).</summary>
+        public int InView()
+        {
+            if (Shown == null) return Trees.Count;
+            int n = 0;
+            foreach (var (k, list) in cells) if (list.Count > 0 && Shown(ChunkCentre(k), ChunkSize)) n += list.Count;
+            return n;
+        }
+
+        /// <summary>Why no more trees can be planted (null: they can).</summary>
+        public string Full => Trees.Count >= MaxTrees ? "The world has as many trees as it can keep - erase some first"
+            : InView() >= MaxInView ? "As many trees as the window can show - plant more elsewhere in the world, or erase some here" : null;
         private readonly Dictionary<long, (GameObject go, Mesh mesh)> chunks = new();
         private readonly HashSet<long> dirty = new();
         private readonly Dictionary<long, MeshData> meshData = new(), proxyData = new();
@@ -83,7 +113,7 @@ namespace Wonderland
         public void MarkAllDirty()
         {
             foreach (var k in chunks.Keys) dirty.Add(k);
-            foreach (var t in Trees) dirty.Add(ChunkKey(t.x, t.z));
+            foreach (var k in cells.Keys) dirty.Add(k);
         }
 
         private readonly MeshBuilder builder = new();
@@ -108,16 +138,11 @@ namespace Wonderland
                 ready.Add(k);
             }
             if (ready.Count == 0) return;
-            var byChunk = new Dictionary<long, List<TreeInstance>>();
-            foreach (long k in ready) byChunk[k] = new List<TreeInstance>();
-            foreach (var t in Trees)
-                if (byChunk.TryGetValue(ChunkKey(t.x, t.z), out var list)) list.Add(t);
             foreach (long k in ready)
             {
                 dirty.Remove(k);
                 lastBuilt[k] = now;
-                var list = byChunk[k];
-                if (list.Count == 0) { Drop(k); continue; }
+                if (!cells.TryGetValue(k, out var list) || list.Count == 0) { Drop(k); continue; }
                 if (!chunks.TryGetValue(k, out var chunk))
                 {
                     var go = new GameObject("Forest chunk " + k);
@@ -219,8 +244,8 @@ namespace Wonderland
             float area = Mathf.PI * radius * radius;
             int attempts = Mathf.Max(1, Mathf.RoundToInt((25f + area * 900f) * dt * (0.4f + density)));
             float spacing = Mathf.Lerp(1.5f, 0.78f, density);
-            int added = 0;
-            for (int a = 0; a < attempts && Trees.Count < MaxTrees; a++)
+            int added = 0, room = Mathf.Min(MaxTrees - Trees.Count, MaxInView - InView());
+            for (int a = 0; a < attempts && added < room; a++)
             {
                 var p = centre + rng.InsideUnitCircle() * radius;
                 var kind = PickKind(p.x, p.y, ref rng);
@@ -229,11 +254,13 @@ namespace Wonderland
                 if (!canPlace(p, footprint)) continue;
                 if (terrain.EdgeAt(p.x, p.y) < 0.35f) continue;
                 if (Crowded(p, footprint, spacing)) continue;
-                Trees.Add(new TreeInstance
+                var tree = new TreeInstance
                 {
                     x = p.x, z = p.y, scale = scale, rotation = rng.Range(0f, 360f), kind = (byte)kind,
                     variant = (byte)TreeFactory.PickVariant(kind, ref rng), tint = rng.Range(0.88f, 1.1f),
-                });
+                };
+                Trees.Add(tree);
+                Cell(ChunkKey(p.x, p.y)).Add(tree);
                 MarkDirty(p.x, p.y);
                 added++;
             }
@@ -242,11 +269,18 @@ namespace Wonderland
 
         private bool Crowded(Vector2 p, float footprint, float spacing)
         {
-            foreach (var t in Trees)
+            // (the widest two trees, spaced, are well under a chunk apart: the chunks round about are enough)
+            int cx = Mathf.FloorToInt(p.x / ChunkSize), cz = Mathf.FloorToInt(p.y / ChunkSize);
+            for (int i = -1; i <= 1; i++)
+            for (int j = -1; j <= 1; j++)
             {
-                float dx = t.x - p.x, dz = t.z - p.y;
-                float min = (footprint + TreeFactory.Radius((TreeKind)t.kind) * t.scale) * spacing;
-                if (dx * dx + dz * dz < min * min) return true;
+                if (!cells.TryGetValue(((long)(cx + i) << 32) ^ (uint)(cz + j), out var list)) continue;
+                foreach (var t in list)
+                {
+                    float dx = t.x - p.x, dz = t.z - p.y;
+                    float min = (footprint + TreeFactory.Radius((TreeKind)t.kind) * t.scale) * spacing;
+                    if (dx * dx + dz * dz < min * min) return true;
+                }
             }
             return false;
         }
@@ -263,6 +297,7 @@ namespace Wonderland
                 if (d > 1f) continue;
                 if (rng.Value < p * (1.3f - d)) { MarkDirty(t.x, t.z); Trees.RemoveAt(i); removed++; }
             }
+            if (removed > 0) Reindex();
             return removed;
         }
 
@@ -271,6 +306,7 @@ namespace Wonderland
             int removed = 0;
             for (int i = Trees.Count - 1; i >= 0; i--)
                 if (predicate(Trees[i])) { MarkDirty(Trees[i].x, Trees[i].z); Trees.RemoveAt(i); removed++; }
+            if (removed > 0) Reindex();
             return removed;
         }
 
@@ -278,6 +314,7 @@ namespace Wonderland
         {
             MarkAllDirty();
             Trees.Clear(); Trees.AddRange(trees);
+            Reindex();
             MarkAllDirty();
         }
 

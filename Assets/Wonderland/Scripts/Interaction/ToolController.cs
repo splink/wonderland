@@ -764,7 +764,7 @@ namespace Wonderland
             {
                 int n = ForestErase ? World.EraseForest(local, Radius, strength + 0.4f, dt) : World.PaintForest(local, Radius, density, dt);
                 if (n > 0) Buzz(0.2f);
-                if (!ForestErase && World.Forest.Trees.Count >= ForestSystem.MaxTrees) Say("The forest is full - erase some trees first");
+                if (!ForestErase && n == 0 && World.Forest.Full is { } full) Say(full);
             }
             if (stroking && (input.TriggerUp || !input.Trigger)) EndStroke();
         }

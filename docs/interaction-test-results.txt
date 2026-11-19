@@ -8,6 +8,7 @@ PASS  Grow chip selects the land brush
 PASS  Aiming at the floor beyond the shore grows land (2.73 -> 3.00 m2)
 PASS  Clicking the Forest tile selects the forest brush
 PASS  Painting with the trigger grows trees (30)
+PASS  The forest takes far more than the old 450 trees: the island wooded all over (879, 879 in the window)
 PASS  Track tool selected
 PASS  Drawing a loop with the trigger lays a closed railway (2.82 m)
 PASS  Drawing from the track outwards branches off with a switch (1 switch, 2 pieces; "New branch with a switch - it runs the way its arrows point; join its end back to the railway so trains can use it")
