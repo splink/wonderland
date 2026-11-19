@@ -13,7 +13,7 @@ namespace Wonderland
     /// </summary>
     public sealed partial class PathSystem
     {
-        public const float StreetRadius = 0.05f, HighwayRadius = 0.18f, KerbWidth = 0.0045f;
+        public const float StreetRadius = 0.05f, HighwayRadius = 0.18f, KerbWidth = 0.006f;
 
         /// <summary>Where roads meet: its centre, how far out its roads stop (its mouths), and the directions of its arms (away from the centre).</summary>
         public sealed class RoadJunction
@@ -542,7 +542,8 @@ namespace Wonderland
         private struct RoadSample { public Vector2 P, T; public float Y, S; public bool Junction; }
 
         private static readonly Color Paving = new(0.78f, 0.75f, 0.7f);
-        private const float KerbHeight = 0.0012f, Skirt = 0.004f, RoadLift = 0.0016f;
+        public const float KerbHeight = 0.0022f, RoadLift = 0.0016f;   // (a kerb about 16 cm high in the miniature's scale)
+        private const float Skirt = 0.005f;
         /// <summary>How far before a junction a road eases to the junction's height.</summary>
         private const float JunctionBlend = 0.06f;
 

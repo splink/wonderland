@@ -491,7 +491,7 @@ namespace Wonderland
             return new Vector2(q.x, q.z);
         }
 
-        private float GroundAt(Vector2 p) => OnPlatform(p, out float top) ? top : world.Bridges.Deck(p, out float deck, out _) ? deck : world.Terrain.SurfaceAt(p.x, p.y);
+        private float GroundAt(Vector2 p) => OnPlatform(p, out float top) ? top : world.Bridges.Deck(p, out float deck, out _) ? deck : world.Terrain.SurfaceAt(p.x, p.y) + world.Paths.WalkLift(p);
 
         private bool TrainRunning => world.Trains.AnyRunning;
 

@@ -52,7 +52,7 @@ namespace Wonderland
         public static bool IsRoad(int kind) => kind == (int)PathKind.Road || kind == (int)PathKind.Highway;
         /// <summary>Ways cars drive on.</summary>
         public static bool IsCarWay(int kind) => IsRoad(kind) || kind == (int)PathKind.Lane;
-        public static float HalfWidth(int kind) => kind switch { 0 => 0.03f, 1 => 0.02f, 2 => 0.012f, 3 => 0.008f, 4 => 0.003f, 5 => 0.007f, 7 => 0.046f, _ => 0.006f };
+        public static float HalfWidth(int kind) => kind switch { 0 => 0.0315f, 1 => 0.02f, 2 => 0.012f, 3 => 0.008f, 4 => 0.003f, 5 => 0.007f, 7 => 0.0475f, _ => 0.006f };   // (a road's kerbs included)
 
         public void Init(TerrainField field, Material lit, Func<TrackNetwork> railway)
         {
@@ -218,11 +218,24 @@ namespace Wonderland
             int kind = Lines[line].kind;
             float hw = HalfWidth(kind);
             if (!IsCarWay(kind)) return d < hw ? 1 : 0;
-            if (d < hw - RoadKerb * 0.5f) return OnCrossing != null && OnCrossing(p) ? 3 : 2;
+            if (d < hw - KerbWidth * 0.5f) return OnCrossing != null && OnCrossing(p) ? 3 : 2;
             return d < hw + Pavement(kind) + 0.004f ? 1 : 0;
         }
 
-        private const float RoadKerb = 0.0045f;
+        /// <summary>
+        /// How far above the bare ground someone walking at a point stands: up on a road's pavement (over the kerb), on
+        /// its asphalt, on a path's gravel - so feet stand on the ways instead of sinking into them.
+        /// </summary>
+        public float WalkLift(Vector2 p)
+        {
+            float d = Query(p, 0.09f, li => IsWay(Lines[li].kind), out int line);
+            if (line < 0) return 0f;
+            int kind = Lines[line].kind;
+            float hw = HalfWidth(kind);
+            if (!IsRoad(kind)) return d < hw ? 0.0014f : 0f;
+            if (d < hw - KerbWidth) return RoadLift;
+            return d < hw + Pavement(kind) ? RoadLift + KerbHeight : 0f;
+        }
 
         public float WayDistance(Vector2 p, out int kind)
         {
