@@ -104,7 +104,7 @@ PASS  Another tap: the next style ("Steel truss bridge")
 PASS  The chosen style stays when the bridge is rebuilt
 PASS  Save/load keeps the bridge style
 PASS  Undo takes the last restyle back
-PASS  A railway bridge offers railway styles (Stone, Timber, Truss, Suspension, Covered)
+PASS  A railway bridge offers railway styles (Stone, Timber, Truss, Suspension, Covered, Lift)
 PASS  A road across the stream gets a bridge
 PASS  The road rises onto a deck above the water (26 mm clear)
 PASS  Villagers can walk across the road bridge
@@ -117,7 +117,7 @@ PASS  The village clock runs a day in 7.6 minutes (360 s of daylight, 97 s of ni
 PASS  The daily rhythm: shops in the morning, lunch at midday, the fair in the afternoon, the square in the evening
 PASS  A railway loop divides the land
 PASS  A village goes up around the railway (13/13 places, 8 residents moved in)
-PASS  The walk grid sees the railway as a divide (2 regions over 6972 cells, built in 24 ms)
+PASS  The walk grid sees the railway as a divide (2 regions over 6972 cells, built in 33 ms)
 PASS  Every resident knows their home (8/8; 2 live inside the loop)
 PASS  The baker lives over the bakery
 PASS  At two in the morning everyone is asleep at home (8/8)
@@ -140,8 +140,8 @@ PASS  ...get off at the far station and walk on to where they were going
 PASS  A lane with a level crossing joins the two sides (1 regions)
 PASS  ...and people from inside the loop walk over it to the village
 PASS  Save/load keeps the time (10:00), the clock speed, needs and homes (8/8)
-PASS  40 villagers: 0.31 ms per frame on average, worst 9.1 ms, 1.4 decisions/s, slowest decision 2.1 ms, places directory 0.5 ms (editor timing)
-PASS  After an edit the walk grid rebuilds over 32 frames (59 ms of work, worst frame 3.2 ms)
+PASS  40 villagers: 0.30 ms per frame on average, worst 5.6 ms, 1.4 decisions/s, slowest decision 2.1 ms, places directory 0.5 ms (editor timing)
+PASS  After an edit the walk grid rebuilds over 32 frames (60 ms of work, worst frame 3.1 ms)
 PASS  With no places at all, villagers wander by day and sleep under the stars at night
 PASS  A working village goes up (15/15 places, 10 villagers)
 PASS  Opening hours: the bakery opens at half six and shuts at six, the carousel stops in the evening, the fountain never closes
@@ -201,7 +201,7 @@ PASS  Save and load keep where the cameras look (71 / 15 degrees; loaded 71 / 15
 PASS  Erasing a camera leaves the other selected, still aimed where it was
 PASS  Sound: 2 sources near the crossroads (at most 8); off means silent; five barks in a row play once; a meow out of earshot isn't played
 PASS  Taking a road away re-routes or parks the traffic (worst 1.4 cm off the remaining roads)
-PASS  A busy town (40 villagers, 8 vehicles, 2 animals, sound and a camera feed): 0.32 ms per frame on average, worst 3.0 ms (editor timing, simulation only)
+PASS  A busy town (40 villagers, 8 vehicles, 2 animals, sound and a camera feed): 0.32 ms per frame on average, worst 3.1 ms (editor timing, simulation only)
 PASS  A road crosses the railway at a level crossing; homes on both sides have vehicles (4 places, 3 vehicles)
 PASS  Vehicles wait at the level crossing while a train goes by (388 waits, 6 trips), and are never on it with the train
 PASS  A loop drawn in two halves closes (1 pieces, 0 dead ends)
@@ -239,7 +239,7 @@ PASS  Every train runs one way round the network, never backing up or meeting an
 PASS  Trains share both loops rather than piling into one (49% of train-time in the quieter loop)
 PASS  Trains call at the country halt (121 calls)
 PASS  A hand-drawn round loop comes out as standard track: closed, straights on the grid and curves of 20 cm, 30 cm, 40 cm ()
-PASS  ...and stays close to what was drawn (on average 1.7 cm off, at most 4.6 cm; planned in 5.1 ms, 2.9 ms drawn freely)
+PASS  ...and stays close to what was drawn (on average 1.7 cm off, at most 4.6 cm; planned in 5.2 ms, 2.9 ms drawn freely)
 PASS  A train runs round it on the rails (worst 0.0 mm off, 3.8 m)
 PASS  A line drawn 4 degrees off comes out dead straight along the grid, its ends on grid points (0.00 mm off straight; ends (-0.600, 0.150) and (0.600, 0.150))
 PASS  An L drawn with a rounded corner: two straights and one standard curve of 30 cm ()
@@ -247,7 +247,7 @@ PASS  Branches drawn off a straight at 25 to 135 degrees get a switch exactly on
 PASS  A line drawn about 8 cm beside a straight runs exactly 10 cm from it (0.0 mm off)
 PASS  A loop drawn round a loop keeps 10 cm from it all the way round, on concentric curves (10.0 to 10.0 cm; curves 20 cm, 30 cm, 40 cm)
 PASS  Crossovers drawn from one loop to the other, one each way, each get a switch at both ends (4 switches, 0 one-way traps)
-PASS  Two loops linked both ways on the grid: 4 switches, no dead ends, no one-way traps, all standard track (4 switches, 0 dead ends, 0 traps; ; a link planned in 4.2 ms, 3.4 ms drawn freely)
+PASS  Two loops linked both ways on the grid: 4 switches, no dead ends, no one-way traps, all standard track (4 switches, 0 dead ends, 0 traps; ; a link planned in 5.8 ms, 3.4 ms drawn freely)
 PASS  A line carried on from its dead end continues it smoothly, as one piece (8 pieces, sharpest bend 2.9 deg per cm; )
 PASS  Drawn on from 15 cm back along the line, it still carries the line on from its end - one piece, no new switch (5 -> 5 switches)
 PASS  Two separate railways joined by a line from one to the other become one (2 -> 1; )
@@ -259,7 +259,7 @@ PASS  A railway drawn freely before the grid takes a grid branch (a switch on it
 PASS  Saved worlds load with their railway intact and its trains on the rails (5/5: headset-wonderland-world.json: ArgumentOutOfRangeException; headset-world-1: 9 pieces, 6 switches, 7 trains; headset-world-3: 2 pieces, 1 switches, 2 trains; headset-world-4.json: ArgumentOutOfRangeException; quest-world-1: 9 pieces, 6 switches, 7 trains; quest-world-latest: 2 pieces, 1 switches, 2 trains; quest-world: 5 pieces, 2 switches, 5 trains)
 PASS  The window is 2 x 2 m to start with ((2.00, 2.00))
 PASS  An arrow steps it a tenth of its size (20 cm)
-PASS  Scrolling 3.4 m moves the window smoothly, the land always there (2 grid moves; other frames 1.75 ms on average, 20.3 ms at most)
+PASS  Scrolling 3.4 m moves the window smoothly, the land always there (2 grid moves; other frames 1.53 ms on average, 17.6 ms at most)
 PASS  In Settings it can be 3 x 3 m ((3.00, 3.00))
 PASS  Put down 40 cm from a wall, the window is the size chosen and stays exactly where it was put (2.00 x 2.00 m)
 PASS  The Window setting changes the window in the room (3 m: 3.0, 1.5 m: 1.5, 2 m: 2.0)
@@ -397,5 +397,5 @@ PASS  Land still grows with bad room data
 PASS  Trimmed land grows back (1.19 -> 1.04 -> 1.16 m2)
 INFO  terrain: 6 chunk meshes, 17 k triangles, land 3.49 m2 of a 4.8 x 4.8 m grid
 INFO  static budget of this world: 358 mesh renderers (~draw calls per eye pass before batching, excl. shadows/UI), 1162 k triangles, ground cover 5538 tufts
-INFO  trees 131, forest chunks 30, houses 3, track 3.43 m, undo depth 9, journey simulated in 97.9 s wall time
+INFO  trees 131, forest chunks 30, houses 3, track 3.43 m, undo depth 9, journey simulated in 94.1 s wall time
 RESULT: PASS
