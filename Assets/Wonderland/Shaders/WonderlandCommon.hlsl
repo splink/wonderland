@@ -11,6 +11,23 @@ half4 _WL_ShadowTint;
 half _WL_Night;   // 0 by day, 1 at night: lamps and lit windows glow brighter
 float4 _WL_Haze;  // distance haze: x = where it starts (m from the eyes), y = over how far it builds up, z = how strong (0: off)
 
+// The world window (set by WonderlandWorld, C#): only the part of the world inside it is drawn, cut off cleanly at its
+// edges. _WL_WorldToWindow takes world space to the world root's local space, where the window is the rectangle centred
+// at _WL_Window.xy with half size _WL_Window.zw (metres); _WL_WindowOn is 0 when the whole world is drawn.
+float4x4 _WL_WorldToWindow;
+float4 _WL_Window;
+float _WL_WindowOn;
+
+void WL_Clip(float3 positionWS)
+{
+    if (_WL_WindowOn > 0.5)
+    {
+        float3 p = mul(_WL_WorldToWindow, float4(positionWS, 1.0)).xyz;
+        float2 d = abs(p.xz - _WL_Window.xy) - _WL_Window.zw;
+        clip(-max(d.x, d.y));
+    }
+}
+
 float WL_Hash(float2 p)
 {
     p = frac(p * float2(123.34, 456.21));

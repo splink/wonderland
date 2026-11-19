@@ -63,7 +63,11 @@ namespace Wonderland
                 try { World.Load(Materials); restored = true; }
                 catch (System.Exception e) { Debug.LogWarning("Wonderland: could not restore the saved world: " + e.Message); }
             }
-            if (!restored) World.Create(size, Materials);
+            if (!restored) World.Create(size, Materials, endless: true);
+            // The world goes on in every direction, seen through a window of up to 3 x 3 m (older island worlds too).
+            World.MakeEndless();
+            World.Lift = WorldAnchor.SavedLift;
+            World.UseWindow(true);
 
             Palette = new GameObject("Palette").AddComponent<PaletteUI>();
             Palette.gameObject.layer = PaletteUI.UiLayer;
@@ -78,7 +82,7 @@ namespace Wonderland
 
             Tools = new GameObject("Tools").AddComponent<ToolController>();
             Tools.Init(World, Palette, Rig != null ? Rig.rightControllerAnchor : null);
-            Tools.ResetRequested = () => { World.Create(StartSize, Materials); WonderlandWorld.CurrentSlot = 0; Tools.SelectTool(Tool.Terrain); Tools.Say("A fresh landscape - Save it as a world to keep it"); };
+            Tools.ResetRequested = () => { World.Create(StartSize, Materials, endless: true); World.UseWindow(true); WonderlandWorld.CurrentSlot = 0; Tools.SelectTool(Tool.Terrain); Tools.Say("A fresh landscape - Save it as a world to keep it"); };
             Palette.AddGlobal("Undo", () => Tools.Say(World.Undo() ? "Undone (B does this too)" : "Nothing to undo"));
             Palette.AddGlobal("Redo", () => Tools.Say(World.Redo() ? "Redone" : "Nothing to redo"));
             // Several worlds: Save and Load list World 1-6; the one being played is kept up to date by the autosave.
@@ -89,12 +93,13 @@ namespace Wonderland
             };
             Tools.LoadWorld = n =>
             {
-                try { World.LoadSlot(n, Materials); World.Save(); Tools.SelectTool(Tool.Terrain); Tools.Say($"World {n} loaded"); }
+                try { World.LoadSlot(n, Materials); World.MakeEndless(); World.UseWindow(true); World.Save(); Tools.SelectTool(Tool.Terrain); Tools.Say($"World {n} loaded"); }
                 catch (System.Exception e) { Tools.Say($"Could not load World {n}: " + e.Message); }
             };
             Palette.AddGlobal("Save", () => Tools.ShowWorlds(true));
             Palette.AddGlobal("Load", () => Tools.ShowWorlds(false));
-            Palette.AddGlobal("Move", () => { Tools.PlacingWorld = true; Tools.Say("Point where the world should grow"); });
+            Palette.AddGlobal("Move", () => { Tools.PlacingWorld = true; Tools.Say("Point where the world should lie - stick up or down to raise or lower it"); });
+            Palette.AddGlobal("Home", () => Tools.Say(World.WindowTarget == Vector2.zero ? "Already home, where the world started" : World.NavigateHome() ? "Back home, where the world started" : "Can't get home from here"));
             // Sound, tips, labels, the grid, stats, performance and New world: all under Settings.
             Tools.SoundState = () => SoundSystem.Setting switch { SoundSetting.On => "On", SoundSetting.Quiet => "Quiet", _ => "Off" };
             Tools.CycleSound = () =>
@@ -117,7 +122,7 @@ namespace Wonderland
             }
             // Pinned to the room: back on the same spot next launch, and steady while it runs.
             Anchor = gameObject.AddComponent<WorldAnchor>();
-            Anchor.World = World.transform;
+            Anchor.World = World;
             Anchor.Floor = ScannedFloor;
             Anchor.Holding = () => Tools.PlacingWorld;
             Tools.WorldPlaced = Anchor.Pin;

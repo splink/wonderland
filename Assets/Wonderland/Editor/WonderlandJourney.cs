@@ -198,6 +198,7 @@ namespace Wonderland.Editor
             TownJourney();
             RailJourney();
             GridRailJourney();
+            { bool snap = BuildGrid.Snap; WindowJourney(); BuildGrid.Snap = snap; Shader.SetGlobalFloat("_WL_WindowOn", 0f); }
             WeatherJourney();
             {
                 // Tunnel: a big hill across the line keeps its top; portals at both mouths; no steam underground.

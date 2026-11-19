@@ -464,7 +464,7 @@ namespace Wonderland
         {
             Palette.SetClock(World.Clock.Label, Health(out _));
             UpdateTips(dt);
-            Palette.SetHint(PlacingWorld ? "Point at the floor, stick to rotate, trigger to place the world here" : Peek() ?? Hint());
+            Palette.SetHint(PlacingWorld ? "Point at the floor, stick left/right to turn, up/down to raise or lower, trigger to place the world here" : Peek() ?? Hint());
             UpdateInspection(dt);
             var ray = input.Ray;
             float rayLength = 2.5f;
@@ -487,6 +487,23 @@ namespace Wonderland
                 }
             }
             else Palette.ClearHover();
+
+            // 1b. The arrows round the window: slide across the world that way.
+            int arrow = !stroking && drawn.Count == 0 && !Holding && !PlacingWorld ? World.Navigator.Pick(ray) : -1;
+            World.Navigator.Hover(arrow);
+            if (arrow >= 0)
+            {
+                World.TerrainView.HideBrush();
+                ghost.gameObject.SetActive(false);
+                if (input.TriggerDown)
+                {
+                    if (World.Navigate(WindowNavigator.Directions[arrow])) { Say($"Off {WindowNavigator.Names[arrow]} - now {World.WhereLabel()}"); Haptic(0.4f, 0.04f); }
+                    else Say("The world doesn't go further that way yet");
+                }
+                var spot = World.Navigator.SpotOf(arrow);
+                DrawPointer(ray, Vector3.Distance(ray.origin, World.transform.TransformPoint(new Vector3(spot.x, 0f, spot.y))), new Color(1f, 0.9f, 0.6f, 0.9f), true);
+                return;
+            }
 
             if (input.SecondaryDown && !stroking) { if (World.Undo()) { Say("Undone"); Haptic(0.3f, 0.03f); RefreshOptions(); } else Say("Nothing to undo"); }
 
@@ -531,6 +548,7 @@ namespace Wonderland
             bool looking = !stroking && !Holding && drawn.Count == 0;
             var dirN = localDir.normalized;
             int houseHit = rayHouse = World.Buildings.Pick(localOrigin, dirN);
+            if (houseHit >= 0 && !World.InWindow(new Vector2(World.Buildings.Houses[houseHit].x, World.Buildings.Houses[houseHit].z), 0.03f)) houseHit = rayHouse = -1;   // (outside the window: not there to point at)
             // What hides things: the land, and buildings' walls (not the air under a sloping roof). Someone at a door
             // stands a little inside its box (eaves): a few centimetres' grace - anyone behind it is further.
             bool walled = World.Buildings.Pick(localOrigin, dirN, out float wallT, true) >= 0;
@@ -1194,21 +1212,25 @@ namespace Wonderland
             if (stroking && (input.TriggerUp || !input.Trigger)) stroking = false;
         }
 
+        /// <summary>Move: the pointer on the floor puts the window's centre there, the stick turns it (X) and lifts it (Y).</summary>
         private void PlaceWorld(PointerInput input, Ray ray, float dt)
         {
             World.TerrainView.HideBrush();
-            float floorY = World.transform.position.y;
+            float floorY = World.PlacementPosition.y - World.Lift;
+            if (Mathf.Abs(input.Stick.y) > 0.3f) World.Lift = Mathf.Clamp(World.Lift + input.Stick.y * 0.35f * dt, 0f, 1.2f);
+            var at = World.PlacementPosition;
             if (Mathf.Abs(ray.direction.y) > 1e-3f)
             {
                 float t = (floorY - ray.origin.y) / ray.direction.y;
                 if (t > 0f && t < 6f)
                 {
                     var p = ray.origin + ray.direction * t;
-                    World.transform.position = new Vector3(p.x, floorY, p.z);
+                    at = new Vector3(p.x, floorY, p.z);
                     DrawPointer(ray, t, new Color(0.6f, 0.9f, 1f, 0.9f), true);
                 }
             }
-            if (Mathf.Abs(input.Stick.x) > 0.25f) World.transform.Rotate(0f, input.Stick.x * 60f * dt, 0f, Space.World);
+            var turn = Mathf.Abs(input.Stick.x) > 0.25f ? Quaternion.Euler(0f, input.Stick.x * 60f * dt, 0f) : Quaternion.identity;
+            World.Place(new Vector3(at.x, floorY + World.Lift, at.z), turn * World.PlacementRotation);
             if (input.TriggerDown) { PlacingWorld = false; World.FitToRoom(); WorldPlaced?.Invoke(); Say("World placed - it stays on this spot"); Haptic(0.5f, 0.06f); }
         }
 

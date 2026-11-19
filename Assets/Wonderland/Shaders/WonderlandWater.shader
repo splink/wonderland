@@ -54,6 +54,7 @@ Shader "Wonderland/Water"
 
             half4 frag(Varyings i) : SV_Target
             {
+                WL_Clip(i.positionWS);
                 UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
                 float t = _Time.y;
                 half depth = i.color.r, shore = i.color.g, flow = i.color.b;

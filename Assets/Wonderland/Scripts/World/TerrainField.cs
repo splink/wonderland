@@ -47,6 +47,13 @@ namespace Wonderland
         /// <summary>Ponds and lakes: water mask (1 = water) and the water surface height for each water cell.</summary>
         public float[] Water, WaterLevel;
         public const float PondDepth = 0.028f;
+        /// <summary>
+        /// Land everywhere: fresh cells are flat land (not bare floor), the grid's edge is no shore - the land goes on past
+        /// it - and land, edge and height are those of fresh flat land outside the grid.
+        /// </summary>
+        public bool Endless { get; private set; }
+        /// <summary>The part of the world shown (local XZ): the pointer finds the land only inside it. Null: everywhere.</summary>
+        public Rect? Window;
         /// <summary>1 where land may grow (free floor inside the room).</summary>
         public byte[] Allowed;
         private float[] scratch, rim, rimNoise, distance, blur;   // rim = Shape(Edge); rimNoise = shoreline roughness (m)
@@ -90,9 +97,10 @@ namespace Wonderland
             }
         }
 
-        public TerrainField(float patchSize, int seed, bool hills = true, RectInt? cells = null)
+        public TerrainField(float patchSize, int seed, bool hills = true, RectInt? cells = null, bool endless = false)
         {
             Seed = seed;
+            Endless = endless;
             Allocate(cells ?? new RectInt(-DefaultHalfCells, -DefaultHalfCells, DefaultHalfCells * 2 + 1, DefaultHalfCells * 2 + 1));
             PatchSize = Mathf.Min(patchSize, Mathf.Min(Nx, Nz) * Cell - 0.4f);
             for (int z = 0; z < Nz; z++)
@@ -100,7 +108,7 @@ namespace Wonderland
             {
                 int i = z * Nx + x;
                 InitCell(i, x, z, hills);
-                Land[i] = OrganicPatch(PatchSize, seed, LocalX(x), LocalZ(z));
+                if (!endless) Land[i] = OrganicPatch(PatchSize, seed, LocalX(x), LocalZ(z));
             }
             if (hills)
             {
@@ -139,14 +147,34 @@ namespace Wonderland
             for (int i = 0; i < n; i++) Allowed[i] = 1;
         }
 
-        /// <summary>Fresh floor cell: base height with a little noise, no land. Noise uses global coordinates, so it is
-        /// identical however the grid is cut.</summary>
+        /// <summary>Fresh cell: base height with a little noise, no land (flat land when <see cref="Endless"/>). Noise uses
+        /// global coordinates, so it is identical however the grid is cut.</summary>
         private void InitCell(int i, int x, int z, bool undulate = true)
         {
             float lx = LocalX(x), lz = LocalZ(z);
             rimNoise[i] = (Noise.Fbm2(lx * 3.5f + Seed * 0.71f, lz * 3.5f - Seed * 0.37f, 3) - 0.5f) * 0.12f;
             Height[i] = BaseHeight + (undulate ? (Noise.Fbm2(lx * 4f + Seed, lz * 4f) - 0.5f) * 0.008f : 0f);
-            Land[i] = 0f; Lock[i] = 0f; Soil[i] = 0f; Water[i] = 0f; WaterLevel[i] = 0f;
+            Land[i] = Endless ? 1f : 0f; Lock[i] = 0f; Soil[i] = 0f; Water[i] = 0f; WaterLevel[i] = 0f;
+        }
+
+        /// <summary>
+        /// Turns an island world into an endless one (an older save): the bare floor round the islands becomes flat land
+        /// at the base height, so the land goes on everywhere. Ponds, hills and everything on the land stay as they were.
+        /// </summary>
+        public void MakeEndless()
+        {
+            if (Endless) return;
+            Endless = true;
+            for (int z = 0; z < Nz; z++)
+            for (int x = 0; x < Nx; x++)
+            {
+                int i = z * Nx + x;
+                if (Land[i] >= 0.5f) continue;
+                Land[i] = 1f;
+                Height[i] = BaseHeight + (Noise.Fbm2(LocalX(x) * 4f + Seed, LocalZ(z) * 4f) - 0.5f) * 0.008f;
+            }
+            RecomputeEdge(All);
+            UpdateSurface(All);
         }
 
         /// <summary>
@@ -252,7 +280,7 @@ namespace Wonderland
             for (int x = w.xMin; x < w.xMax; x++)
             {
                 int i = z * Nx + x;
-                distance[i] = Land[i] < 0.5f ? 0f : (x == 0 || z == 0 || x == Nx - 1 || z == Nz - 1) ? 0f : inf;
+                distance[i] = Land[i] < 0.5f ? 0f : !Endless && (x == 0 || z == 0 || x == Nx - 1 || z == Nz - 1) ? 0f : inf;
             }
             for (int z = w.yMin; z < w.yMax; z++)
             for (int x = w.xMin; x < w.xMax; x++)
@@ -340,8 +368,10 @@ namespace Wonderland
         }
 
         public float SurfaceAt(float x, float z) => Bilinear(Surface, x, z);
-        public float EdgeAt(float x, float z) => Inside(x, z) ? Bilinear(Edge, x, z) : 0f;
-        public bool LandAt(float x, float z) => Inside(x, z) && Bilinear(Land, x, z) >= 0.5f;
+        public float EdgeAt(float x, float z) => Inside(x, z) ? Bilinear(Edge, x, z) : Endless ? 1f : 0f;
+        public bool LandAt(float x, float z) => Inside(x, z) ? Bilinear(Land, x, z) >= 0.5f : Endless;
+        /// <summary>Whether a point is inside the window (or there is no window).</summary>
+        public bool Shown(float x, float z) => Window is not Rect w || x >= w.xMin && x <= w.xMax && z >= w.yMin && z <= w.yMax;
         public float WaterAt(float x, float z) => Inside(x, z) ? Bilinear(Water, x, z) : 0f;
 
         /// <summary>Water surface height at a point (the level of the nearest water cell), or -1 when dry.</summary>
@@ -425,7 +455,7 @@ namespace Wonderland
             {
                 var p = origin + direction * t;
                 if (p.y < -0.01f) break;
-                if (!Inside(p.x, p.z)) { prevT = t; prevAbove = true; continue; }
+                if (!Inside(p.x, p.z) || !Shown(p.x, p.z)) { prevT = t; prevAbove = true; continue; }
                 bool above = p.y > SurfaceAt(p.x, p.z);
                 if (!above && prevAbove)
                 {
@@ -455,6 +485,7 @@ namespace Wonderland
             if (t < 0f || t > maxDistance) return false;
             hit = origin + direction * t;
             hit.y = 0f;
+            if (!Shown(hit.x, hit.z)) return false;
             // Anywhere on the floor within reach: the grid grows to meet new land.
             return Mathf.Abs(hit.x) < MaxReach - 0.3f && Mathf.Abs(hit.z) < MaxReach - 0.3f;
         }

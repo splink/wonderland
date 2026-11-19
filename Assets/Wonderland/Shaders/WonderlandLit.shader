@@ -70,6 +70,7 @@ Shader "Wonderland/Lit"
             {
                 UNITY_SETUP_INSTANCE_ID(i);
                 UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
+                WL_Clip(i.positionWS);
                 half3 albedo = SRGBToLinear(i.color.rgb) * _Tint.rgb;
                 half3 normalWS = normalize(i.normalWS);
                 half3 colour = WL_Shade(albedo, i.positionWS, normalWS);

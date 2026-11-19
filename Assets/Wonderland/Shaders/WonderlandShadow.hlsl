@@ -16,6 +16,7 @@ struct WLShadowAttributes
 struct WLShadowVaryings
 {
     float4 positionCS : SV_POSITION;
+    float3 positionWS : TEXCOORD0;
     UNITY_VERTEX_OUTPUT_STEREO
 };
 
@@ -38,6 +39,7 @@ WLShadowVaryings WLShadowVert(WLShadowAttributes v)
     positionCS.z = max(positionCS.z, UNITY_NEAR_CLIP_VALUE);
 #endif
     o.positionCS = positionCS;
+    o.positionWS = positionWS;
     return o;
 }
 
@@ -46,10 +48,11 @@ WLShadowVaryings WLDepthVert(WLShadowAttributes v)
     WLShadowVaryings o = (WLShadowVaryings)0;
     UNITY_SETUP_INSTANCE_ID(v);
     UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
-    o.positionCS = TransformWorldToHClip(WL_Wind(TransformObjectToWorld(v.positionOS.xyz), v.uv.x));
+    o.positionWS = WL_Wind(TransformObjectToWorld(v.positionOS.xyz), v.uv.x);
+    o.positionCS = TransformWorldToHClip(o.positionWS);
     return o;
 }
 
-half4 WLShadowFrag(WLShadowVaryings i) : SV_Target { return 0; }
+half4 WLShadowFrag(WLShadowVaryings i) : SV_Target { WL_Clip(i.positionWS); return 0; }
 
 #endif

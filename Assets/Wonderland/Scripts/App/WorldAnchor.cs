@@ -10,13 +10,15 @@ namespace Wonderland
     /// the headset, so the next launch finds it again and puts the world back on the same spot. While the app runs the
     /// world follows the anchor, so it stays put when the headset re-localises (taken off and put on again, a recentre,
     /// the guardian redrawn). The height is the room scan's floor when there is one (the anchor's own height otherwise),
-    /// and only the anchor's heading is used, so the world always lies level on the floor. Move re-pins it.
+    /// plus the lift the player chose (Move), and only the anchor's heading is used, so the world always lies level. What
+    /// is anchored is the placement - the window's centre - so navigating the world never moves it. Move re-pins it.
     /// </summary>
     public sealed class WorldAnchor : MonoBehaviour
     {
         private const string Key = "wonderland.anchor";
+        private const string LiftKey = "wonderland.lift";
 
-        public Transform World;
+        public WonderlandWorld World;
         /// <summary>The real floor's height, when the room scan knows it.</summary>
         public Func<float?> Floor;
         /// <summary>True while the player is moving the world by hand (the anchor isn't followed then).</summary>
@@ -77,7 +79,8 @@ namespace Wonderland
             busy = true;
             var old = anchor;
             var go = new GameObject("World anchor");
-            go.transform.SetPositionAndRotation(World.position, Quaternion.Euler(0f, World.eulerAngles.y, 0f));
+            go.transform.SetPositionAndRotation(World.PlacementPosition - Vector3.up * World.Lift, Quaternion.Euler(0f, World.PlacementRotation.eulerAngles.y, 0f));
+            PlayerPrefs.SetFloat(LiftKey, World.Lift);
             var fresh = go.AddComponent<OVRSpatialAnchor>();
             for (float t = 0f; !fresh.Created && t < 5f; t += Time.unscaledDeltaTime) yield return null;
             if (!fresh.Created) { Destroy(go); busy = false; Status = "couldn't pin the world to the room"; yield break; }
@@ -94,6 +97,9 @@ namespace Wonderland
 
         private void LateUpdate() => Follow(false);
 
+        /// <summary>The lift chosen last time (metres above the floor).</summary>
+        public static float SavedLift => PlayerPrefs.GetFloat(LiftKey, 0f);
+
         /// <summary>Puts the world on the anchor (level, on the floor); small corrections only when they matter.</summary>
         private void Follow(bool always)
         {
@@ -102,15 +108,16 @@ namespace Wonderland
             {
                 // Not pinned (yet): still keep it on the floor.
                 float? floor = Floor?.Invoke();
-                if (floor.HasValue && Mathf.Abs(World.position.y - floor.Value) > 0.002f) World.position = new Vector3(World.position.x, floor.Value, World.position.z);
+                var at = World.PlacementPosition;
+                if (floor.HasValue && Mathf.Abs(at.y - floor.Value - World.Lift) > 0.002f) World.Place(new Vector3(at.x, floor.Value + World.Lift, at.z), World.PlacementRotation);
                 return;
             }
             var a = anchor.transform;
-            float y = Floor?.Invoke() ?? a.position.y;
+            float y = (Floor?.Invoke() ?? a.position.y) + World.Lift;
             var position = new Vector3(a.position.x, y, a.position.z);
             var rotation = Quaternion.Euler(0f, a.eulerAngles.y, 0f);
-            if (!always && (World.position - position).sqrMagnitude < 0.0005f * 0.0005f && Quaternion.Angle(World.rotation, rotation) < 0.05f) return;
-            World.SetPositionAndRotation(position, rotation);
+            if (!always && (World.PlacementPosition - position).sqrMagnitude < 0.0005f * 0.0005f && Quaternion.Angle(World.PlacementRotation, rotation) < 0.05f) return;
+            World.Place(position, rotation);
         }
     }
 }

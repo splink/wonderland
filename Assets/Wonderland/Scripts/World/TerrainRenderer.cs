@@ -92,6 +92,7 @@ namespace Wonderland
                     dirty.Add(cz * chunksX + cx);
             }
             foreach (int c in dirty) RebuildChunk(chunks[c]);
+            if (dirty.Count > 0 && cut != null) SetCut(cut);   // (the cut edge follows the land)
         }
 
         /// <summary>Sand along pond shores: land within a few centimetres of water, above it but not much higher.</summary>
@@ -169,6 +170,86 @@ namespace Wonderland
         }
 
         public void HideBrush() => SetBrush(Vector3.zero, 0f, Color.black, 0f);
+
+        // ------------------------------------------------------------------ the cut edge
+
+        /// <summary>Material for the cut edge (the world's lit material).</summary>
+        public Material CutMaterial;
+        private MeshRenderer cutRenderer;
+        private Mesh cutMesh;
+        private Rect? cut;
+
+        /// <summary>
+        /// The world cut off cleanly at the window: soil walls from the floor up to the land along its four sides (water
+        /// showing where a pond meets the cut) and a base under it, like a model landscape sawn out of a bigger one.
+        /// Null removes it.
+        /// </summary>
+        public void SetCut(Rect? window)
+        {
+            cut = window;
+            if (window is not Rect r || CutMaterial == null)
+            {
+                if (cutRenderer != null) cutRenderer.enabled = false;
+                return;
+            }
+            if (cutRenderer == null)
+            {
+                var go = new GameObject("Cut edge");
+                go.transform.SetParent(transform, false);
+                cutMesh = new Mesh { name = "Cut edge" };
+                cutMesh.MarkDynamic();
+                go.AddComponent<MeshFilter>().sharedMesh = cutMesh;
+                cutRenderer = go.AddComponent<MeshRenderer>();
+                cutRenderer.sharedMaterial = CutMaterial;
+                cutRenderer.shadowCastingMode = ShadowCastingMode.Off;
+            }
+            cutRenderer.enabled = true;
+            const float inset = 0.0002f;   // (just inside the window, so the shaders' cut keeps it)
+            r = Rect.MinMaxRect(r.xMin + inset, r.yMin + inset, r.xMax - inset, r.yMax - inset);
+            var b = new MeshBuilder();
+            var grass = new Color(0.36f, 0.48f, 0.22f); var topsoil = new Color(0.45f, 0.33f, 0.21f);
+            var soil = new Color(0.37f, 0.27f, 0.18f); var deep = new Color(0.29f, 0.22f, 0.16f);
+            var water = new Color(0.32f, 0.52f, 0.62f);
+            void Side(Vector2 from, Vector2 to, Vector3 outward)
+            {
+                int n = Mathf.Max(1, Mathf.CeilToInt((to - from).magnitude / field.Cell));
+                int prev = -1; float prevTop = 0f, prevLevel = -1f; Vector2 prevP = default;
+                for (int k = 0; k <= n; k++)
+                {
+                    var p = Vector2.Lerp(from, to, k / (float)n);
+                    float top = Mathf.Max(field.SurfaceAt(p.x, p.y), 0.002f);
+                    float lip = Mathf.Max(0f, top - 0.0035f);
+                    int v = b.AddVertex(new Vector3(p.x, top, p.y), outward, grass);
+                    b.AddVertex(new Vector3(p.x, lip, p.y), outward, topsoil);
+                    b.AddVertex(new Vector3(p.x, top * 0.45f, p.y), outward, soil);
+                    b.AddVertex(new Vector3(p.x, 0f, p.y), outward, deep);
+                    if (prev >= 0)
+                        for (int band = 0; band < 3; band++)
+                        {
+                            b.AddTriangle(prev + band, v + band, v + band + 1);
+                            b.AddTriangle(prev + band, v + band + 1, prev + band + 1);
+                        }
+                    // A pond reaching the cut: its water shows as a pane above the bed.
+                    float level = field.WaterAt(p.x, p.y) > 0.3f ? field.WaterLevelAt(p.x, p.y) : -1f;
+                    if (prev >= 0 && level > top + 0.001f && prevLevel > prevTop + 0.001f)
+                        b.AddQuad(new Vector3(prevP.x, prevLevel, prevP.y), new Vector3(p.x, level, p.y), new Vector3(p.x, top, p.y), new Vector3(prevP.x, prevTop, prevP.y), water);
+                    prev = v; prevTop = top; prevLevel = level; prevP = p;
+                }
+            }
+            // Wound so each wall faces out of the window.
+            Side(new Vector2(r.xMin, r.yMin), new Vector2(r.xMax, r.yMin), Vector3.back);
+            Side(new Vector2(r.xMax, r.yMin), new Vector2(r.xMax, r.yMax), Vector3.right);
+            Side(new Vector2(r.xMax, r.yMax), new Vector2(r.xMin, r.yMax), Vector3.forward);
+            Side(new Vector2(r.xMin, r.yMax), new Vector2(r.xMin, r.yMin), Vector3.left);
+            // The base, seen from below when the world is lifted off the floor.
+            int a0 = b.AddVertex(new Vector3(r.xMin, 0f, r.yMin), Vector3.down, deep);
+            int a1 = b.AddVertex(new Vector3(r.xMax, 0f, r.yMin), Vector3.down, deep);
+            int a2 = b.AddVertex(new Vector3(r.xMax, 0f, r.yMax), Vector3.down, deep);
+            int a3 = b.AddVertex(new Vector3(r.xMin, 0f, r.yMax), Vector3.down, deep);
+            b.AddTriangle(a0, a1, a2); b.AddTriangle(a0, a2, a3);
+            b.ToMesh("Cut edge", cutMesh);
+            cutMesh.RecalculateBounds();
+        }
 
         /// <summary>Visible chunk meshes and triangles (budget reporting).</summary>
         public (int chunks, int triangles) Stats()

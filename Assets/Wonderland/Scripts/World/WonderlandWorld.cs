@@ -63,8 +63,16 @@ namespace Wonderland
 
         public static string SavePath => Path.Combine(Application.persistentDataPath, "wonderland-world.json");
 
-        public void Create(float size, WorldMaterials materials, int seed = 7, bool hills = true)
+        /// <summary>
+        /// A fresh world: a patch of land on the floor (an island), or with <paramref name="endless"/> land everywhere -
+        /// the window shows part of it, and it goes on in every direction.
+        /// </summary>
+        public void Create(float size, WorldMaterials materials, int seed = 7, bool hills = true, bool endless = false)
         {
+            // A fresh world starts at home, the window's centre staying where it is in the room.
+            var placed = PlacementPosition;
+            WindowCenter = WindowTarget = Vector2.zero; slideT = 1f; windowDirty = true;
+            Place(placed, PlacementRotation);
             for (int i = transform.childCount - 1; i >= 0; i--)
             {
                 if (Application.isPlaying) Destroy(transform.GetChild(i).gameObject); else DestroyImmediate(transform.GetChild(i).gameObject);
@@ -72,8 +80,11 @@ namespace Wonderland
             Materials = materials; Seed = seed;
             platforms = null;
             Clock = new VillageClock();
-            Terrain = new TerrainField(size, seed, hills);
+            Terrain = new TerrainField(size, seed, hills, null, endless);
             TerrainView = Child<TerrainRenderer>("Terrain");
+            TerrainView.CutMaterial = materials.Lit;
+            Navigator = Child<WindowNavigator>("Window arrows");
+            Navigator.Init(this, materials.UI);
             TerrainView.Init(Terrain, materials.Terrain);
             Forest = Child<ForestSystem>("Forest");
             Forest.Init(Terrain, materials.Lit, seed);
@@ -170,7 +181,14 @@ namespace Wonderland
         public void FitToRoom()
         {
             roomLocal = room != null && room.Floor.Count >= 3 ? room.ToLocal(transform) : null;
-            if (roomLocal != null)
+            if (Terrain.Endless)
+            {
+                // Land everywhere: the room sizes the window, and the grid covers the window (and a margin round it).
+                FitWindowToRoom();
+                EnsureGridCovers(Grow(WindowRect, 0.3f));
+                windowDirty = true;
+            }
+            else if (roomLocal != null)
             {
                 var need = roomLocal.Bounds;
                 var land = Terrain.LandBounds();
@@ -259,6 +277,7 @@ namespace Wonderland
 
         private void LateUpdate()
         {
+            UpdateWindow(Time.deltaTime);
             if (resitHouses) { Buildings.Resit(); resitHouses = false; }
             // Sculpting under the railway: re-profile it a few times per second (and once more after the stroke).
             if (streamsDirty && Time.realtimeSinceStartup - streamsUpdated > 0.3f) UpdateStreamsFromTerrain();
@@ -645,7 +664,7 @@ namespace Wonderland
         [Serializable]
         private sealed class SaveData
         {
-            public int version = 6;
+            public int version = 7;
             public int gx, gz, nx, nz;       // v2: the grid in global cells
             public float size;               // v1: island size (its grid spanned exactly this); v2: starting patch size
             public int seed;
@@ -667,6 +686,8 @@ namespace Wonderland
             public List<CameraAim> cameras;            // v6: where each CCTV camera looks
             public List<BoatInstance> boats;           // v6+: boats on the ponds (older saves have none)
             public List<TrafficSystem.PlacedVehicle> cars;   // v6+: the player's cars and lorries on the roads
+            public bool endless;                       // v7: land everywhere, seen through the window
+            public float windowX, windowZ;             // v7: where the window was (local XZ)
             public List<Vector3> track;                // v1 / v2: the single railway and its train
             public bool trackClosed, trainPlaced, trainRunning;
             public float trainS;
@@ -700,12 +721,13 @@ namespace Wonderland
             cameras = new List<CameraAim>(Cctv.Export()),
             boats = new List<BoatInstance>(Boats.Export()),
             cars = Traffic.ExportPlaced(),
+            endless = Terrain.Endless, windowX = WindowTarget.x, windowZ = WindowTarget.y,
         });
 
         public void Deserialize(string json, WorldMaterials materials)
         {
             var d = JsonUtility.FromJson<SaveData>(json);
-            if (d == null || d.size <= 0f || (d.version < 1 || d.version > 6)) throw new InvalidDataException("Not a Wonderland save.");
+            if (d == null || d.size <= 0f || (d.version < 1 || d.version > 7)) throw new InvalidDataException("Not a Wonderland save.");
             float[] height, land, locks, soil, water = null, waterLevel = null;
             RectInt cells;
             if (d.version >= 2)
@@ -733,7 +755,7 @@ namespace Wonderland
                 }
             }
             var keepRoom = room; room = null;   // fit once, after the data is in
-            Create(d.size, materials, d.seed, false);
+            Create(d.size, materials, d.seed, false, d.endless);
             Restore(new Snapshot
             {
                 Cells = cells, Height = height, Land = Quantise(land), Lock = Quantise(locks), Soil = Quantise(soil),
@@ -750,6 +772,24 @@ namespace Wonderland
             TerrainView.RebuildAll();
             WaterView.RebuildAll();
             room = keepRoom;
+            FitToRoom();
+            if (d.endless) SetWindowCenter(new Vector2(d.windowX, d.windowZ));
+        }
+
+        /// <summary>
+        /// An island world (an older save) becomes endless: the bare floor round it turns into flat land, so the land
+        /// goes on in every direction. Everything on it stays where it was; undo starts afresh.
+        /// </summary>
+        public void MakeEndless()
+        {
+            if (Terrain.Endless) return;
+            Terrain.MakeEndless();
+            TerrainView.RebuildAll();
+            WaterView.RebuildAll();
+            Cover.Scatter();
+            Forest.MarkAllDirty();
+            ApplyPads();
+            undo.Clear();
             FitToRoom();
         }
 
