@@ -1496,7 +1496,7 @@ namespace Wonderland
             main.startRotation = new ParticleSystem.MinMaxCurve(0f, Mathf.PI * 2f);
             main.startColor = new Color(1f, 1f, 1f, 0.85f);
             main.gravityModifier = -0.004f;
-            main.simulationSpace = ParticleSystemSimulationSpace.World;
+            TrafficSystem.InWorld(main, go.transform);   // (in the world's space: the plume stays with the land when the world moves)
             main.maxParticles = 160;
             main.scalingMode = ParticleSystemScalingMode.Hierarchy;
             var emission = ps.emission; emission.rateOverTime = 0f;

@@ -313,7 +313,10 @@ namespace Wonderland
             }
         }
 
-        /// <summary>The factory chimney smokes while someone is at work there.</summary>
+        /// <summary>
+        /// The factory chimney smokes while it works: thickly while someone is at work there, a thin plume through its
+        /// working hours when it has a worker (the furnace kept in between), none when it stands idle or after hours.
+        /// </summary>
         private void UpdateChimneys()
         {
             List<long> gone = null;
@@ -322,13 +325,17 @@ namespace Wonderland
             foreach (var p in places)
             {
                 if (p.Bp.Id != Catalog.Factory) continue;
-                bool working = p.Worker != null && AtWork(p.Worker, p.House);
+                bool atWork = p.Worker != null && AtWork(p.Worker, p.House);
+                bool working = atWork || (p.Worker != null && p.Bp.OpenAt(Clock.Hour));
                 if (!chimneys.TryGetValue(p.Key, out var smoke) || smoke == null)
                 {
                     if (!working) continue;
                     var top = world.Buildings.LocalToWorld(p.House, HouseFactory.FactoryChimney + new Vector3(0f, 0.125f, 0f));
                     chimneys[p.Key] = smoke = TrafficSystem.Smoke(transform, top, world.Materials.Smoke, new Color(0.82f, 0.82f, 0.85f, 0.7f), 8f, 0.02f);
                 }
+                var emission = smoke.emission;
+                float rate = atWork ? 8f : 3f;
+                if (emission.rateOverTime.constant != rate) emission.rateOverTime = rate;
                 if (working && !smoke.isEmitting) smoke.Play();
                 else if (!working && smoke.isEmitting) smoke.Stop();
             }

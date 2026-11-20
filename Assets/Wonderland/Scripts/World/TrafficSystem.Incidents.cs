@@ -200,6 +200,18 @@ namespace Wonderland
         }
 
         /// <summary>A puff of smoke (or a water spray, given a direction): a small particle system, local to <paramref name="parent"/>.</summary>
+        /// <summary>
+        /// Particles that live in the miniature's own space: smoke, steam and spray already in the air go along when the
+        /// world is moved, turned or scrolled (in the room's space they stayed behind, torn off what made them), while a
+        /// moving engine still leaves its plume behind it over the land.
+        /// </summary>
+        public static void InWorld(ParticleSystem.MainModule main, Transform emitter)
+        {
+            var root = emitter.GetComponentInParent<WonderlandWorld>(true);
+            if (root != null) { main.simulationSpace = ParticleSystemSimulationSpace.Custom; main.customSimulationSpace = root.transform; }
+            else main.simulationSpace = ParticleSystemSimulationSpace.World;
+        }
+
         public static ParticleSystem Smoke(Transform parent, Vector3 at, Material material, Color colour, float rate, float size, Vector3? direction = null, float speed = 0.02f)
         {
             var go = new GameObject(direction.HasValue ? "Spray" : "Smoke");
@@ -215,7 +227,7 @@ namespace Wonderland
             main.startSize = new ParticleSystem.MinMaxCurve(size * 0.6f, size);
             main.startColor = colour;
             main.gravityModifier = direction.HasValue ? 0.08f : -0.004f;
-            main.simulationSpace = ParticleSystemSimulationSpace.World;
+            InWorld(main, go.transform);
             main.scalingMode = ParticleSystemScalingMode.Hierarchy;
             main.maxParticles = 80;
             var emission = ps.emission; emission.rateOverTime = rate;

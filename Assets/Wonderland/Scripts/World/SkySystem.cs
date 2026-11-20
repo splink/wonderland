@@ -151,7 +151,7 @@ namespace Wonderland
             var main = ps.main;
             main.startLifetime = 0.8f; main.startSpeed = 1.3f; main.startSize = 0.0025f;
             main.startColor = new Color(0.75f, 0.85f, 1f, 0.55f);
-            main.simulationSpace = ParticleSystemSimulationSpace.World; main.scalingMode = ParticleSystemScalingMode.Hierarchy; main.maxParticles = 120;
+            TrafficSystem.InWorld(main, go.transform); main.scalingMode = ParticleSystemScalingMode.Hierarchy; main.maxParticles = 120;
             var shape = ps.shape; shape.shapeType = ParticleSystemShapeType.Box; shape.scale = new Vector3(0.14f, 0.08f, 0.01f);
             var r = go.GetComponent<ParticleSystemRenderer>();
             r.renderMode = ParticleSystemRenderMode.Stretch; r.lengthScale = 6f; r.velocityScale = 0f;
