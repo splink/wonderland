@@ -17,6 +17,36 @@ namespace Wonderland.Editor
     {
         public const string Output = "docs/renders";
 
+        /// <summary>The bigger town's shops and the lido, close up (docs/renders/editor-shops-*.png).</summary>
+        public static void ShopRenders()
+        {
+            Directory.CreateDirectory(Output);
+            ShaderUtil.allowAsyncCompilation = false;
+            EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            var lit = WonderlandMaterials.Lit;
+            WonderlandLighting.CreateKeyLight();
+            CreateFloor(4f);
+            var root = new GameObject("Shops").transform;
+            var ids = new[] { Catalog.ShoppingMall, Catalog.Supermarket, Catalog.Kiosk, Catalog.Pizzeria, Catalog.Boutique, Catalog.Florist };
+            float x = -0.36f;
+            foreach (int id in ids)
+            {
+                float hw = Catalog.Get(id).Half.x;
+                x += hw;
+                Place(root, HouseFactory.Get(id, 0), lit, new Vector3(x, 0f, 0f), Quaternion.Euler(0f, 180f, 0f));
+                x += hw + 0.03f;
+            }
+            Place(root, HouseFactory.Get(Catalog.Lido, 0), lit, new Vector3(0f, 0f, 0.35f), Quaternion.Euler(0f, 180f, 0f));
+            var cam = CreateCamera(new Vector3(-0.15f, 0.2f, 0.42f), new Vector3(-0.15f, 0.03f, 0f), 40f);
+            Capture(cam, "warmup.png", 64, 64); File.Delete(Path.Combine(Output, "warmup.png"));
+            Capture(cam, "editor-shops-mall.png", 1800, 1000);
+            cam.transform.position = new Vector3(0.22f, 0.16f, 0.32f); cam.transform.LookAt(new Vector3(0.22f, 0.02f, 0f));
+            Capture(cam, "editor-shops-street.png", 1800, 1000);
+            cam.transform.position = new Vector3(0f, 0.32f, 0.85f); cam.transform.LookAt(new Vector3(0f, 0f, 0.35f));
+            Capture(cam, "editor-shops-lido.png", 1800, 1000);
+            if (Application.isBatchMode) EditorApplication.Exit(0);
+        }
+
         [MenuItem("Wonderland/Render asset gallery")]
         public static void Gallery()
         {

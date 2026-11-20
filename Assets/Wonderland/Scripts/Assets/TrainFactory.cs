@@ -585,7 +585,7 @@ namespace Wonderland
             // The nose: a long blob tapering forward, the windscreen on its slope, a headlamp each side, the livery round it.
             var nose = new Vector3(0f, 0f, z0 + L / 2f);
             b.AddBlob(nose + new Vector3(0f, 0.031f, 0.012f), new Vector3(W / 2f, 0.0165f, 0.026f), 2, 0f, 71, (d, p) => p.y < 0.026f && p.y > 0.022f ? stripe : white);
-            b.AddFace(nose + new Vector3(0f, 0.043f, 0.014f), new Vector3(0f, 0.7f, 0.7f).normalized, Vector3.up, 0.024f, 0.009f, glass);
+            b.AddFace(nose + new Vector3(0f, 0.043f, 0.014f), new Vector3(0f, 0.7f, 0.7f).normalized, Vector3.up, 0.016f, 0.0065f, glass);
             foreach (int s in new[] { -1, 1 }) b.AddFace(nose + new Vector3(s * 0.011f, 0.024f, 0.033f), new Vector3(s * 0.3f, 0.1f, 1f).normalized, Vector3.up, 0.0045f, 0.002f, Pal.Glow(Pal.Hex("#FFF2C8")));
             b.AddBox(nose + new Vector3(0f, 0.017f, 0.034f), new Vector3(0.026f, 0.003f, 0.006f), Pal.Shade(white, 0.7f));
             // A flat back with a gangway, and a smooth roof.
@@ -695,8 +695,8 @@ namespace Wonderland
             for (int i = 0; i < 6; i++) foreach (int s in new[] { -1, 1 }) b.AddFace(new Vector3(s * 0.0152f, 0.034f, -0.05f + i * 0.013f), new Vector3(s, 0f, 0f), Vector3.up, 0.008f, 0.012f, dark);   // the hood doors
             b.AddBox(new Vector3(0f, 0.039f, 0.04f), new Vector3(W - 0.004f, 0.04f, 0.024f), body, Pal.Shade(body, 1.08f), Pal.Shade(body, 0.75f));   // the cab
             b.AddBox(new Vector3(0f, 0.0598f, 0.04f), new Vector3(W - 0.002f, 0.0016f, 0.026f), Pal.Shade(body, 0.7f));
-            b.AddFace(new Vector3(0f, 0.049f, 0.0522f), Vector3.forward, Vector3.up, 0.03f, 0.009f, glass);
-            foreach (int s in new[] { -1, 1 }) b.AddFace(new Vector3(s * (W / 2f - 0.0018f), 0.049f, 0.04f), new Vector3(s, 0f, 0f), Vector3.up, 0.014f, 0.009f, glass);
+            b.AddFace(new Vector3(0f, 0.049f, 0.0522f), Vector3.forward, Vector3.up, 0.016f, 0.0045f, glass);
+            foreach (int s in new[] { -1, 1 }) b.AddFace(new Vector3(s * (W / 2f - 0.0018f), 0.049f, 0.04f), new Vector3(s, 0f, 0f), Vector3.up, 0.0075f, 0.0045f, glass);
             b.AddBox(new Vector3(0f, 0.028f, 0.058f), new Vector3(0.026f, 0.018f, 0.01f), body);                                        // the short nose
             foreach (int s in new[] { -1, 1 }) b.AddFace(new Vector3(s * 0.008f, 0.031f, 0.0632f), Vector3.forward, Vector3.up, 0.003f, 0.003f, Pal.Glow(Pal.Hex("#FFF2C8")));
             // Yellow ends, handrails along the walkway, stacks and horns.

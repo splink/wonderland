@@ -286,7 +286,7 @@ namespace Wonderland
         {
             PlaceCategory.Homes => "Cottages, town houses, flats and farmhouses: each is home to villagers",
             PlaceCategory.Town => "The town hall, church, theatre, museum, hotel, squares and parks",
-            PlaceCategory.Shops => "Bakers, grocers, cafés, restaurants, pubs: where villagers shop and eat",
+            PlaceCategory.Shops => "Bakers, grocers, a supermarket, a shopping mall, kiosks, boutiques, florists, cafés, a pizzeria, restaurants, pubs: where villagers shop and eat",
             PlaceCategory.Services => "Hospital, police, fire station, school, factories and the sawmill",
             PlaceCategory.Farm => "Barns, silos, windmills, glasshouses and fields",
             PlaceCategory.Fun => "Fairground rides, a castle, sports grounds and evening spots",

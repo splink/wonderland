@@ -33,6 +33,8 @@ namespace Wonderland.Editor
             catch (Exception e) { Fail("Exception: " + e); }
             try { Shipping(); HarbourJourney(); LiftBridges(); }
             catch (Exception e) { Fail("Exception: " + e); }
+            try { Shopping(); }
+            catch (Exception e) { Fail("Exception: " + e); }
             try { Attractions(); }
             catch (Exception e) { Fail("Exception: " + e); }
             try { Waterways(); }
@@ -491,6 +493,38 @@ namespace Wonderland.Editor
         /// at kick-off time a match starts at the stadium - villagers come to watch, the stands fill, the teams play - and
         /// after the final whistle the crowd goes.
         /// </summary>
+        /// <summary>
+        /// The bigger town's shops and the lido among homes: each goes up where it is put, and through a day the villagers
+        /// go shopping at the mall, the supermarket and the rest, eat at the pizzeria and swim at the lido.
+        /// </summary>
+        private static void Shopping()
+        {
+            var w = Scratch("Shopping", 400f);
+            var placed = new List<(int id, int index)>(); var refused = new List<string>();
+            void Put(int id, float x, float z)
+            {
+                string e = w.PlaceHouse(new HouseInstance { x = x, z = z, variant = id });
+                if (e == null) placed.Add((id, w.Buildings.Houses.Count - 1)); else refused.Add($"{Catalog.Get(id).Name}: {e}");
+            }
+            var shops = new[] { (Catalog.ShoppingMall, -0.35f, 0.3f), (Catalog.Supermarket, 0.05f, 0.3f), (Catalog.Kiosk, 0.3f, 0.32f), (Catalog.Pizzeria, 0.48f, 0.3f), (Catalog.Boutique, -0.5f, -0.05f), (Catalog.Florist, -0.36f, -0.05f), (Catalog.Lido, 0.25f, -0.4f) };
+            foreach (var (id, x, z) in shops) Put(id, x, z);
+            foreach (var (x, z) in new[] { (-0.15f, -0.05f), (0.0f, -0.05f), (0.15f, -0.05f), (0.3f, -0.05f), (0.45f, -0.05f), (-0.5f, -0.35f), (-0.35f, -0.35f), (-0.2f, -0.35f), (-0.05f, -0.4f) }) Put(Catalog.Apartments, x, z);
+            int shopCount = placed.FindAll(p => p.id != Catalog.Apartments).Count;
+            Check(shopCount == shops.Length, $"A shopping mall, a supermarket, a news kiosk, a pizzeria, a boutique, a florist and a lido go up among the flats ({shopCount} of {shops.Length}{(refused.Count > 0 ? "; " + string.Join("; ", refused) : "")})");
+            w.People.Grid.Complete(); w.Clock.Hour = 8f; w.People.Step(Dt);
+            var seen = new Dictionary<int, int>();
+            Live(w, 420f, s =>
+            {
+                foreach (var (id, index) in placed)
+                    if (id != Catalog.Apartments) { var card = w.People.PlaceCardOf(index); seen[id] = Mathf.Max(seen.TryGetValue(id, out int v) ? v : 0, card.Visitors + card.Today); }
+            });
+            int visited = 0; foreach (var v in seen.Values) if (v > 0) visited++;
+            string Count(int id) => $"{Catalog.Get(id).Short} {(seen.TryGetValue(id, out int v) ? v : 0)}";
+            Check(visited >= 5 && seen.GetValueOrDefault(Catalog.ShoppingMall) > 0 && seen.GetValueOrDefault(Catalog.Pizzeria) > 0 && seen.GetValueOrDefault(Catalog.Lido) > 0,
+                $"Through the day the villagers shop, eat pizza and swim ({visited} of {shops.Length} visited: {string.Join(", ", System.Array.ConvertAll(shops, x => Count(x.Item1)))})");
+            UnityEngine.Object.DestroyImmediate(w.gameObject);
+        }
+
         private static void Attractions()
         {
             var w = Scratch("Attractions", 320f);

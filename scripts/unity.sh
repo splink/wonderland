@@ -39,6 +39,7 @@ case "$task" in
   joinrender) method=Wonderland.Editor.WonderlandJourney.JoinRenders; graphics=() ;;
   bayrender) method=Wonderland.Editor.WonderlandJourney.BayRenders; graphics=() ;;
   harbourrender) method=Wonderland.Editor.WonderlandJourney.HarbourRenders; graphics=() ;;
+  shoprender) method=Wonderland.Editor.WonderlandRenders.ShopRenders; graphics=() ;;
   liftrender) method=Wonderland.Editor.WonderlandJourney.LiftRenders; graphics=() ;;
   saveprobe) method=Wonderland.Editor.WonderlandSaveProbe.Run; graphics=() ;;
   terrainrender) method=Wonderland.Editor.WonderlandJourney.TerrainModeRenders; graphics=() ;;

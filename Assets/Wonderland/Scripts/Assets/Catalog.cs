@@ -117,7 +117,8 @@ namespace Wonderland
             Camera = 50, Balloon = 51, Jetty = 52, RowingBoat = 53, SailingBoat = 54, Steamer = 55, Halt = 56, TaxiRank = 57,
             Sawmill = 58, FurnitureShop = 59, IceCream = 60, Pub = 61, Hotel = 62, PostOffice = 63, Letterbox = 64, CarPark = 65, FreightYard = 66, Harbour = 67, Zoo = 68, FairyCastle = 69, Stadium = 70, Zebra = 71,
             ZooGate = 72, ZooPlaza = 73, Savanna = 74, ElephantHouse = 75, LionRock = 76, PenguinPool = 77, MonkeyIsland = 78, Aviary = 79, TropicalHouse = 80,
-            PettingZoo = 81, ZooKiosk = 82, SafariCafe = 83, ZooGarden = 84, BusStop = 85, Farmhouse = 86, Theatre = 87, ParkingGarage = 88, ContainerYard = 89, Warehouse = 90, HarbourGate = 91;
+            PettingZoo = 81, ZooKiosk = 82, SafariCafe = 83, ZooGarden = 84, BusStop = 85, Farmhouse = 86, Theatre = 87, ParkingGarage = 88, ContainerYard = 89, Warehouse = 90, HarbourGate = 91,
+            ShoppingMall = 92, Supermarket = 93, Kiosk = 94, Pizzeria = 95, Boutique = 96, Florist = 97, Lido = 98;
 
         /// <summary>A station of any size (the big one, or a country halt): trains stop beside it.</summary>
         public static bool IsStation(int variant) => variant == Station || variant == Halt || variant == FreightYard;
@@ -300,6 +301,24 @@ namespace Wonderland
             list.Add(new() { Name = "Container yard", Short = "Yard", Category = PlaceCategory.Harbour, Half = new Vector2(0.11f, 0.075f), Height = 0.06f, Styles = 1, Hint = "containers stacked high; a straddle carrier moves them" });
             list.Add(new() { Name = "Warehouse", Short = "Warehouse", Category = PlaceCategory.Harbour, Half = new Vector2(0.08f, 0.055f), Height = 0.05f, Styles = 1, Hint = "goods in and out at its loading docks; a forklift busy outside" });
             list.Add(new() { Name = "Harbour gate", Short = "Gate", Category = PlaceCategory.Harbour, Half = new Vector2(0.07f, 0.04f), Height = 0.05f, Styles = 1, Walkable = true, Hint = "the way into the harbour: a gatehouse, barriers and a barbed-wire fence" });
+            // The bigger town's shops, and the lido (see HouseFactory.Shops.cs).
+            ActivitySpot[] Browse(float halfZ, params float[] xs) { var a = new ActivitySpot[xs.Length]; for (int k = 0; k < xs.Length; k++) a[k] = new ActivitySpot(xs[k], -halfZ - 0.012f, SpotKind.Browse); return a; }
+            list.Add(new() { Name = "Shopping mall", Short = "Mall", Category = PlaceCategory.Shops, Half = new Vector2(0.115f, 0.075f), Height = 0.1f, Styles = 1, Hint = "a whole morning's shopping under one roof",
+                Spots = Concat(Browse(0.075f, -0.085f, -0.055f, 0.055f, 0.085f), new[] { Door(0f, 0.075f), new ActivitySpot(-0.05f, -0.1f, SpotKind.Sit, 180f), new ActivitySpot(0.05f, -0.1f, SpotKind.Sit, 180f) }) });
+            list.Add(new() { Name = "Supermarket", Short = "Super", Category = PlaceCategory.Shops, Half = new Vector2(0.085f, 0.06f), Height = 0.07f, Styles = 1, Hint = "the weekly shop, trolleys and all",
+                Spots = Concat(Browse(0.06f, -0.06f, 0.0f), new[] { Door(-0.03f, 0.06f), new ActivitySpot(0.05f, -0.085f, SpotKind.Browse) }) });
+            list.Add(new() { Name = "News kiosk", Short = "Kiosk", Category = PlaceCategory.Shops, Half = new Vector2(0.024f, 0.016f), Height = 0.04f, Pad = false, Small = true, Styles = 1, Hint = "a paper and a bar of chocolate on the way",
+                Spots = Browse(0.016f, -0.008f, 0.008f) });
+            list.Add(new() { Name = "Pizzeria", Short = "Pizza", Category = PlaceCategory.Shops, Half = new Vector2(0.045f, 0.05f), Height = 0.12f, Styles = 1, Hint = "pizza from the wood oven, at tables outside",
+                Spots = new[] { Door(0.018f, 0.05f), new ActivitySpot(-0.034f, -0.047f, SpotKind.Sit, 90f), new ActivitySpot(-0.018f, -0.047f, SpotKind.Sit, -90f), new ActivitySpot(0.004f, -0.049f, SpotKind.Sit, 90f), new ActivitySpot(0.02f, -0.049f, SpotKind.Sit, -90f) } });
+            list.Add(new() { Name = "Boutique", Short = "Boutique", Category = PlaceCategory.Shops, Half = new Vector2(0.042f, 0.045f), Height = 0.08f, Styles = 1, Hint = "dresses in the windows",
+                Spots = Concat(Browse(0.045f, -0.021f, 0.021f), new[] { Door(0f, 0.045f) }) });
+            list.Add(new() { Name = "Florist", Short = "Flowers", Category = PlaceCategory.Shops, Half = new Vector2(0.04f, 0.045f), Height = 0.1f, Styles = 4, Hint = "buckets of flowers on the pavement",
+                Spots = Concat(Browse(0.05f, -0.024f, 0.0f), new[] { Door(0.02f, 0.045f) }) });
+            list.Add(new() { Name = "Lido", Short = "Lido", Category = PlaceCategory.Fun, Half = new Vector2(0.145f, 0.105f), Height = 0.06f, Walkable = true, Kids = true, Styles = 1, Hint = "a swim and a lounger in the sun",
+                Spots = new[] { new ActivitySpot(-0.05f, 0.0f, SpotKind.Play), new ActivitySpot(-0.01f, 0.018f, SpotKind.Play), new ActivitySpot(0.03f, -0.01f, SpotKind.Play), new ActivitySpot(0.06f, 0.025f, SpotKind.Play),
+                    new ActivitySpot(-0.1f, -0.056f, SpotKind.Sit, 180f), new ActivitySpot(-0.034f, -0.056f, SpotKind.Sit, 180f), new ActivitySpot(0.032f, -0.056f, SpotKind.Sit, 180f), new ActivitySpot(0.098f, -0.056f, SpotKind.Sit, 180f),
+                    new ActivitySpot(0.1f, 0.006f, SpotKind.Watch, -90f) } });
             for (int i = 0; i < list.Count; i++) list[i].Id = i;
             // What each place is for: the needs it satisfies decide who comes and when (see Needs).
             foreach (var b in list)
@@ -315,6 +334,9 @@ namespace Wonderland
                     ZooPlaza => Need.Rest,
                     BusStop => Need.Social,
                     Theatre => Need.Fun,
+                    ShoppingMall or Supermarket or Kiosk or Boutique or Florist => Need.Errands,
+                    Pizzeria => Need.Food,
+                    Lido => Need.Fun,
                     Bench or LogPile or HayBales => Need.Rest,
                     _ => b.Category == PlaceCategory.Homes ? Need.Rest : Need.None,
                 };
@@ -361,6 +383,18 @@ namespace Wonderland
             Work(ZooKiosk, "kiosk keeper", 9f, 18f, false, Goods.Sells); Work(SafariCafe, "cook", 9f, 18f, false, Goods.Sells);
             list[ZooKiosk].Takes = list[SafariCafe].Takes = Cargo.Produce;
             Hours(Stadium, 10f, 21.5f); Work(Stadium, "groundsman", 9f, 18f);
+            Hours(ShoppingMall, 9f, 20f); Work(ShoppingMall, "shop assistant", 8.5f, 20f, false, Goods.Sells);
+            Hours(Supermarket, 7f, 21f); Work(Supermarket, "cashier", 6.5f, 21f, false, Goods.Sells);
+            Hours(Kiosk, 6f, 20f); Work(Kiosk, "newsagent", 5.5f, 20f, false, Goods.Sells);
+            Hours(Pizzeria, 11.5f, 23f); Work(Pizzeria, "pizza chef", 11f, 23f, false, Goods.Sells);
+            Hours(Boutique, 10f, 19f); Work(Boutique, "shopkeeper", 9.5f, 19f, false, Goods.Sells);
+            Hours(Florist, 8f, 18f); Work(Florist, "florist", 7.5f, 18f, false, Goods.Sells);
+            Hours(Lido, 10f, 19.5f); Work(Lido, "lifeguard", 9.5f, 19.5f);
+            list[Pizzeria].Rhythm = new[] { 0f, 0f, 0f, 0.05f, 1f, 0.4f, 0.95f, 0.6f, 0f };   // lunch and supper
+            list[Lido].Rhythm = new[] { 0f, 0f, 0f, 0.1f, 0.7f, 1f, 0.5f, 0f, 0f };          // sunny afternoons
+            list[ShoppingMall].Takes = list[Supermarket].Takes = Cargo.Produce | Cargo.Goods;
+            list[Kiosk].Takes = list[Boutique].Takes = Cargo.Goods;
+            list[Pizzeria].Takes = list[Florist].Takes = Cargo.Produce;
             // Their own rhythms: supper in the evening, dancing after dark.
             list[Restaurant].Rhythm = new[] { 0f, 0f, 0f, 0.05f, 0.85f, 0.35f, 1f, 0.8f, 0f };
             list[Disco].Rhythm = new[] { 0.9f, 0f, 0f, 0f, 0f, 0f, 0.3f, 1f, 1f };

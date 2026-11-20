@@ -306,7 +306,7 @@ namespace Wonderland
                 b.AddBox(new Vector3(s * (W / 2 + 0.0004f), 0.0142f, 0f), new Vector3(0.0005f, 0.004f, L - 0.004f), blue);
                 for (int i = 0; i < 3; i++) b.AddBox(new Vector3(s * (W / 2 + 0.0004f), 0.0095f, -0.025f + i * 0.02f), new Vector3(0.0004f, 0.005f, 0.014f), Pal.Shade(silver, 0.85f));   // luggage doors
             }
-            b.AddFace(new Vector3(0f, 0.026f, L / 2 + 0.0004f), new Vector3(0f, 0.3f, 1f).normalized, Vector3.up, W - 0.004f, 0.016f, glass);
+            b.AddFace(new Vector3(0f, 0.026f, L / 2 + 0.0004f), new Vector3(0f, 0.3f, 1f).normalized, Vector3.up, W / 2 - 0.002f, 0.008f, glass);
             b.AddBox(new Vector3(0f, 0.034f, 0f), new Vector3(W - 0.004f, 0.0024f, L * 0.5f), Pal.Shade(silver, 0.8f));
             Lights(b, W / 2, 0.009f, L / 2 + 0.0004f, -L / 2 - 0.0004f);
         }

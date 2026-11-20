@@ -53,6 +53,13 @@ namespace Wonderland
             D(Pub, "Dining", "Where the village gathers in the evening");
             D(FurnitureShop, "Goods", "Chairs and tables made from the sawmill's planks", "the sawmill's lorry brings the timber");
             D(PostOffice, "Goods", "Its van empties the letterboxes and delivers the post", "by a street, for the post van");
+            D(Supermarket, "Food", "The weekly shop: a long glass front, a red canopy, a bay of trolleys; it takes produce and goods", "by a street, for the delivery lorry");
+            D(Pizzeria, "Dining", "Pizza from the wood-fired oven at tables under parasols - lunch and supper");
+            D(ShoppingMall, "Shopping", "Shoes, books, toys and fashion either side of a glass atrium: a whole morning's shopping", "by a street, near the homes (a car park beside it helps)");
+            D(Boutique, "Shopping", "Dresses on dummies in its tall windows");
+            D(Florist, "Shopping", "Buckets of flowers on tiered stands out on the pavement");
+            D(Kiosk, "Shopping", "Newspapers, magazines and sweets through its hatch - on a street corner or by the station");
+            D(Lido, "Sport", "An open-air pool: a diving board, a slide, loungers and parasols, a row of changing huts");
             // Work.
             D(Hospital, "Emergency", "Its ambulance answers when someone is taken ill", "by a street, for the ambulance");
             D(Police, "Emergency", "Its patrol car keeps watch and answers calls", "by a street, for the patrol car");

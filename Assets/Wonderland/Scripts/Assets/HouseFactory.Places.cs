@@ -49,6 +49,8 @@ namespace Wonderland
         {
             float own = Overhauled(b, ref rng, s, id, style, out warp);
             if (own >= 0f) return own;
+            float shop = Shops(b, ref rng, s, id, out warp);
+            if (shop >= 0f) return shop;
             float living = Living(b, ref rng, s, id, style, out warp);
             if (living >= 0f) return living;
             float town = Town(b, ref rng, s, id, style, out warp);
