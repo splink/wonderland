@@ -10,15 +10,15 @@ namespace Wonderland
     /// </summary>
     public static partial class HouseFactory
     {
-        private static float Shops(MeshBuilder b, ref Rng rng, Style s, int id, out bool warp)
+        private static float Shops(MeshBuilder b, ref Rng rng, Style s, int id, int style, out bool warp)
         {
             warp = false;
             switch (id)
             {
                 case Catalog.ShoppingMall: return Mall(b, ref rng);
-                case Catalog.Supermarket: return SupermarketHall(b, ref rng);
-                case Catalog.Kiosk: return NewsKiosk(b);
-                case Catalog.Boutique: return BoutiqueShop(b, ref rng);
+                case Catalog.Supermarket: return SupermarketHall(b, ref rng, style);
+                case Catalog.Kiosk: return NewsKiosk(b, style);
+                case Catalog.Boutique: return BoutiqueShop(b, ref rng, style);
             }
             warp = true;   // (the older trades: hand-made, leaning a little)
             switch (id)
@@ -110,10 +110,11 @@ namespace Wonderland
             return 0.004f + AH + 0.018f;
         }
 
-        private static float SupermarketHall(MeshBuilder b, ref Rng rng)
+        private static float SupermarketHall(MeshBuilder b, ref Rng rng, int style)
         {
             const float W = 0.16f, D = 0.1f, H = 0.04f, Z = 0.01f;
-            var wall = Pal.Hex("#F2F0EA"); var red = Pal.Hex("#C8352B"); var frame = Pal.Hex("#3A3A40");
+            // Three chains, by their colours: red, green, blue.
+            var wall = Pal.Hex("#F2F0EA"); var red = Pal.Hex(style switch { 1 => "#2E8A44", 2 => "#2F5FA8", _ => "#C8352B" }); var frame = Pal.Hex("#3A3A40");
             Foundation(b, ref rng, W, D);
             float front = Z - D / 2;
             b.AddBox(new Vector3(0f, 0.004f + H / 2, Z), new Vector3(W, H, D), wall, wall, wall);
@@ -135,9 +136,9 @@ namespace Wonderland
             return 0.004f + H + 0.016f;
         }
 
-        private static float NewsKiosk(MeshBuilder b)
+        private static float NewsKiosk(MeshBuilder b, int style)
         {
-            var green = Pal.Hex("#2E6B4E"); var cream = Pal.Hex("#F1E6CC");
+            var green = Pal.Hex(style switch { 1 => "#2F4E8A", 2 => "#8A2E2E", _ => "#2E6B4E" }); var cream = Pal.Hex("#F1E6CC");
             const float W = 0.028f, D = 0.02f, H = 0.026f;
             b.AddBox(new Vector3(0f, 0.002f, 0f), new Vector3(W + 0.006f, 0.004f, D + 0.006f), Pal.Hex("#B9A88C"));
             b.AddBox(new Vector3(0f, 0.004f + H / 2, 0f), new Vector3(W, H, D), green, green, green);
@@ -189,10 +190,10 @@ namespace Wonderland
             return 0.004f + wallH + 0.04f;
         }
 
-        private static float BoutiqueShop(MeshBuilder b, ref Rng rng)
+        private static float BoutiqueShop(MeshBuilder b, ref Rng rng, int style)
         {
             const float w = 0.072f, d = 0.054f, wallH = 0.05f;
-            var facade = Pal.Hex("#2E2E36"); var cream = Pal.Hex("#EFE6D2"); var gold = Pal.Hex("#D9B45A");
+            var facade = Pal.Hex(style switch { 1 => "#5A2E4A", 2 => "#2E4A46", _ => "#2E2E36" }); var cream = Pal.Hex(style == 1 ? "#F2E2E6" : "#EFE6D2"); var gold = Pal.Hex("#D9B45A");
             Foundation(b, ref rng, w, d);
             b.AddBox(new Vector3(0f, 0.004f + wallH / 2, 0.006f), new Vector3(w, wallH, d), cream, cream, cream);
             float z = -d / 2 + 0.006f;

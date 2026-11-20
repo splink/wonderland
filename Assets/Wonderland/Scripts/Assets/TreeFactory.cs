@@ -413,13 +413,14 @@ namespace Wonderland
             {
                 float a = s / (float)strands * Mathf.PI * 2f + rng.Range(-0.15f, 0.15f);
                 var p = centre + new Vector3(Mathf.Cos(a) * size.x * 1.05f, -size.y * 0.1f, Mathf.Sin(a) * size.z * 1.05f);
-                int beads = Mathf.RoundToInt(rng.Range(4f, 6f) * scale);
+                // (longer, simpler beads: the same curtain for a third of the vertices)
+                int beads = Mathf.RoundToInt(rng.Range(3f, 4f) * scale);
                 for (int k = 0; k < beads && p.y > 0.006f; k++)
                 {
                     b.Sway = 1f;
                     float r = 0.0048f * scale * (1f - k * 0.08f);
-                    b.AddBlob(p, new Vector3(r * 0.8f, r * 1.5f, r * 0.8f), 1, 0.15f, s * 10 + k, (d, q) => paint(d, q));
-                    p += new Vector3(Mathf.Cos(a) * 0.0015f, -0.0085f * scale, Mathf.Sin(a) * 0.0015f);
+                    b.AddBlob(p, new Vector3(r * 0.85f, r * 2.1f, r * 0.85f), 0, 0.15f, s * 10 + k, (d, q) => paint(d, q));
+                    p += new Vector3(Mathf.Cos(a) * 0.002f, -0.0115f * scale, Mathf.Sin(a) * 0.002f);
                 }
             }
             b.Sway = 0f;

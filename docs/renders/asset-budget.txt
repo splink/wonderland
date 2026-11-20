@@ -19,8 +19,8 @@ Wonderland asset vertex budget:
   tree Birch 0: 1791 verts
   tree Birch 1: 3170 verts
   tree Birch 2: 1535 verts
-  tree Willow 0: 4560 verts
-  tree Willow 1: 3612 verts
+  tree Willow 0: 2448 verts
+  tree Willow 1: 2220 verts
   tree Palm 0: 1010 verts
   tree Palm 1: 1220 verts
   tree Palm 2: 834 verts

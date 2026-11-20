@@ -305,13 +305,13 @@ namespace Wonderland
             ActivitySpot[] Browse(float halfZ, params float[] xs) { var a = new ActivitySpot[xs.Length]; for (int k = 0; k < xs.Length; k++) a[k] = new ActivitySpot(xs[k], -halfZ - 0.012f, SpotKind.Browse); return a; }
             list.Add(new() { Name = "Shopping mall", Short = "Mall", Category = PlaceCategory.Shops, Half = new Vector2(0.115f, 0.075f), Height = 0.1f, Styles = 1, Hint = "a whole morning's shopping under one roof",
                 Spots = Concat(Browse(0.075f, -0.085f, -0.055f, 0.055f, 0.085f), new[] { Door(0f, 0.075f), new ActivitySpot(-0.05f, -0.1f, SpotKind.Sit, 180f), new ActivitySpot(0.05f, -0.1f, SpotKind.Sit, 180f) }) });
-            list.Add(new() { Name = "Supermarket", Short = "Super", Category = PlaceCategory.Shops, Half = new Vector2(0.085f, 0.06f), Height = 0.07f, Styles = 1, Hint = "the weekly shop, trolleys and all",
+            list.Add(new() { Name = "Supermarket", Short = "Super", Category = PlaceCategory.Shops, Half = new Vector2(0.085f, 0.06f), Height = 0.07f, Styles = 3, Hint = "the weekly shop, trolleys and all",
                 Spots = Concat(Browse(0.06f, -0.06f, 0.0f), new[] { Door(-0.03f, 0.06f), new ActivitySpot(0.05f, -0.085f, SpotKind.Browse) }) });
-            list.Add(new() { Name = "News kiosk", Short = "Kiosk", Category = PlaceCategory.Shops, Half = new Vector2(0.024f, 0.016f), Height = 0.04f, Pad = false, Small = true, Styles = 1, Hint = "a paper and a bar of chocolate on the way",
+            list.Add(new() { Name = "News kiosk", Short = "Kiosk", Category = PlaceCategory.Shops, Half = new Vector2(0.024f, 0.016f), Height = 0.04f, Pad = false, Small = true, Styles = 3, Hint = "a paper and a bar of chocolate on the way",
                 Spots = Browse(0.016f, -0.008f, 0.008f) });
             list.Add(new() { Name = "Pizzeria", Short = "Pizza", Category = PlaceCategory.Shops, Half = new Vector2(0.045f, 0.05f), Height = 0.12f, Styles = 1, Hint = "pizza from the wood oven, at tables outside",
                 Spots = new[] { Door(0.018f, 0.05f), new ActivitySpot(-0.034f, -0.047f, SpotKind.Sit, 90f), new ActivitySpot(-0.018f, -0.047f, SpotKind.Sit, -90f), new ActivitySpot(0.004f, -0.049f, SpotKind.Sit, 90f), new ActivitySpot(0.02f, -0.049f, SpotKind.Sit, -90f) } });
-            list.Add(new() { Name = "Boutique", Short = "Boutique", Category = PlaceCategory.Shops, Half = new Vector2(0.042f, 0.045f), Height = 0.08f, Styles = 1, Hint = "dresses in the windows",
+            list.Add(new() { Name = "Boutique", Short = "Boutique", Category = PlaceCategory.Shops, Half = new Vector2(0.042f, 0.045f), Height = 0.08f, Styles = 3, Hint = "dresses in the windows",
                 Spots = Concat(Browse(0.045f, -0.021f, 0.021f), new[] { Door(0f, 0.045f) }) });
             list.Add(new() { Name = "Florist", Short = "Flowers", Category = PlaceCategory.Shops, Half = new Vector2(0.04f, 0.045f), Height = 0.1f, Styles = 4, Hint = "buckets of flowers on the pavement",
                 Spots = Concat(Browse(0.05f, -0.024f, 0.0f), new[] { Door(0.02f, 0.045f) }) });
