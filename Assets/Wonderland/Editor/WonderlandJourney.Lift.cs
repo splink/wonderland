@@ -47,7 +47,7 @@ namespace Wonderland.Editor
         private static void LiftBridges()
         {
             var w = LiftScene(360f, out string why);
-            Check(why == null && w.Harbours.ShipCount == 1, $"A railway across a harbour lake on two lift bridges: the ship still has its way ({w.Harbours.ShipCount} ships{(why != null ? "; " + why : "")})");
+            Check(why == null && w.Harbours.ShipCount >= 1, $"A railway across a harbour lake on two lift bridges: the ships still have their way ({w.Harbours.ShipCount} ships{(why != null ? "; " + why : "")})");
             if (why != null || w.Harbours.ShipCount == 0 || w.Trains.Trains.Count == 0) { Object.DestroyImmediate(w.gameObject); return; }
             var train = w.Trains.Trains[0];
             var ship = w.Harbours.transform.Find("Container ship");

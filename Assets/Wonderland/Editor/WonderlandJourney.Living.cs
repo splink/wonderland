@@ -117,7 +117,7 @@ namespace Wonderland.Editor
                 $"A barn by a road keeps an open lorry for its produce ({(lorry != null ? lorry.Owner : "none")}{road ?? ""}{barn ?? ""}{bakery ?? ""})");
             if (lorry == null) return;
             var said = new List<string>();
-            int mostShown = 0; bool hopSeen = false, onRoad = true;
+            int mostShown = 0; bool hopSeen = false, onRoad = true, reached = false;
             float stockBefore = w.People.StockAt(ki);
             Live(w, 300f, s =>
             {
@@ -126,7 +126,10 @@ namespace Wonderland.Editor
                 if (lorry.Load != null && lorry.Load.gameObject.activeSelf && lorry.Job != null) mostShown = Mathf.Max(mostShown, lorry.Job.Shown);
                 var carried = w.Traffic.transform.Find("Crate carried");
                 hopSeen |= carried != null && carried.gameObject.activeSelf;
-                if (lorry.State == TrafficSystem.Mode.Driving) onRoad &= w.Traffic.OffRoad(lorry.Position) < 0.03f;
+                // (on the road once it is on it: out of its yard beside the barn it drives straight to the street)
+                if (lorry.State != TrafficSystem.Mode.Driving) reached = false;
+                else if (w.Traffic.OffRoad(lorry.Position) < 0.03f) reached = true;
+                else if (reached) onRoad = false;
             });
             string story = string.Join(" / ", said);
             bool loaded = said.Exists(x => x.Contains("loading")), carriedTo = said.Exists(x => x.Contains("to the bakery")), unloaded = said.Exists(x => x.Contains("unloading"));
@@ -378,6 +381,23 @@ namespace Wonderland.Editor
             // A passenger station on the same loop and a passenger train: each train calls only where it belongs.
             var ps = w.StationAt(t.PointAt(0f, 0.3f), 0);
             if (ps.HasValue) w.PlaceHouse(ps.Value);
+            // Onto the platform from behind it: up its ramp, no step anywhere (it was a 13.5 mm jump).
+            if (ps.HasValue && w.Track.Network.Nearest(new Vector3(ps.Value.x, 0f, ps.Value.z), out int pe, out float pAt, out _, 0.3f))
+            {
+                var pl = w.Track.Network.Edges[pe].Layout;
+                var mid = pl.Evaluate(pl.Closed ? pl.Wrap(pAt + 0.15f) : Mathf.Min(pAt + 0.15f, pl.Length), out var tan); tan.y = 0f; tan.Normalize();
+                var side = Vector3.Cross(Vector3.up, tan);
+                if (Vector3.Dot(side, new Vector3(ps.Value.x, 0f, ps.Value.z) - mid) < 0f) side = -side;
+                float step = 0f, prevH = float.NaN;
+                for (float d = 0.14f; d >= 0.05f; d -= 0.004f)
+                {
+                    var q = mid + side * d;
+                    float h = w.People.GroundHeight(new Vector2(q.x, q.z));
+                    if (!float.IsNaN(prevH)) step = Mathf.Max(step, Mathf.Abs(h - prevH));
+                    prevH = h;
+                }
+                Check(step < 0.003f, $"Passengers walk up a ramp onto the platform from behind it - no step to jump (at most {step * 1000f:0.0} mm in 4 mm)");
+            }
             w.PlaceTrain(t.PointAt(-0.5f, 0f), TrainKind.Passenger, Vector3.forward, out var coach);
             int yardStop = w.Trains.Stations.FindIndex(x => x.Freight), passengerStop = w.Trains.Stations.FindIndex(x => !x.Freight);
             bool goodsAtStation = false, coachAtYard = false, coachStopped = false, goodsStopped = false;
@@ -428,19 +448,24 @@ namespace Wonderland.Editor
             var b = w.ShoreSnap(w.Terrain.PointAt(0.4f, -0.27f), Catalog.Harbour, 0);
             string ea = a.HasValue ? w.PlaceHouse(a.Value) : "no spot", eb = b.HasValue ? w.PlaceHouse(b.Value) : "no spot";
             w.People.Grid.Complete(); w.Clock.Hour = 9f; w.People.Step(Dt); w.Harbours.Step(Dt); w.Harbours.Step(2.1f);
-            Check(ea == null && eb == null && w.Harbours.ShipCount == 1, $"Two harbours on one lake get a container ship ({w.Harbours.ShipCount} ships{(ea != null ? ", A: " + ea : "")}{(eb != null ? ", B: " + eb : "")})");
+            Check(ea == null && eb == null && w.Harbours.ShipCount == 2, $"Two harbours across a lake get two container ships, one setting out from each ({w.Harbours.ShipCount} ships{(ea != null ? ", A: " + ea : "")}{(eb != null ? ", B: " + eb : "")})");
             if (w.Harbours.ShipCount == 0) return;
             int ia = w.Buildings.Houses.FindIndex(h => h.variant == Catalog.Harbour), ib = w.Buildings.Houses.FindLastIndex(h => h.variant == Catalog.Harbour);
             var said = new List<string>();
             bool overLand = false;
             var ship = w.Harbours.transform.Find("Container ship");
+            var fleet = new List<Transform>();
+            foreach (Transform child in w.Harbours.transform) if (child.name == "Container ship") fleet.Add(child);
+            float closest = float.MaxValue;
             Live(w, 300f, s =>
             {
                 w.Harbours.Step(Dt);
                 string l = w.Harbours.HarbourFor(ib);
                 if (said.Count == 0 || said[^1] != l) said.Add(l);
-                if (ship != null && w.Terrain.WaterAt(ship.localPosition.x, ship.localPosition.z) < 0.3f) overLand = true;
+                foreach (var sh in fleet) if (w.Terrain.WaterAt(sh.localPosition.x, sh.localPosition.z) < 0.3f) overLand = true;
+                if (fleet.Count == 2) closest = Mathf.Min(closest, (fleet[0].localPosition - fleet[1].localPosition).magnitude);
             });
+            Check(fleet.Count == 2 && closest > 0.025f, $"The two ships pass each other in open water and never share a quay (closest {closest * 100f:0.0} cm)");
             Check(w.Harbours.Voyages >= 1 && w.Harbours.Lifted >= 4 && !overLand && said.Exists(x => x.Contains("unloading")),
                 $"The ship is unloaded by the crane, sails over the water to the other harbour and is unloaded there ({w.Harbours.Voyages} voyages, {w.Harbours.Lifted} containers lifted): {string.Join(" / ", said)} [{w.Harbours.ShipState()}]");
             Check(w.People.StockAt(ib) >= 1f || w.People.StockAt(ia) >= 1f, $"...the containers wait on the quay for the harbour's lorry ({w.People.StockAt(ia):0} and {w.People.StockAt(ib):0})");
@@ -471,7 +496,7 @@ namespace Wonderland.Editor
             foreach (var _ in boats) w.Boats.RemoveAt(w.Boats.Boats.Count - 1);
             w.Undo();
             w.Harbours.Step(5.1f);
-            Check(w.Bridges.Bridges.Count == 0 && w.Harbours.ShipCount == 1, $"...and with the bridge gone a ship sails again ({w.Harbours.ShipCount} ships)");
+            Check(w.Bridges.Bridges.Count == 0 && w.Harbours.ShipCount >= 1, $"...and with the bridge gone a ship sails again ({w.Harbours.ShipCount} ships)");
             // A harbour on a pond of its own: no ship, and its card says why.
             var w2 = Scratch("Pond harbour", 280f);
             Lake(w2, -0.1f, 0.1f, 0.2f);

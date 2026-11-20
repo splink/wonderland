@@ -301,9 +301,13 @@ namespace Wonderland
 
         /// <summary>
         /// A platform along the railway between arc lengths <paramref name="s0"/> and <paramref name="s1"/> on the given
-        /// side: stone face down into the bed, a light paved top at coach-floor height with a pale safety edge, and sloped
-        /// ends. Follows curves and grades because it is generated from the layout itself.
+        /// side: stone face down into the bed, a light paved top at coach-floor height with a pale safety edge, sloped
+        /// ends, and along its back a paved ramp down to the ground (<see cref="PlatformRamp"/>): passengers walk up onto it
+        /// from wherever they come. Follows curves and grades because it is generated from the layout itself.
         /// </summary>
+        /// <summary>A platform's top above the rails' bed, its back from the track's middle, and how far its ramp reaches beyond that.</summary>
+        public const float PlatformTop = 0.0135f, PlatformBack = 0.08f, PlatformRamp = 0.035f;
+
         public static void Platform(MeshBuilder b, TrackLayout layout, float s0, float s1, int side)
         {
             var path = new System.Collections.Generic.List<Vector3>(); var right = new System.Collections.Generic.List<Vector3>(); var up = new System.Collections.Generic.List<Vector3>();
@@ -316,9 +320,9 @@ namespace Wonderland
             }
             if (path.Count < 2) return;
             // Profile in (outwards from the track, up), clockwise seen along the path when side = +1; mirror for -1.
-            const float edge = 0.032f, back = 0.08f, top = 0.0135f, foot = -0.04f;   // deep foot: reaches the ground where it falls away
-            var profile = new[] { new Vector2(edge, foot), new Vector2(edge, top - 0.0018f), new Vector2(edge + 0.0012f, top), new Vector2(back, top), new Vector2(back, foot) };
-            var colours = new[] { Pal.StoneDark, Pal.Stone, Pal.Hex("#F2E6C8"), Pal.Hex("#C9BBA3"), Pal.StoneDark };
+            const float edge = 0.032f, back = PlatformBack, top = PlatformTop, foot = -0.04f;   // deep foot: reaches the ground where it falls away
+            var profile = new[] { new Vector2(edge, foot), new Vector2(edge, top - 0.0018f), new Vector2(edge + 0.0012f, top), new Vector2(back, top), new Vector2(back + PlatformRamp, -0.0025f), new Vector2(back + PlatformRamp, foot) };
+            var colours = new[] { Pal.StoneDark, Pal.Stone, Pal.Hex("#F2E6C8"), Pal.Hex("#C9BBA3"), Pal.Hex("#B5A68C"), Pal.StoneDark };
             if (side < 0)
             {
                 System.Array.Reverse(profile); System.Array.Reverse(colours);

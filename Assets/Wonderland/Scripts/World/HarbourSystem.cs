@@ -7,7 +7,9 @@ namespace Wonderland
     /// <summary>
     /// Harbours and container ships. Two harbours on the shores of the same water - wide enough for a ship all the way
     /// (a route is found over the water, never over land) - are served by a little container ship that sails between
-    /// them. At each harbour it moors alongside the quay and the quay crane lifts its containers off onto the quay, one by
+    /// them; across water wide enough (<see cref="SecondShipRoute"/> or more of sailing), by two, one setting out from
+    /// each harbour. In open water each keeps to the right of the way, so they pass each other; a ship arriving at a
+    /// quay where the other lies (or is just leaving) holds off until the berth is free. At each harbour it moors alongside the quay and the quay crane lifts its containers off onto the quay, one by
     /// one (the harbour's lorry takes them on), then loads what lorries brought for shipping, and the ship sails for the
     /// other harbour. A harbour with no other harbour across the water stays quiet; a harbour taken away (or the water
     /// cut) sends its ship away. Nothing here is saved: ships come from the harbours.
@@ -126,12 +128,25 @@ namespace Wonderland
                     var from = Mooring(a.House, out float heading); var to = Mooring(b.House, out _);
                     var route = Route(from, to);
                     if (route == null) continue;
+                    route = Waypoints(route);
                     var s = new Ship { Name = "MV " + Names[ships.Count % Names.Length], A = a.House, B = b.House, Route = route, Pos = from, Heading = heading, ToB = true, Docked = true, Cargo = 4, Wait = 2f };
                     s.Root = Part("Container ship", transform, HouseFactory.ShipMesh());
                     Lod.Attach(s.Root.GetComponent<MeshRenderer>(), HouseFactory.ShipMesh, 0.16f);
                     s.Deck = Part("Deck", s.Root, null).GetComponent<MeshFilter>();
                     ships.Add(s);
                     Pose(s);
+                    // A long enough way: a second ship, setting out from the other harbour a little later.
+                    float length = 0f; for (int q = 1; q < route.Count; q++) length += (route[q] - route[q - 1]).magnitude;
+                    if (length >= SecondShipRoute)
+                    {
+                        var s2 = new Ship { Name = "MV " + Names[ships.Count % Names.Length], A = a.House, B = b.House, Route = route, Pos = to, ToB = false, Docked = true, Cargo = 3, Wait = 7f };
+                        Mooring(b.House, out s2.Heading);
+                        s2.Root = Part("Container ship", transform, HouseFactory.ShipMesh());
+                        Lod.Attach(s2.Root.GetComponent<MeshRenderer>(), HouseFactory.ShipMesh, 0.16f);
+                        s2.Deck = Part("Deck", s2.Root, null).GetComponent<MeshFilter>();
+                        ships.Add(s2);
+                        Pose(s2);
+                    }
                     break;
                 }
             }
@@ -161,7 +176,7 @@ namespace Wonderland
                 if (r != null)
                 {
                     // The water changed: a new way, carrying on from the point nearest the ship.
-                    s.Route = r;
+                    s.Route = r = Waypoints(r);
                     int near = 0; for (int q = 1; q < r.Count; q++) if ((r[q] - s.Pos).sqrMagnitude < (r[near] - s.Pos).sqrMagnitude) near = q;
                     s.Next = s.ToB ? near : r.Count - 1 - near;
                     continue;
@@ -246,12 +261,66 @@ namespace Wonderland
 
         private Vector2 At(Ship s) => s.ToB ? s.A : s.B;   // (docked: where it is - it sets off towards the other)
 
+        /// <summary>A way with a point at least every 12 cm (a straight crossing is one long leg): ships keep to their lane all along it.</summary>
+        private static List<Vector2> Waypoints(List<Vector2> route)
+        {
+            var dense = new List<Vector2> { route[0] };
+            for (int i = 1; i < route.Count; i++)
+            {
+                int n = Mathf.Max(1, Mathf.CeilToInt((route[i] - route[i - 1]).magnitude / 0.12f));
+                for (int k = 1; k <= n; k++) dense.Add(Vector2.Lerp(route[i - 1], route[i], k / (float)n));
+            }
+            return dense;
+        }
+
+        /// <summary>A way between two harbours at least this long (metres of sailing) has two ships on it.</summary>
+        public const float SecondShipRoute = 0.6f;
+        /// <summary>How far to the right of the way a ship keeps in open water (two ships pass each other this far apart, twice over).</summary>
+        private const float LaneOffset = 0.016f;
+
+        /// <summary>A ship's next point along its way, moved to the right of the way (in open water: the narrows it takes in the middle).</summary>
+        private Vector2 LanePoint(Ship s, int i)
+        {
+            int last = s.Route.Count - 1;
+            var p = s.Route[i];
+            if (i <= 0 || i >= last) return p;
+            var d = s.Route[i + 1] - s.Route[i - 1];
+            if (!s.ToB) d = -d;
+            if (d.sqrMagnitude < 1e-8f) return p;
+            var lane = p + new Vector2(d.y, -d.x).normalized * LaneOffset;
+            return Navigable(lane) ? lane : p;
+        }
+
+        /// <summary>Whether the quay a ship is making for is taken: another ship alongside, just leaving, or about to come in ahead of it.</summary>
+        private bool BerthTaken(Ship s)
+        {
+            var harbour = s.ToB ? s.B : s.A;
+            var berth = Mooring(harbour, out _);
+            foreach (var o in ships)
+            {
+                if (o == s) continue;
+                if (o.Docked && At(o) == harbour) return true;
+                if (!o.Docked && (o.Pos - berth).magnitude < 0.1f && (o.ToB ? o.A : o.B) == harbour && o.Next <= 1) return true;   // (casting off from it)
+                if (!o.Docked && (o.ToB ? o.B : o.A) == harbour && o.Next == o.Route.Count - 1 && (o.Pos - berth).sqrMagnitude < (s.Pos - berth).sqrMagnitude) return true;
+            }
+            return false;
+        }
+
         private void StepShip(Ship s, float dt)
         {
             if (s.Docked) { AtQuay(s, dt); Pose(s); return; }
             // Sailing: along the route (backwards on the way home), then alongside the quay.
             int last = s.Route.Count - 1;
-            var target = s.Route[s.ToB ? s.Next : last - s.Next];
+            var target = LanePoint(s, s.ToB ? s.Next : last - s.Next);
+            // The quay taken: hold off out on the water (to the right of the way) until it is free.
+            if (ships.Count > 1 && s.Next >= last - 2 && (s.Pos - s.Route[s.ToB ? last : 0]).magnitude < 0.22f && BerthTaken(s))
+            {
+                s.Waiting = true;
+                s.Speed = Mathf.MoveTowards(s.Speed, 0f, 0.06f * dt);
+                s.Pos += new Vector2(Mathf.Sin(s.Heading * Mathf.Deg2Rad), Mathf.Cos(s.Heading * Mathf.Deg2Rad)) * s.Speed * dt;
+                Pose(s);
+                return;
+            }
             var to = target - s.Pos;
             if (to.magnitude < (s.Next < last ? 0.02f : 0.01f))
             {

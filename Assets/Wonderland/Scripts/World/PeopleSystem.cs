@@ -476,7 +476,7 @@ namespace Wonderland
             {
                 if (st.Edge != edge || st.Side != side) continue;
                 if (TrackNetwork.ArcGap(layout, s, st.S) > WonderlandWorld.PlatformLength / 2f - 0.012f) continue;
-                top = pt.y + 0.0135f;
+                top = pt.y + HouseFactory.PlatformTop;
                 return true;
             }
             return false;
@@ -491,7 +491,37 @@ namespace Wonderland
             return new Vector2(q.x, q.z);
         }
 
-        private float GroundAt(Vector2 p) => OnPlatform(p, out float top) ? top : world.Bridges.Deck(p, out float deck, out _) ? deck : world.Terrain.SurfaceAt(p.x, p.y) + world.Paths.WalkLift(p);
+        private float GroundAt(Vector2 p) => PlatformHeight(p, out float top) ? top : world.Bridges.Deck(p, out float deck, out _) ? deck : world.Terrain.SurfaceAt(p.x, p.y) + world.Paths.WalkLift(p);
+
+        /// <summary>
+        /// Whether a point is on a platform - its paving, or the ramp along its back - and the height there: the paving's,
+        /// or down the ramp from it to the ground, so whoever walks onto a platform walks up onto it. (One look for the
+        /// nearest track serves both.)
+        /// </summary>
+        private bool PlatformHeight(Vector2 p, out float height)
+        {
+            height = 0f;
+            if (stations.Count == 0) return false;
+            var net = world.Track.Network;
+            var q = new Vector3(p.x, 0f, p.y);
+            if (!net.Nearest(q, out int edge, out float s, out float d, HouseFactory.PlatformBack + HouseFactory.PlatformRamp)) return false;
+            if (d < 0.046f) return false;   // (between the rails, or where the coaches overhang)
+            bool paving = d <= 0.076f;
+            var layout = net.Edges[edge].Layout;
+            var pt = layout.Evaluate(s, out var tangent); tangent.y = 0f; tangent.Normalize();
+            int side = Vector3.Dot(Vector3.Cross(Vector3.up, tangent), q - pt) >= 0f ? 1 : -1;
+            foreach (var st in stations)
+            {
+                if (st.Edge != edge || st.Side != side) continue;
+                if (TrackNetwork.ArcGap(layout, s, st.S) > WonderlandWorld.PlatformLength / 2f - (paving ? 0.012f : 0f)) continue;
+                float top = pt.y + HouseFactory.PlatformTop;
+                if (paving) { height = top; return true; }
+                float ground = world.Terrain.SurfaceAt(p.x, p.y);
+                height = Mathf.Lerp(top, Mathf.Min(top, ground), Mathf.Clamp01((d - HouseFactory.PlatformBack) / HouseFactory.PlatformRamp));
+                return true;
+            }
+            return false;
+        }
 
         private bool TrainRunning => world.Trains.AnyRunning;
 
