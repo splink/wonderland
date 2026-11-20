@@ -355,7 +355,7 @@ namespace Wonderland
             UpdateTips(dt);
             Palette.SetHint(PlacingWorld ? "Point at the floor and pull the trigger to put the world there  ·  stick left/right: turn it, up/down: raise or lower it" : Peek() ?? Hint());
             UpdateInspection(dt);
-            if (Twist(input)) return;   // (both grips: the world turns with the hands, nothing else this frame)
+            if (Twist(input, dt)) return;   // (both grips: the world turns with the hands, nothing else this frame)
             if (PlacingWorld) TurnAndLift(input.Stick + input.LeftStick, dt);
             else if (input.Grip && !Holding) GripTurn(input, dt);
             else { GripTurn(input, dt); Scroll(input.Stick, dt); }
@@ -1283,15 +1283,28 @@ namespace Wonderland
         private bool twisting;
         private float twistFrom;
         private Quaternion twistWorld;
+        private float rightGripFor;
+
+        /// <summary>
+        /// The left grip may close this long after the right one and still grab the world: hands closing together rarely
+        /// close in the same frame, and the right one alone has picked up what the pointer was on meanwhile (put back).
+        /// </summary>
+        public const float BothGripsGrace = 0.3f;
+
+        /// <summary>The world is being turned by hand (both grips, or grip and the stick): the room anchor leaves it be.</summary>
+        public bool TurningWorld => twisting || gripTurned;
 
         /// <summary>
         /// Both grips held (nothing in hand): the world is grabbed with both hands and turns as they turn round each other -
-        /// like turning a model on a table by its edges - about the window's middle; letting go of either grip puts it
-        /// down there. True while it is held so.
+        /// like turning a model on a table by its edges - about the window's middle, live as the hands move; letting go of
+        /// either grip puts it down there. True while it is held so.
         /// </summary>
-        private bool Twist(PointerInput input)
+        private bool Twist(PointerInput input, float dt)
         {
-            bool both = input.Grip && input.LeftGrip && !Holding && input.LeftHand != Vector3.zero && input.RightHand != Vector3.zero;
+            rightGripFor = input.GripDown ? 0f : input.Grip ? rightGripFor + dt : float.MaxValue;
+            bool hands = input.Grip && input.LeftGrip && input.LeftHand != Vector3.zero && input.RightHand != Vector3.zero;
+            if (hands && !twisting && Holding && !heldByTrigger && rightGripFor < BothGripsGrace) PutBack();   // (the right grip closed first: it meant the world)
+            bool both = hands && !Holding;
             if (!both)
             {
                 if (twisting) { twisting = false; World.FitToRoom(); WorldPlaced?.Invoke(); Haptic(0.4f, 0.05f); }

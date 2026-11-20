@@ -134,7 +134,7 @@ namespace Wonderland
             Anchor = gameObject.AddComponent<WorldAnchor>();
             Anchor.World = World;
             Anchor.Floor = ScannedFloor;
-            Anchor.Holding = () => Tools.PlacingWorld;
+            Anchor.Holding = () => Tools.PlacingWorld || Tools.TurningWorld;
             Tools.WorldPlaced = Anchor.Pin;
             // The Perf panel's settings: applied now, and whenever one changes.
             Light Sun() { foreach (var l in FindObjectsByType<Light>(FindObjectsSortMode.None)) if (l.type == LightType.Directional) return l; return null; }

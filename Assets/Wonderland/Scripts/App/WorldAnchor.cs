@@ -11,8 +11,11 @@ namespace Wonderland
     /// world follows the anchor, so it stays put when the headset re-localises (taken off and put on again, a recentre,
     /// the guardian redrawn). The height is the room scan's floor when there is one (the anchor's own height otherwise),
     /// plus the lift the player chose (Move), and only the anchor's heading is used, so the world always lies level. What
-    /// is anchored is the placement - the window's centre - so navigating the world never moves it. Move re-pins it.
+    /// is anchored is the placement - the window's centre - so navigating the world never moves it. Move re-pins it, and so
+    /// does turning it by hand; the anchor isn't followed while either is under way. It goes before the world's own
+    /// LateUpdate, so the window's cut is drawn where the world is this frame.
     /// </summary>
+    [DefaultExecutionOrder(-100)]
     public sealed class WorldAnchor : MonoBehaviour
     {
         private const string Key = "wonderland.anchor";
@@ -83,16 +86,23 @@ namespace Wonderland
             PlayerPrefs.SetFloat(LiftKey, World.Lift);
             var fresh = go.AddComponent<OVRSpatialAnchor>();
             for (float t = 0f; !fresh.Created && t < 5f; t += Time.unscaledDeltaTime) yield return null;
-            if (!fresh.Created) { Destroy(go); busy = false; Status = "couldn't pin the world to the room"; yield break; }
+            if (!fresh.Created) { Destroy(go); Unfollow(old); Status = "couldn't pin the world to the room"; yield break; }
             var save = fresh.SaveAnchorAsync();
             for (float t = 0f; !save.IsCompleted && t < 10f; t += Time.unscaledDeltaTime) yield return null;
-            if (!save.IsCompleted || !save.GetResult().Success) { Destroy(go); busy = false; Status = "couldn't save the world's spot"; yield break; }
+            if (!save.IsCompleted || !save.GetResult().Success) { Destroy(go); Unfollow(old); Status = "couldn't save the world's spot"; yield break; }
             PlayerPrefs.SetString(Key, fresh.Uuid.ToString());
             PlayerPrefs.Save();
             anchor = fresh;
             if (old != null) { old.EraseAnchorAsync(); Destroy(old.gameObject); }
             busy = false;
             Status = "pinned to the room";
+        }
+
+        /// <summary>Pinning failed: the world stays where the player put it rather than going back to the old anchor (still saved for next time).</summary>
+        private void Unfollow(OVRSpatialAnchor old)
+        {
+            if (old != null) Destroy(old.gameObject);
+            anchor = null; busy = false;
         }
 
         private void LateUpdate() => Follow(false);

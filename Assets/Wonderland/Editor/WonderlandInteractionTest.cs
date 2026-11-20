@@ -701,6 +701,27 @@ namespace Wonderland.Editor
             Frame(hand, aim + Vector3.up * 3f, false);
             Check(Mathf.Abs(twisted - 40f) < 1f && Mathf.Abs(Mathf.DeltaAngle(twistFrom, world.PlacementRotation.eulerAngles.y) - 40f) < 1f,
                 $"Both grips held and the hands twisted turn the world with them ({twisted:0} of 40 degrees); one grip alone does not");
+            // The right grip closing a moment before the left, on a building: the building goes back, the world turns.
+            int hn = world.Buildings.Houses.Count - 1;
+            if (hn >= 0)
+            {
+                var hb = world.Buildings.Houses[hn]; int housesWas = world.Buildings.Houses.Count;
+                var top = world.transform.TransformPoint(new Vector3(hb.x, world.Buildings.TopOf(hn) - 0.01f, hb.z));
+                float turnFrom = world.PlacementRotation.eulerAngles.y;
+                Frame(hand, top, false, leftHand: left0, rightHand: right0);
+                for (int i = 0; i < 6; i++) Frame(hand, top, false, grip: true, leftHand: left0, rightHand: right0);
+                bool grabbed = tools.Holding;
+                for (int i = 0; i <= 10; i++)
+                {
+                    var r = Quaternion.Euler(0f, 4f * i, 0f);
+                    Frame(hand, top, false, grip: true, leftGrip: true, leftHand: (left0 + right0) / 2 + r * (left0 - (left0 + right0) / 2), rightHand: (left0 + right0) / 2 + r * (right0 - (left0 + right0) / 2));
+                }
+                bool turning = tools.TurningWorld;
+                Frame(hand, top, false);
+                float late = Mathf.DeltaAngle(turnFrom, world.PlacementRotation.eulerAngles.y);
+                Check(grabbed && turning && !tools.Holding && world.Buildings.Houses.Count == housesWas && Mathf.Abs(late - 40f) < 1f,
+                    $"The right grip closing first on a building, the left a moment later: the building goes back and the world turns with the hands ({late:0} of 40 degrees; picked up first: {grabbed}, back: {world.Buildings.Houses.Count == housesWas})");
+            }
             // The World panel, in tabs: Place (Move), Turn, Height (Floor, Table, Lower, Higher), Size (Window, Scale).
             tools.ToggleMoving();
             bool tabs = Find("Place") != null && Find("Turn") != null && Find("Height") != null && Find("Size") != null && Find("Move") != null;
