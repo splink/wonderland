@@ -52,6 +52,7 @@ PASS  Select the track: its card's Bend button bends it, the trigger puts it dow
 PASS  A railway across a pond gets a bridge (track: ok; 1 bridges)
 PASS  Pointing at a bridge names it; Select's trigger on it opens its card with the styles that suit it, and Lift makes it a lift bridge [hint "Stone arch bridge  ·  trigger: its card - choose its style", card True (Lift bridge), lift True]
 PASS  A tap on the bridge with the Track tool takes the next style (Stone arch bridge), and draws no track
+PASS  Track > Bridges chooses the style new bridges are built in [panel "Track · Bridges", then "Track · Bridges", Lift chosen True]
 PASS  A building's card has Remove; B brings it back [card True, removed True, back True]
 PASS  Save and Load keep several worlds: saved as World 2 and World 3, and World 2 loads back as it was (4 buildings)
 PASS  Help opens in 8 topics as tabs; Moving tells of the two-hand twist, Buildings has its own page with an example

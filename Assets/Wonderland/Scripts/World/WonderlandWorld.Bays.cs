@@ -5,9 +5,9 @@ namespace Wonderland
 {
     /// <summary>
     /// The places vehicles stop are part of the street they stand by: a bus stop and a taxi rank get a lay-by (and step
-    /// back from the kerb to make room for it, facing the street), a car park, a parking garage and the police, fire
-    /// and ambulance stations a driveway from the street to their way in. Worked out again whenever the buildings or
-    /// the streets change.
+    /// back from the kerb to make room for it, facing the street), a car park, a parking garage, a fuel station and the
+    /// police, fire and ambulance stations a driveway from the street to their way in. Worked out again whenever the
+    /// buildings or the streets change.
     /// </summary>
     public sealed partial class WonderlandWorld
     {
@@ -19,15 +19,15 @@ namespace Wonderland
         {
             Catalog.BusStop => BayKind.Bus,
             Catalog.TaxiRank => BayKind.Taxi,
-            Catalog.CarPark or Catalog.ParkingGarage or Catalog.Police or Catalog.FireStation or Catalog.Hospital => BayKind.Drive,
+            Catalog.CarPark or Catalog.ParkingGarage or Catalog.Fuel or Catalog.Police or Catalog.FireStation or Catalog.Hospital => BayKind.Drive,
             _ => null,
         };
 
-        /// <summary>Where a building's driveway reaches it: a car park's or garage's way in, a station's doors.</summary>
+        /// <summary>Where a building's driveway reaches it: a car park's or garage's way in, a fuel station's forecourt, a station's doors.</summary>
         public static Vector2 WayIn(HouseInstance h)
         {
-            if (h.variant != Catalog.CarPark && h.variant != Catalog.ParkingGarage) return PeopleSystem.DoorStep(h);
-            var local = h.variant == Catalog.CarPark ? HouseFactory.CarParkEntrance : HouseFactory.GarageEntrance;
+            if (h.variant != Catalog.CarPark && h.variant != Catalog.ParkingGarage && h.variant != Catalog.Fuel) return PeopleSystem.DoorStep(h);
+            var local = h.variant == Catalog.CarPark ? HouseFactory.CarParkEntrance : h.variant == Catalog.Fuel ? HouseFactory.FuelEntrance : HouseFactory.GarageEntrance;
             var d = Quaternion.Euler(0f, h.rotation, 0f) * local;
             return new Vector2(h.x + d.x, h.z + d.z);
         }
@@ -79,7 +79,7 @@ namespace Wonderland
             Catalog.FireStation => VehicleFactory.Length(VehicleKind.FireEngine) + 0.012f,
             Catalog.Hospital => VehicleFactory.Length(VehicleKind.Ambulance) + 0.012f,
             Catalog.Police => VehicleFactory.Length(VehicleKind.Police) + 0.012f,
-            Catalog.CarPark or Catalog.ParkingGarage => 0.02f,   // (a short driveway to its way in)
+            Catalog.CarPark or Catalog.ParkingGarage or Catalog.Fuel => 0.02f,   // (a short driveway to its way in)
             _ => 0f,
         };
 
@@ -100,7 +100,7 @@ namespace Wonderland
             var right = new Vector2(along.y, -along.x);
             var away = Vector2.Dot(p - at, right) >= 0f ? right : -right;
             float edge = PathSystem.HalfWidth((int)PathKind.Road) - PathSystem.KerbWidth, depth = kind == BayKind.Bus ? BusBayDepth : TaxiBayDepth;
-            bool lot = h.variant is Catalog.CarPark or Catalog.ParkingGarage;
+            bool lot = h.variant is Catalog.CarPark or Catalog.ParkingGarage or Catalog.Fuel;
             var c = lot ? at + away * Mathf.Max(Vector2.Dot(p - at, away), edge + forecourt + half.y)   // (its front edge, where its way in is, at least that far back; further if it was put further)
                 : forecourt > 0f
                 ? at + away * (edge + forecourt + half.y * 0.86f + PeopleSystem.Radius + 0.008f)   // (its doors - where the driveway ends - that far back)

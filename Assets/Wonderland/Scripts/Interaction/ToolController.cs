@@ -54,6 +54,10 @@ namespace Wonderland
         public float StreamWidth { get; private set; } = 1f;   // 0.6 a creek, 1 a stream, 2.2 a river
         private float waterLevel;
         private float strength = 0.6f, density = 0.6f, houseRotation;
+        /// <summary>Roads > Turning circle: a tap at a street's end puts one there (or takes it away).</summary>
+        public bool TurningCircleMode { get; set; }
+        // Beside a road: how far the building has been turned from facing it, and the rotation it was given last frame.
+        private float roadTurn, roadSet = float.NaN;
         private int houseStyle;   // each new house gets the next colour style, so a village never repeats itself
         private readonly QuestInput quest = new();
         private LineRenderer line;
@@ -769,12 +773,14 @@ namespace Wonderland
                 if (TrackPlanner.Length(drawn) < 0.03f)
                 {
                     // A tap: on a bridge, try its next style.
-                    TapBridge(drawn[0]);
+                    if (TurningCircleMode) { Say(World.ToggleTurningCircle(drawn[0]), 3f); Haptic(0.5f, 0.05f); }
+                    else TapBridge(drawn[0]);
                     drawn.Clear();
                     return;
                 }
+                var bridgesBefore = BridgesNow();
                 string error = World.BuildPath(drawn, PathKind);
-                if (error == null) { Say(PathSystem.Names[(int)PathKind] + " added"); Haptic(0.5f, 0.05f); }
+                if (error == null) { Say(PathSystem.Names[(int)PathKind] + " added"); Haptic(0.5f, 0.05f); StyleNewBridges(bridgesBefore); }
                 else { Say(error); Haptic(0.7f, 0.1f); }
                 drawn.Clear();
             }
@@ -899,6 +905,7 @@ namespace Wonderland
                     return;
                 }
                 int before = net.Edges.Count, joints = net.Joints.Count;
+                var bridgesBefore = BridgesNow();
                 var plan = World.BuildTrack(drawn);
                 if (plan.Ok)
                 {
@@ -916,6 +923,7 @@ namespace Wonderland
                     if (after.Crossings.Count > 0 && plan.Start.Kind == AttachKind.None && plan.Finish.Kind == AttachKind.None && !plan.Closed) what += " - with a crossing";
                     if (after.Traps > 0) what = "Joined one way: trains can go across but not back yet - draw a second link the other way (follow the arrows) so they can return";
                     Say(what, 4f);
+                    StyleNewBridges(bridgesBefore);   // (and its bridges in the style chosen: said after)
                     Haptic(0.6f, 0.08f);
                     RefreshOptions();
                 }
@@ -1034,13 +1042,24 @@ namespace Wonderland
                 if (carrying && !heldByTrigger && input.GripUp) { DropCarried(); Say("Point at the land to put it down - it's back where it was", 4f); Haptic(0.7f, 0.1f); RefreshOptions(); }
                 return;
             }
-            if (BuildGrid.Snap && !Catalog.IsStation(HouseVariant) && HouseVariant is not (Catalog.Harbour or Catalog.Jetty or Catalog.Zebra))
+            if (!Catalog.IsStation(HouseVariant) && HouseVariant is not (Catalog.Harbour or Catalog.Jetty or Catalog.Zebra))
             {
-                // On the grid: beside a road, facing it and lined up along it; elsewhere on the grid, in quarter turns.
+                // Beside a road a building faces it - its front to the street - and lines up behind the kerb: on the grid
+                // stepped along the road, off it wherever the pointer is. The stick still turns it, from the road's way (on
+                // the grid a quarter turn at a time). Elsewhere on the grid, grid points and quarter turns.
                 var bp = Catalog.Get(HouseVariant);
                 var p2 = new Vector2(local.x, local.z);
-                if (!bp.Small && World.Paths.AlongRoad(p2, bp.Half.y, out var beside, out float facingRoad)) { p2 = beside; houseRotation = facingRoad; }
-                else { p2 = BuildGrid.Point(p2); houseRotation = BuildGrid.Quarter(houseRotation); }
+                if (!bp.Small && World.Paths.AlongRoad(p2, bp.Half.y, out var beside, out float facingRoad, BuildGrid.Snap))
+                {
+                    if (!float.IsNaN(roadSet)) roadTurn += Mathf.DeltaAngle(roadSet, houseRotation);   // (turned with the stick since)
+                    if (BuildGrid.Snap) roadTurn = BuildGrid.Quarter(roadTurn);
+                    p2 = beside; houseRotation = roadSet = Mathf.Repeat(facingRoad + roadTurn, 360f);
+                }
+                else
+                {
+                    roadSet = float.NaN;
+                    if (BuildGrid.Snap) { p2 = BuildGrid.Point(p2); houseRotation = BuildGrid.Quarter(houseRotation); }
+                }
                 local = new Vector3(p2.x, World.Terrain.SurfaceAt(p2.x, p2.y), p2.y);
             }
             var candidate = new HouseInstance { x = local.x, z = local.z, rotation = houseRotation, variant = HouseVariant, style = houseStyle };

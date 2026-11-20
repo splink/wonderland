@@ -195,6 +195,34 @@ namespace Wonderland
                         if (j > i && !graph[i].Next.Contains(j) && (graph[i].P - graph[j].P).magnitude < Junction) Link(i, j);
                 }
             }
+            TurningLoops();
+        }
+
+        /// <summary>
+        /// A turning circle at a street's end: a one-way loop round it from the street's end node and back to it, the
+        /// right way round (keeping right: anticlockwise), so traffic reaching the end drives round instead of turning
+        /// on the spot. Added after the junctions are joined, so the loop's own nodes aren't joined across it.
+        /// </summary>
+        private void TurningLoops()
+        {
+            foreach (var c in world.Paths.TurningCircles)
+            {
+                int end = -1;
+                for (int i = 0; i < graph.Count; i++) if (graph[i].Car && (graph[i].P - c.End).sqrMagnitude < 1e-8f) { end = i; break; }
+                if (end < 0) continue;
+                float back = Mathf.Atan2(-c.Out.y, -c.Out.x), r = PathSystem.CircleLoop;
+                const int n = 9;
+                const float open = 30f * Mathf.Deg2Rad;
+                int prev = end;
+                for (int k = 0; k < n; k++)
+                {
+                    float a = back + open + (Mathf.PI * 2f - open * 2f) * k / (n - 1);
+                    int id = Add(c.Centre + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * r, true, c.Line.kind);
+                    graph[prev].Next.Add(id);   // (one way round)
+                    prev = id;
+                }
+                graph[prev].Next.Add(end);
+            }
         }
 
         private int Add(Vector2 p, bool car, int kind) { graph.Add(new Node { P = p, Car = car, Kind = kind }); return graph.Count - 1; }
@@ -310,8 +338,9 @@ namespace Wonderland
                 // (a tractor waits in its field's corner, a taxi in its rank's lay-by, help on its station's forecourt;
                 // one already waiting moves there if the lay-by or forecourt is new)
                 bool idle = v.State == Mode.Parked && v.ParkDir == 0 && v.Fare == null && !visiting.Contains(v);
-                if (fresh && v.Field >= 0 || (v.Rank >= 0 || v.Base >= 0) && (fresh || idle)) GoHome(v, true);
                 v.Depot = w.depot; v.Cargo = w.depot >= 0 ? Catalog.Get(houses[w.depot].variant).Makes : Cargo.None;
+                // (a new lorry or van waits in its place's yard; one out on a job keeps it)
+                if (fresh && (v.Field >= 0 || v.Depot >= 0) || (v.Rank >= 0 || v.Base >= 0) && (fresh || idle)) GoHome(v, true);
                 if (w.station >= 0) v.BasePos = new Vector2(houses[w.station].x, houses[w.station].z);
                 keep.Add(v);
             }
@@ -395,17 +424,20 @@ namespace Wonderland
 
         /// <summary>
         /// Where a vehicle waits at home off the street: a taxi in its rank's lay-by (one behind the other, facing the
-        /// way the traffic goes there), an emergency vehicle on its station's forecourt, nose to the street.
+        /// way the traffic goes there), an emergency vehicle on its station's forecourt, nose to the street; a lorry or a
+        /// van at the place it belongs to. With no lay-by or forecourt long enough for it, in the yard beside its
+        /// building (<see cref="YardSpot"/>) - never half in the street.
         /// </summary>
         private bool HomeSpot(Vehicle v, out Vector2 at, out float heading)
         {
             at = default; heading = 0f;
             var houses = world.Buildings.Houses;
-            int house = v.Rank >= 0 ? v.Rank : v.Base;
+            int house = v.Rank >= 0 ? v.Rank : v.Base >= 0 ? v.Base : v.Depot;
             if (house < 0 || house >= houses.Count) return false;
             var bay = world.BayOf(new Vector2(houses[house].x, houses[house].z));
-            if (bay == null) return false;
             float len = VehicleFactory.Length(v.Kind);
+            int yard = v.Depot >= 0 ? Mathf.RoundToInt((v.Home - PeopleSystem.DoorStep(houses[house])).magnitude / 0.03f) : 0;   // (lorries: first, second)
+            if (bay == null) return YardSpot(house, v.Kind, yard, out at, out heading);
             if (bay.Kind == BayKind.Taxi)
             {
                 int slot = Mathf.RoundToInt((v.Home - PeopleSystem.DoorStep(houses[house])).magnitude / 0.03f);   // (the rank's taxis wait 3 cm apart at its door: first, second)
@@ -414,13 +446,13 @@ namespace Wonderland
                 heading = Mathf.Atan2(flow.x, flow.y) * Mathf.Rad2Deg;
                 return true;
             }
-            if (bay.Kind == BayKind.Drive && bay.Depth > len * 0.7f)
+            if (bay.Kind == BayKind.Drive && bay.Depth > len + 0.002f)   // (all of it on the forecourt: none over the pavement)
             {
                 at = bay.End - bay.Out * (len * 0.5f + 0.002f);
                 heading = Mathf.Atan2(-bay.Out.x, -bay.Out.y) * Mathf.Rad2Deg;
                 return true;
             }
-            return false;
+            return YardSpot(house, v.Kind, yard, out at, out heading);
         }
 
         private Vector2 Direction(int n)
@@ -466,6 +498,14 @@ namespace Wonderland
             // Setting off from a forecourt: down the driveway to the street first (not across the pavement).
             var drive = world.Paths.Bays.Count > 0 ? world.Paths.BayAt(v.Position) : null;
             if (drive != null && drive.Kind == BayKind.Drive) { v.Path.Insert(0, drive.Mouth + drive.Out * 0.004f); v.Fast.Insert(0, false); }
+            else if (v.Path.Count > 0 && OffRoad(v.Position) > 0.03f)
+            {
+                // ...or from a yard beside its building: straight out, nose first, to the street's edge, then on.
+                var fwd = new Vector2(Mathf.Sin(v.Heading * Mathf.Deg2Rad), Mathf.Cos(v.Heading * Mathf.Deg2Rad));
+                var to = v.Path[0] - v.Position;
+                float ahead = Mathf.Max(0f, Vector2.Dot(to, fwd));
+                if (ahead > 0.01f) { v.Path.Insert(0, v.Position + fwd * ahead * 0.8f); v.Fast.Insert(0, false); }
+            }
             var route = v.Path;
             v.Next = 0; v.State = Mode.Driving; v.ToHome = home; v.Waiting = 0f;
             v.Timer = 20f + route.Count * NodeSpacing / Cruise(v) * 3f;   // give up if it takes far too long
@@ -488,9 +528,16 @@ namespace Wonderland
             if (hour < 7f || hour > 21f) return;
             float wish = Mathf.Max(Needs.Appeal(Need.Errands, hour), Needs.Appeal(Need.Food, hour) * 0.8f, Needs.Appeal(Need.Work, hour) * 0.7f, Needs.Appeal(Need.Fun, hour) * 0.6f);
             if (!v.Rng.Chance(0.25f + wish * 0.5f)) return;
-            // A destination: a place by the road, not too near (a bicycle goes less far).
+            // Now and then a car calls at a fuel station first (it fills up, then goes home).
             var houses = world.Buildings.Houses;
             float max = v.Kind == VehicleKind.Bicycle ? 0.9f : 2f;
+            if (Car(v) && v.Kind != VehicleKind.Tractor && v.Rng.Chance(RefuelChance) && FreePump(v.Home, max, out var station) && ParkingAim(station) is { } forecourt)
+            {
+                v.CarPark = station; v.Bay = 0;
+                if (DriveTo(v, forecourt, false)) { v.Driver = TakeDriver != null ? TakeDriver(v.Home, 0f) : 0; return; }
+                v.Bay = -1;
+            }
+            // A destination: a place by the road, not too near (a bicycle goes less far).
             for (int k = 0; k < 8; k++)
             {
                 var h = houses[v.Rng.Range(0, houses.Count)];
@@ -704,7 +751,7 @@ namespace Wonderland
             {
                 v.State = Mode.Parked; v.Kerbside = v.Position; v.KerbHeading = v.Heading; v.ParkT = 0f; v.ParkDir = 1;
                 PlanParking(v);
-                v.Timer = v.Rng.Range(20f, 45f); v.ToHome = true;
+                v.Timer = AtFuel(v) ? v.Rng.Range(3f, 5f) : v.Rng.Range(20f, 45f); v.ToHome = true;   // (at the pump: just while it fills up)
                 visiting.Add(v);
                 return;
             }
@@ -725,7 +772,7 @@ namespace Wonderland
             List<Vehicle> done = null;
             foreach (var v in visiting)
             {
-                if (v.State != Mode.Parked) { (done ??= new List<Vehicle>()).Add(v); continue; }
+                if (v.State != Mode.Parked || !v.Root || !Vehicles.Contains(v)) { (done ??= new List<Vehicle>()).Add(v); continue; }   // (set off, or taken away meanwhile)
                 if (StepParking(v, dt, false) && v.ParkDir > 0) continue;   // turning into its bay
                 v.Timer -= dt;
                 if (v.Timer > 0f) continue;
@@ -767,6 +814,7 @@ namespace Wonderland
         public float OffRoad(Vector2 p)
         {
             if (world.Paths.Bays.Count > 0 && world.Paths.BayAt(p) != null) return 0f;   // (a lay-by or a driveway is the street too)
+            foreach (var c in world.Paths.TurningCircles) if ((p - c.Centre).magnitude < PathSystem.CircleRadius) return 0f;   // (and a turning circle)
             float best = float.MaxValue;
             foreach (var l in world.Paths.Lines)
                 if (PathSystem.IsCarWay(l.kind) || l.kind == (int)PathKind.Footpath) best = Mathf.Min(best, PathSystem.Distance(l, p));
@@ -829,6 +877,7 @@ namespace Wonderland
                     seen.Clear();
                 }
                 int next = options[v.Rng.Range(0, options.Count)];
+                if (!graph[next].Next.Contains(cur)) seen.Clear();   // (one way round a turning circle: back up the street after)
                 var along = graph[next].P - node.P;
                 if (along.sqrMagnitude > 0.0001f) dir = along.normalized;   // (short hops between a junction's nodes keep the old direction)
                 prev = cur; cur = next;

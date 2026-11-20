@@ -339,9 +339,10 @@ namespace Wonderland
         /// <summary>
         /// Where a building of half-depth <paramref name="depth"/> goes beside the road nearest <paramref name="p"/>
         /// (within reach): just behind the kerb on the pointer's side, its front (-Z) facing the road, stepped along it on
-        /// the grid. False when no road (or lane) is near.
+        /// the grid (unless <paramref name="stepped"/> is false: then just beside the pointer). Curved roads too: it lines
+        /// up with the road where it is nearest. False when no road (or lane) is near.
         /// </summary>
-        public bool AlongRoad(Vector2 p, float depth, out Vector2 at, out float yaw)
+        public bool AlongRoad(Vector2 p, float depth, out Vector2 at, out float yaw, bool stepped = true)
         {
             at = p; yaw = 0f;
             float d = Query(p, 0.16f, k => IsCarWay(Lines[k].kind), out int li);
@@ -356,7 +357,7 @@ namespace Wonderland
             var right = new Vector2(t.y, -t.x);
             var normal = Vector2.Dot(p - q, right) >= 0f ? right : -right;
             float s = Vector2.Dot(q, t);
-            q += t * (Mathf.Round(s / BuildGrid.Size) * BuildGrid.Size - s);
+            if (stepped) q += t * (Mathf.Round(s / BuildGrid.Size) * BuildGrid.Size - s);
             at = q + normal * (hw + Pavement(l.kind) + depth + 0.006f);
             yaw = Mathf.Atan2(normal.x, normal.y) * Mathf.Rad2Deg;   // (a building's front is its -Z: it looks back along -normal, at the road)
             return true;

@@ -471,6 +471,37 @@ namespace Wonderland
         }
 
         /// <summary>Tap on a bridge: the next style that suits it (checkpointed). Returns its name, or null if there is no bridge.</summary>
+        /// <summary>
+        /// A tap at a street's dead end: a turning circle there, or (one there) taken away again (checkpointed). Returns
+        /// what happened, or why not.
+        /// </summary>
+        public string ToggleTurningCircle(Vector3 local)
+        {
+            var p = new Vector2(local.x, local.z);
+            PathLine best = null; bool atStart = false; float bestD = 0.06f;
+            foreach (var l in Paths.Lines)
+            {
+                if (l.kind != (int)PathKind.Road || l.closed || l.points.Count < 3) continue;
+                for (int k = 0; k < 2; k++)
+                {
+                    float d = ((k == 0 ? l.points[0] : l.points[^1]) - p).magnitude;
+                    if (d < bestD) { bestD = d; best = l; atStart = k == 0; }
+                }
+            }
+            if (best == null) return "Tap the end of a street (where it stops) for a turning circle";
+            bool has = atStart ? best.roundStart : best.roundEnd;
+            if (!has && !Paths.FreeEnd(best, atStart)) return "That end joins another road - a turning circle goes where a street stops";
+            var e = atStart ? best.points[0] : best.points[^1];
+            var o = (e - (atStart ? best.points[3] : best.points[^4])).normalized;
+            if (!has && Buildings.Contains(e + o * PathSystem.CircleRadius * 0.6f, PathSystem.CircleRadius)) return "No room for a turning circle there - a building is in the way";
+            Checkpoint();
+            if (atStart) best.roundStart = !has; else best.roundEnd = !has;
+            Paths.Rebuild();
+            Traffic.Refresh(true);
+            Cover.MarkDirtyRegion(e, 0.08f);
+            return has ? "Turning circle taken away" : "Turning circle: traffic drives round it at the end of the street";
+        }
+
         public string CycleBridge(Vector3 local) => CycleBridge(Bridges.Pick(new Vector2(local.x, local.z)));
 
         /// <summary>Bridge <paramref name="i"/> takes its next style (checkpointed). Returns its name, or null if there is no such bridge.</summary>
@@ -481,6 +512,26 @@ namespace Wonderland
             var style = Bridges.Cycle(i);
             RefreshBridges();
             return BridgeSystem.Names[(int)style];
+        }
+
+        /// <summary>
+        /// The bridges made since <paramref name="before"/> (the bridges' anchors then) take <paramref name="style"/> where it
+        /// suits them - part of the stroke that made them, so one Undo takes both. Returns what to tell the player: the
+        /// style built, or why a crossing got another.
+        /// </summary>
+        public string StyleNewBridges(List<Vector2> before, BridgeStyle style)
+        {
+            string said = null;
+            bool any = false;
+            for (int i = 0; i < Bridges.Bridges.Count; i++)
+            {
+                var b = Bridges.Bridges[i];
+                if (before.Exists(a => (a - b.Anchor).magnitude < 0.12f)) continue;
+                if (BridgeSystem.Allowed(b).Contains(style)) { if (b.Style != style) { Bridges.Choose(i, style); any = true; } said ??= BridgeSystem.Names[(int)style] + " built"; }
+                else said = $"A {BridgeSystem.Names[(int)style].ToLower()} doesn't suit this crossing" + (style == BridgeStyle.Lift ? (b.Members.TrueForAll(m => m.Track) ? " (too short)" : " (only for the railway alone)") : "") + $" - it got a {BridgeSystem.Names[(int)b.Style].ToLower()}";
+            }
+            if (any) RefreshBridges();
+            return said;
         }
 
         /// <summary>Bridge <paramref name="i"/> in a style of its own choosing (checkpointed). False if it doesn't suit it.</summary>

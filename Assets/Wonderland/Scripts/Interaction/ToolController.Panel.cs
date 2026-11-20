@@ -110,11 +110,13 @@ namespace Wonderland
                     var paths = new Group { Name = "Paths", About = "Ways for people on foot", Opened = () => { PlacingVehicle = null; if (PathKind is not (PathKind.Footpath or PathKind.Trail)) PathKind = PathKind.Footpath; } };
                     var fences = new Group { Name = "Fences", About = "Fences, hedges and walls", Opened = () => { PlacingVehicle = null; if (!PathSystem.IsBarrier((int)PathKind)) PathKind = PathKind.Fence; } };
                     var vehicles = new Group { Name = "Vehicles", About = "Put a car, bus or lorry on a road", Opened = () => PlacingVehicle ??= VehicleKind.Car };
-                    void Way(Group g, PathKind k, string about) => g.Rows.Add(Row(Choice(PathSystem.Names[(int)k], PathKind == k && PlacingVehicle == null, () => { PathKind = k; PlacingVehicle = null; RefreshOptions(); }), about));
+                    void Way(Group g, PathKind k, string about) => g.Rows.Add(Row(Choice(PathSystem.Names[(int)k], PathKind == k && PlacingVehicle == null && !TurningCircleMode, () => { PathKind = k; PlacingVehicle = null; TurningCircleMode = false; RefreshOptions(); }), about));
                     Way(streets, PathKind.Road, "A town street with kerbs and pavements. Cross another for a crossroads with lights; end on one for a T-junction");
                     Way(streets, PathKind.Highway, "Two lanes each way, for traffic between towns");
                     Way(streets, PathKind.Lane, "A narrow country lane without pavements");
                     Way(streets, PathKind.ServiceRoad, "A narrow concrete road for harbours, yards and depots");
+                    streets.Rows.Add(Row(Choice("Turning circle", TurningCircleMode && PlacingVehicle == null, () => { TurningCircleMode = true; PathKind = PathKind.Road; PlacingVehicle = null; RefreshOptions(); Say("Tap the end of a street: a turning circle, so traffic can turn round there", 4f); }),
+                        "Tap a street's dead end: a round turning place, traffic drives round it and back. Tap it again to take it away"));
                     Way(paths, PathKind.Footpath, "A gravel path for people on foot. Across water it gets a footbridge");
                     Way(paths, PathKind.Trail, "A trodden earth trail through the countryside");
                     Way(fences, PathKind.Fence, "A wooden fence. Close it into a loop for a pasture that keeps animals in");
@@ -130,7 +132,7 @@ namespace Wonderland
                         else if (vk == VehicleKind.Bus) for (int s = 0; s < VehicleFactory.BusStyles; s++) Vehicle(vk, s, VehicleFactory.BusStyleNames[s], VehicleFactory.BusStyleAbout[s]);
                         else Vehicle(vk, -1, VehicleName(vk), $"Pull the trigger on a road: a {VehicleName(vk).ToLower()} drives off about the town, the way you point");
                     }
-                    groups.Add(streets); groups.Add(paths); groups.Add(fences); groups.Add(vehicles);
+                    groups.Add(streets); groups.Add(paths); groups.Add(fences); groups.Add(vehicles); groups.Add(BridgesGroup(false));
                     open = PlacingVehicle != null ? 3 : PathSystem.IsBarrier((int)PathKind) ? 2 : PathKind is PathKind.Footpath or PathKind.Trail ? 1 : 0;
                     o.Add(GridChip());
                     footer = PlacingVehicle != null ? "The way you point is the way it faces" : "Hold the trigger and draw; let go to build it";
@@ -145,7 +147,7 @@ namespace Wonderland
                     draw.Rows.Add(Row(Note("Bend it"), "Grip on the track and move: that piece bends like a rope"));
                     draw.Rows.Add(Row(Note("Switches"), "Tap a switch (where tracks part) to throw it"));
                     signals.Rows.Add(Row(Choice("Signals", SignalMode, () => { SignalMode = true; RefreshOptions(); }), "Pull the trigger beside the track to put up a signal; tap one to hold trains at red"));
-                    groups.Add(draw); groups.Add(signals);
+                    groups.Add(draw); groups.Add(signals); groups.Add(BridgesGroup(true));
                     open = SignalMode ? 1 : 0;
                     o.Add(GridChip());
                     o.Add(new PaletteUI.Option("Remove railway", false, () => { if (World.Track.HasTrack) { World.RemoveTrack(); Say("Railway removed - Undo brings it back"); RefreshOptions(); } }, World.Track.HasTrack)
@@ -266,7 +268,7 @@ namespace Wonderland
             }
             if (groups.Count > 0)
             {
-                if (!openGroup.TryGetValue(Tool, out int was) || Tool is Tool.Terrain or Tool.Water or Tool.Paths or Tool.Track || Tool == Tool.Decor && was < 3
+                if (!openGroup.TryGetValue(Tool, out int was) || Tool is Tool.Terrain or Tool.Water || Tool == Tool.Paths && was != 4 || Tool == Tool.Track && was != 2 || Tool == Tool.Decor && was < 3   // (Bridges, too, stays open till left)
                     || Tool == Tool.Forest && (was != 2 || ForestErase))   // (Density shows no state of its own: it stays open till left)
                     openGroup[Tool] = open;
                 int g = Mathf.Clamp(openGroup[Tool], 0, groups.Count - 1);

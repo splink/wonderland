@@ -26,6 +26,39 @@ namespace Wonderland
         /// <summary>Whether a switch or a signal is at a point (they are picked before the bridge they stand on).</summary>
         private bool RailFixtureAt(Vector3 local) => World.Track.HasTrack && (World.Track.PickJoint(local, 0.045f) >= 0 || World.Track.PickSignal(local, 0.03f) >= 0);
 
+        /// <summary>The style new bridges over water are built in (Roads and Track > Bridges); null: each gets what suits it.</summary>
+        public BridgeStyle? BridgeChoice { get; set; }
+
+        /// <summary>The bridges there are now (by their anchors), before a stroke that may make new ones.</summary>
+        private List<Vector2> BridgesNow() => World.Bridges.Bridges.ConvertAll(b => b.Anchor);
+
+        /// <summary>After a stroke: the bridges it made take the style chosen in Bridges (if one is), and the banner says so.</summary>
+        private void StyleNewBridges(List<Vector2> before)
+        {
+            if (BridgeChoice is not BridgeStyle style || World.Bridges.Bridges.Count == before.Count) return;
+            string said = World.StyleNewBridges(before, style);
+            if (said != null) Say(said, 3f);
+        }
+
+        /// <summary>The Bridges group of the Roads and Track tools: what new bridges will look like, and how to change one.</summary>
+        private Group BridgesGroup(bool rail)
+        {
+            var g = new Group { Name = "Bridges", About = "How new bridges over water look - and changing one that is there" };
+            void Style(BridgeStyle? st, string label, string about) => g.Rows.Add(Row(Choice(label, BridgeChoice == st, () =>
+            {
+                BridgeChoice = st;
+                RefreshOptions();
+                Say(st is BridgeStyle s ? $"New bridges: {BridgeSystem.Names[(int)s].ToLower()} - draw across water" : "New bridges: whatever suits each crossing", 3f);
+            }), about));
+            Style(null, "Automatic", "Each crossing gets what suits it: stone arches over a stream, steel over wide water");
+            foreach (var st in new[] { BridgeStyle.Stone, BridgeStyle.Timber, BridgeStyle.Truss, BridgeStyle.Suspension, BridgeStyle.Covered })
+                Style(st, BridgeSystem.Short[(int)st], char.ToUpper(BridgeSystem.About[(int)st][0]) + BridgeSystem.About[(int)st].Substring(1) + (st == BridgeStyle.Suspension ? " (a long crossing)" : st == BridgeStyle.Covered ? " (a short crossing)" : ""));
+            if (rail) Style(BridgeStyle.Lift, "Lift", "Its middle span goes up for ships and tall boats; trains wait while it is up (a railway across 16 cm of water or more)");
+            else Style(BridgeStyle.Footbridge, "Footbridge", "A light deck for walkers (paths only)");
+            g.Rows.Add(Row(Note("Change one"), "Tap a bridge for its next style, or Select it: its card shows every style that suits it and how much room ships have under it"));
+            return g;
+        }
+
         /// <summary>A tap with Roads or Track: the bridge pointed at (or under the point) takes its next style.</summary>
         private void TapBridge(Vector3 at)
         {

@@ -165,7 +165,7 @@ namespace Wonderland
         private static bool SamePaths(List<PathLine> a, List<PathLine> b)
         {
             if (b == null || a.Count != b.Count) return false;
-            for (int i = 0; i < a.Count; i++) if (a[i].kind != b[i].kind || a[i].closed != b[i].closed || !a[i].points.SequenceEqual(b[i].points)) return false;
+            for (int i = 0; i < a.Count; i++) if (a[i].kind != b[i].kind || a[i].closed != b[i].closed || a[i].roundStart != b[i].roundStart || a[i].roundEnd != b[i].roundEnd || !a[i].points.SequenceEqual(b[i].points)) return false;
             return true;
         }
 

@@ -272,6 +272,8 @@ namespace Wonderland.Editor
             UnityEngine.Object.DestroyImmediate(w.gameObject);
 
             CrossingJourney();
+            TurningCircleJourney();
+            AccessJourney();
         }
 
         /// <summary>A road across a railway: vehicles wait at the level crossing while a train goes by.</summary>
@@ -290,6 +292,10 @@ namespace Wonderland.Editor
             w.Traffic.Refresh(true);
             Check(rail.Ok && road == null && road2 == null && train == null && w.Paths.LevelCrossings.Count > 0 && w.Traffic.Vehicles.Count > 0,
                 $"A road crosses the railway at a level crossing; homes on both sides have vehicles ({ok} places, {w.Traffic.Vehicles.Count} vehicles){road ?? road2 ?? train ?? ""}");
+            // Steam and smoke live in the world's space (they go with it when it is moved or scrolled).
+            int inRoom = 0, particles = 0;
+            foreach (var ps in w.GetComponentsInChildren<ParticleSystem>(true)) { particles++; if (ps.main.simulationSpace != ParticleSystemSimulationSpace.Custom || ps.main.customSimulationSpace != w.transform) inRoom++; }
+            Check(particles > 0 && inRoom == 0, $"Steam, smoke and spray move with the world when it is moved or scrolled: all {particles} particle systems in its space ({inRoom} in the room's)");
             // The road rises to the rails across each crossing: its surface just under the rail heads.
             float flush = 0f;
             foreach (var c in w.Paths.LevelCrossings) flush = Mathf.Max(flush, Mathf.Abs(w.People.GroundHeight(new Vector2(c.at.x, c.at.z)) - (c.at.y + TrackSystem.RailTop - 0.0004f)));

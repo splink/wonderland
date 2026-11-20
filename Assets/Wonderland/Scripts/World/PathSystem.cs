@@ -13,6 +13,7 @@ namespace Wonderland
         public int kind;
         public List<Vector2> points = new();   // 1 cm apart
         public bool closed;
+        public bool roundStart, roundEnd;      // a street's dead end with a turning circle (at its start, at its end)
         // A new road drawn on from free ends of roads (not saved): the lines it carries on, and whether from their starts.
         [NonSerialized] public int extendsStart = -1, extendsEnd = -1;
         [NonSerialized] public bool startAtItsStart, endAtItsStart;
@@ -79,14 +80,14 @@ namespace Wonderland
         public void SetLines(IEnumerable<PathLine> lines)
         {
             Lines.Clear();
-            if (lines != null) foreach (var l in lines) Lines.Add(new PathLine { kind = l.kind, points = new List<Vector2>(l.points), closed = l.closed });
+            if (lines != null) foreach (var l in lines) Lines.Add(new PathLine { kind = l.kind, points = new List<Vector2>(l.points), closed = l.closed, roundStart = l.roundStart, roundEnd = l.roundEnd });
             Rebuild();
         }
 
         public static List<PathLine> Copy(List<PathLine> lines)
         {
             var c = new List<PathLine>(lines.Count);
-            foreach (var l in lines) c.Add(new PathLine { kind = l.kind, points = new List<Vector2>(l.points), closed = l.closed });
+            foreach (var l in lines) c.Add(new PathLine { kind = l.kind, points = new List<Vector2>(l.points), closed = l.closed, roundStart = l.roundStart, roundEnd = l.roundEnd });
             return c;
         }
 
@@ -240,6 +241,12 @@ namespace Wonderland
 
         private float WayLift(Vector2 p)
         {
+            foreach (var c in TurningCircles)
+            {
+                float r = (p - c.Centre).magnitude;
+                if (r < CircleRadius) return RoadLift;
+                if (r < CircleRadius + CirclePavement && Vector2.Dot((p - c.Centre) / r, -c.Out) < 0.88f) return RoadLift + KerbHeight;
+            }
             if (Bays.Count > 0 && BayAt(p) != null) return RoadLift;   // (a lay-by or a driveway: level with the street)
             float d = Query(p, 0.09f, li => IsWay(Lines[li].kind), out int line);
             if (line < 0) return 0f;
@@ -262,6 +269,7 @@ namespace Wonderland
         /// <summary>Whether a point is on a way or a barrier (things should not be planted or built there).</summary>
         public bool Covers(Vector2 p, float margin)
         {
+            foreach (var c in TurningCircles) if ((p - c.Centre).magnitude < CircleRadius + CirclePavement + margin) return true;
             float d = Query(p, 0.03f + margin, _ => true, out int line);
             return line >= 0 && d < HalfWidth(Lines[line].kind) + Pavement(Lines[line].kind) + margin;
         }
@@ -461,6 +469,7 @@ namespace Wonderland
             PiecesBuilt = 0;
             Index();
             LocateLevelCrossings();   // (first: a way rises over the rails at its crossings)
+            LocateTurningCircles();
             // The junctions: found again when the ways have changed, else only levelled again where the ground has.
             bool restructured = Restructured();
             if (restructured) FindJunctions(); else Relevel();
@@ -478,6 +487,7 @@ namespace Wonderland
             Gather(barriers, pieces, p => p.Props);
             foreach (var l in Lines) if (IsBarrier(l.kind)) Barrier(barriers, l);
             CrossingPlanks(barriers);
+            TurningCircleMeshes(barriers);
             ForgetPieces();
             barriers.ToMesh("Fences and hedges", barrierMesh); barrierMesh.RecalculateBounds();
         }
@@ -746,6 +756,75 @@ namespace Wonderland
                 own = Mathf.Lerp(own, Mathf.Max(own, deck), w);
             }
             return own;
+        }
+
+        /// <summary>
+        /// A turning circle at a street's dead end: a round of asphalt beyond the end, kerbed and paved round, so traffic
+        /// that comes to the end drives round it and back instead of turning on the spot. <see cref="Centre"/> lies ahead
+        /// of the end (<see cref="Out"/>: the way the street was going); the street's own end opens into it.
+        /// </summary>
+        public struct TurningCircle { public PathLine Line; public bool AtStart; public Vector2 End, Out, Centre; public float Y; }
+        public readonly List<TurningCircle> TurningCircles = new();
+        /// <summary>A turning circle's asphalt (radius), the pavement round it, and the round its traffic drives (before keeping to its lane).</summary>
+        public const float CircleRadius = 0.044f, CirclePavement = 0.01f, CircleLoop = 0.013f;
+
+        /// <summary>Where a street's end is free: not in a junction, not on another way's end.</summary>
+        public bool FreeEnd(PathLine l, bool atStart)
+        {
+            if (l.closed || l.points.Count < 2) return false;
+            var e = atStart ? l.points[0] : l.points[^1];
+            if (NearJunction(e, 0.03f)) return false;
+            foreach (var o in Lines)
+            {
+                if (o == l || !IsCarWay(o.kind)) continue;
+                if (Distance(o, e) < HalfWidth(o.kind) + 0.02f) return false;
+            }
+            return true;
+        }
+
+        private void LocateTurningCircles()
+        {
+            TurningCircles.Clear();
+            foreach (var l in Lines)
+            {
+                if (l.kind != (int)PathKind.Road || l.closed || l.points.Count < 3) { l.roundStart = l.roundEnd = false; continue; }
+                for (int k = 0; k < 2; k++)
+                {
+                    bool atStart = k == 0;
+                    if (!(atStart ? l.roundStart : l.roundEnd)) continue;
+                    if (!FreeEnd(l, atStart)) { if (atStart) l.roundStart = false; else l.roundEnd = false; continue; }   // (joined on since: the street carries on)
+                    var e = atStart ? l.points[0] : l.points[^1];
+                    var inner = atStart ? l.points[Mathf.Min(3, l.points.Count - 1)] : l.points[Mathf.Max(0, l.points.Count - 4)];
+                    var o = (e - inner).normalized;
+                    var c = e + o * CircleRadius * 0.6f;   // (its back under the street's pavements: they run into its kerb)
+                    float y = Mathf.Max(terrain.SurfaceAt(e.x, e.y), terrain.SurfaceAt(c.x, c.y));
+                    TurningCircles.Add(new TurningCircle { Line = l, AtStart = atStart, End = e, Out = o, Centre = c, Y = y });
+                }
+            }
+        }
+
+        /// <summary>The turning circles: asphalt, the kerb and pavement round them (open where the street comes in), a skirt to the ground.</summary>
+        private void TurningCircleMeshes(MeshBuilder b)
+        {
+            const int seg = 36;
+            foreach (var c in TurningCircles)
+            {
+                float y = c.Y + RoadLift + 0.0002f, top = y + KerbHeight;
+                var centre = new Vector3(c.Centre.x, y, c.Centre.y);
+                b.AddDisc(centre, CircleRadius, seg, Pal.Shade(Asphalt, 0.98f), true);
+                float open = Mathf.Asin(Mathf.Clamp01(AsphaltHalf(c.Line.kind) / CircleRadius)) + 0.05f;   // (the street's mouth: no kerb across it)
+                float back = Mathf.Atan2(-c.Out.y, -c.Out.x);
+                for (int i = 0; i < seg; i++)
+                {
+                    float a0 = back + open + (Mathf.PI * 2f - open * 2f) * i / seg, a1 = back + open + (Mathf.PI * 2f - open * 2f) * (i + 1) / seg;
+                    Vector3 P(float a, float r, float h) => new(c.Centre.x + Mathf.Cos(a) * r, h, c.Centre.y + Mathf.Sin(a) * r);
+                    float r0 = CircleRadius, r1 = CircleRadius + KerbWidth * 0.5f, r2 = CircleRadius + CirclePavement;
+                    b.AddQuad(P(a1, r0, top), P(a0, r0, top), P(a0, r0, y), P(a1, r0, y), KerbStone);          // the kerb's face
+                    b.AddQuad(P(a1, r1, top), P(a0, r1, top), P(a0, r0, top), P(a1, r0, top), KerbStone);    // its top
+                    b.AddQuad(P(a1, r2, top), P(a0, r2, top), P(a0, r1, top), P(a1, r1, top), Paving);       // the pavement
+                    b.AddQuad(P(a1, r2, c.Y - 0.006f), P(a0, r2, c.Y - 0.006f), P(a0, r2, top), P(a1, r2, top), Pal.Shade(Paving, 0.8f));   // its edge down to the ground
+                }
+            }
         }
 
         /// <summary>Planks between the rails where a way crosses the railway, with crossbucks beside roads and lanes.</summary>

@@ -84,7 +84,9 @@ namespace Wonderland
                     t.Section("How to").Row("Roads", "pick Streets, Paths or Fences, hold the trigger and draw. Cross a road: crossroads with lights. End on one: a T-junction")
                         .Row("Railway", "Track > Draw: draw a big circle back to its start for a loop. Start on a track to branch; tap a switch to throw it")
                         .Row("Trains", "Train: pick one, trigger on the track. Point at a train: trigger stop / go, left stick speed")
-                        .Row("Bridges", "where a road or railway crosses water it gets a bridge. Select, trigger on a bridge: its card lists the styles that suit it - press one (or tap the bridge with Roads or Track for the next)")
+                        .Row("Bridges", "where a road or railway crosses water it gets a bridge. Roads or Track > Bridges: the style new ones are built in. Select a bridge: its card lists the styles that suit it (or tap it for the next)")
+                        .Row("Crossings", "a street over the railway rises flush with the rails; barriers come down while a train is near and traffic waits")
+                        .Row("Dead ends", "Roads > Streets > Turning circle, then tap a street's end: traffic drives round it and back")
                         .Row("Ships", "boats and container ships only pass under a bridge high enough for them (its card says which). A railway's Lift bridge opens for ships: trains wait while it is up")
                         .Row("Grid", "on: straight and square; off: freehand");
                     t.Section("Example").Line("Draw a loop of track, put a Steam train on it, add a station beside it (Buildings).");
@@ -93,7 +95,7 @@ namespace Wonderland
                     t.Section("What it's for").Line("Houses, shops, a zoo, a harbour - over a hundred buildings, each with a job in the world.");
                     t.Section("How to").Line("1. Build tool: pick a category, then a family on the second row.")
                         .Line("2. Point at a tile on the left: it says what it is, does and needs.")
-                        .Line("3. Point at the land and pull the trigger. Left stick: turn it (the arrow is its front).");
+                        .Line("3. Point at the land and pull the trigger. Left stick: turn it (the arrow is its front). Beside a street it faces the street, lined up behind the kerb.");
                     t.Section("Example").Line("Travel > Road > Bus stop beside a street: it stands back with a lay-by, and buses pull in.");
                     t.Section("Move one").Line("Grip (or trigger) on a building: pick it up, point elsewhere, let go.");
                     break;

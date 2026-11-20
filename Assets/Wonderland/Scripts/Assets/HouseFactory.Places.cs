@@ -1160,6 +1160,11 @@ namespace Wonderland
             return 0.12f;
         }
 
+        /// <summary>The fuel station's forecourt: where its driveway comes in (its front, the street side), and the pump lane - a car stands at the pumps there facing +x, having come in at -x and leaving at +x.</summary>
+        public static readonly Vector3 FuelEntrance = new(-0.045f, 0f, -0.05f);
+        public static readonly Vector3 FuelPump = new(-0.03f, 0f, -0.036f);
+        public const float FuelLaneEnd = 0.085f;
+
         private static float FuelStation(MeshBuilder b, ref Rng rng)
         {
             var white = Pal.Hex("#F7F1E6"); var red = Pal.Hex("#D7382E");

@@ -793,6 +793,14 @@ namespace Wonderland.Editor
             bi = world.Bridges.Find(new Vector2(pond.x, pond.z));
             var after = bi >= 0 ? world.Bridges.Bridges[bi].Style : BridgeStyle.Lift;
             Check(after != BridgeStyle.Lift && world.Track.Network.Edges.Count == edges, $"A tap on the bridge with the Track tool takes the next style ({BridgeSystem.Names[(int)after]}), and draws no track");
+            // While building: Track > Bridges chooses the style new bridges get.
+            ClickButton(hand, "Bridges");
+            string opened = palette.DetailsTitle;
+            ClickButton(hand, "Lift");
+            bool chosen = tools.BridgeChoice == BridgeStyle.Lift;
+            string then = palette.DetailsTitle;
+            tools.BridgeChoice = null;   // (Automatic again: the rest of the journey builds as before)
+            Check(chosen && opened == "Track · Bridges" && then == opened, $"Track > Bridges chooses the style new bridges are built in [panel \"{opened}\", then \"{then}\", Lift chosen {chosen}]");
             ClickButton(hand, "Select");
             for (int k = 0; k < 4; k++) world.Undo();
         }
