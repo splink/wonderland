@@ -122,5 +122,12 @@ Wonderland asset vertex budget:
   house Container yard: 14208 verts
   house Warehouse: 6408 verts
   house Harbour gate: 4537 verts
+  house Shopping mall: 8760 verts
+  house Supermarket: 4224 verts
+  house News kiosk: 1380 verts
+  house Pizzeria: 4766 verts
+  house Boutique: 3078 verts
+  house Florist: 4042 verts
+  house Lido: 3224 verts
   villager: 642 verts
   sheep: 828 verts, cow: 574 verts
