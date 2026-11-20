@@ -88,7 +88,9 @@ Shader "Wonderland/Water"
                 half alpha = lerp(0.6h, 0.9h, depth);
                 alpha = max(alpha, foam * 0.9h);
                 alpha *= saturate(depth * 40.0h + shore);   // feather the very edge
-                alpha *= smoothstep(0.0h, 0.7h, i.color.a);    // ...and fade out under the banks (pond water only; streams keep a = 1)
+                // ...and the edge: a stream's ribbon fades out over its rims; a pond is cut off softly where its blurred
+                // wetness passes a half - a smooth line across the grid's cells, wherever no bank hides it first.
+                alpha *= flow > 0.01h ? smoothstep(0.0h, 0.7h, i.color.a) : smoothstep(0.3h, 0.62h, i.color.a);
                 return half4(colour, alpha);
             }
             ENDHLSL

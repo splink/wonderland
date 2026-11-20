@@ -684,7 +684,77 @@ namespace Wonderland
             Despike(r);
             SmoothShores(r);
             UpdateSurface(r);
+            if (!drain && UnifyWater(r, out var merged)) r = Union(r, merged);
             return r;
+        }
+
+        private static RectInt Union(RectInt a, RectInt b)
+        {
+            int x0 = Mathf.Min(a.xMin, b.xMin), z0 = Mathf.Min(a.yMin, b.yMin);
+            return new RectInt(x0, z0, Mathf.Max(a.xMax, b.xMax) - x0, Mathf.Max(a.yMax, b.yMax) - z0);
+        }
+
+        /// <summary>
+        /// Water that touches is one body with one level. A stroke begun on dry ground keeps the level it started at, so
+        /// where it reaches a pond at another level the two would lie side by side as steps. Every body of water touching
+        /// <paramref name="r"/> that holds more than one level settles at its lowest - as water finds its level - and the
+        /// beds of the parts that were higher are lowered by as much, so they keep their depth (their banks stand higher
+        /// over the water instead). Returns whether anything changed, and the cells it touched.
+        /// </summary>
+        public bool UnifyWater(RectInt r, out RectInt touched)
+        {
+            touched = default;
+            bool any = false;
+            r = Expand(r, 1);
+            for (int z = r.yMin; z < r.yMax; z++)
+            for (int x = r.xMin; x < r.xMax; x++)
+            {
+                int i = z * Nx + x;
+                if (Water[i] < 0.5f) continue;
+                bool step = (x + 1 < Nx && Water[i + 1] >= 0.5f && Mathf.Abs(WaterLevel[i + 1] - WaterLevel[i]) > LevelTolerance)
+                         || (z + 1 < Nz && Water[i + Nx] >= 0.5f && Mathf.Abs(WaterLevel[i + Nx] - WaterLevel[i]) > LevelTolerance);
+                if (!step) continue;
+                var body = SettleBody(i);
+                touched = any ? Union(touched, body) : body;
+                any = true;
+            }
+            if (any) UpdateSurface(Expand(touched, 1));
+            return any;
+        }
+
+        /// <summary>Levels further apart than this are two levels (water drawn at the same level differs by rounding only).</summary>
+        public const float LevelTolerance = 0.0003f;
+
+        /// <summary>The body of water connected to cell <paramref name="seed"/> settles at its lowest level (see <see cref="UnifyWater"/>); returns its cells' bounds.</summary>
+        private RectInt SettleBody(int seed)
+        {
+            var seen = new bool[Water.Length];
+            var cells = new List<int>();
+            var queue = new Queue<int>();
+            queue.Enqueue(seed); seen[seed] = true;
+            float lowest = float.MaxValue;
+            while (queue.Count > 0)
+            {
+                int i = queue.Dequeue();
+                cells.Add(i);
+                lowest = Mathf.Min(lowest, WaterLevel[i]);
+                int x = i % Nx, z = i / Nx;
+                void Visit(int j) { if (!seen[j] && Water[j] >= 0.5f) { seen[j] = true; queue.Enqueue(j); } }
+                if (x > 0) Visit(i - 1);
+                if (x + 1 < Nx) Visit(i + 1);
+                if (z > 0) Visit(i - Nx);
+                if (z + 1 < Nz) Visit(i + Nx);
+            }
+            int x0 = Nx, z0 = Nz, x1 = 0, z1 = 0;
+            foreach (int i in cells)
+            {
+                int x = i % Nx, z = i / Nx;
+                x0 = Mathf.Min(x0, x); z0 = Mathf.Min(z0, z); x1 = Mathf.Max(x1, x); z1 = Mathf.Max(z1, z);
+                float drop = WaterLevel[i] - lowest;
+                WaterLevel[i] = lowest;
+                if (drop > LevelTolerance) Height[i] = Mathf.Min(Height[i], HeightForSurface(i, Mathf.Max(MinHeight + 0.001f, Surface[i] - drop)));
+            }
+            return new RectInt(x0, z0, x1 - x0 + 1, z1 - z0 + 1);
         }
 
         /// <summary>

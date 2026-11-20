@@ -7,7 +7,10 @@ namespace Wonderland
     /// <summary>
     /// Draws the ponds: a flat water surface over every water cell and two cells beyond, under the banks, where the
     /// opaque terrain clips it into a smooth, natural shoreline. Chunked like the terrain; only touched chunks rebuild.
-    /// Vertex colour: r = depth (0 shore .. 1 deep), g = shore (foam), b = flow (0 for still water).
+    /// Vertex colour: r = depth (0 shore .. 1 deep), g = shore (foam), b = flow (0 for still water), a = how wet round
+    /// about (the water cells blurred over their neighbours): the shader cuts the water off softly where that passes a
+    /// half, so where no bank stands higher than the water its edge is a smooth line, not the grid's cells. Depth is
+    /// measured to the bed smoothed the same way, so a bed dug unevenly by several strokes doesn't show as patches.
     /// </summary>
     public sealed class WaterRenderer : MonoBehaviour
     {
@@ -16,6 +19,7 @@ namespace Wonderland
         private Material material;
         private readonly Dictionary<int, (GameObject go, Mesh mesh)> chunks = new();
         private readonly MeshBuilder builder = new();
+        private readonly float[] wet = new float[4];
 
         public void Init(TerrainField terrain, Material water) { field = terrain; material = water; RebuildAll(); }
 
@@ -51,6 +55,34 @@ namespace Wonderland
             return best;
         }
 
+        /// <summary>How wet round a grid point: its water cells and their neighbours, weighted 4 / 2 / 1.</summary>
+        private float Wetness(int x, int z)
+        {
+            float sum = 0f, weight = 0f;
+            for (int oz = -1; oz <= 1; oz++)
+            for (int ox = -1; ox <= 1; ox++)
+            {
+                int xx = Mathf.Clamp(x + ox, 0, field.Nx - 1), zz = Mathf.Clamp(z + oz, 0, field.Nz - 1);
+                float w = (ox == 0 ? 2f : 1f) * (oz == 0 ? 2f : 1f);
+                sum += field.Water[zz * field.Nx + xx] >= 0.5f ? w : 0f; weight += w;
+            }
+            return sum / weight;
+        }
+
+        /// <summary>The bed round a grid point, smoothed over its neighbours.</summary>
+        private float Bed(int x, int z)
+        {
+            float sum = 0f, weight = 0f;
+            for (int oz = -1; oz <= 1; oz++)
+            for (int ox = -1; ox <= 1; ox++)
+            {
+                int xx = Mathf.Clamp(x + ox, 0, field.Nx - 1), zz = Mathf.Clamp(z + oz, 0, field.Nz - 1);
+                float w = (ox == 0 ? 2f : 1f) * (oz == 0 ? 2f : 1f);
+                sum += field.Surface[zz * field.Nx + xx] * w; weight += w;
+            }
+            return sum / weight;
+        }
+
         private void BuildChunk(int cx, int cz)
         {
             int key = cz * 10000 + cx;
@@ -74,26 +106,29 @@ namespace Wonderland
                 // A quad wherever any corner is water or borders water.
                 float level = Mathf.Max(Mathf.Max(LevelNear(x, z), LevelNear(x + 1, z)), Mathf.Max(LevelNear(x, z + 1), LevelNear(x + 1, z + 1)));
                 if (level < 0f) continue;
-                // A quad whose dry corner lies below the water would drape down a slope (a spill): leave it out.
-                bool spill = false;
-                for (int k = 0; k < 4 && !spill; k++)
+                // A quad whose dry corner lies below the water would drape down a slope (a spill): leave it out - unless
+                // the water's soft edge runs through it (then the shader cuts it off at the edge).
+                bool spill = false, edge = false;
+                for (int k = 0; k < 4; k++)
                 {
-                    int i = (z + (k >= 2 ? 1 : 0)) * field.Nx + x + (k == 1 || k == 2 ? 1 : 0);
+                    int xx = x + (k == 1 || k == 2 ? 1 : 0), zz = z + (k >= 2 ? 1 : 0);
+                    int i = zz * field.Nx + xx;
                     if (field.Water[i] < 0.5f && field.Surface[i] < level - 0.0005f) spill = true;
+                    wet[k] = Wetness(xx, zz);
+                    if (wet[k] >= 0.5f) edge = true;
                 }
-                if (spill) continue;
+                if (spill && !edge) continue;
                 int v = builder.VertexCount;
                 for (int k = 0; k < 4; k++)
                 {
                     int xx = x + (k == 1 || k == 2 ? 1 : 0), zz = z + (k >= 2 ? 1 : 0);
                     int i = zz * field.Nx + xx;
-                    float depth = Mathf.Clamp01((level - field.Surface[i]) / TerrainField.PondDepth);
-                    bool wet = field.Water[i] >= 0.5f;
-                    float shore = wet ? Mathf.Clamp01(1f - depth * 4f) : 0.8f;
+                    float depth = Mathf.Clamp01((level - Mathf.Max(field.Surface[i], Bed(xx, zz))) / TerrainField.PondDepth);
+                    float shore = Mathf.Lerp(0.8f, Mathf.Clamp01(1f - depth * 4f), Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.3f, 0.7f, wet[k])));
                     // Flat all the way out under the banks: the ground cuts it, so the shoreline is the smooth line where
                     // the land meets the water's level (not the grid's steps).
                     float y = level;
-                    builder.AddVertex(new Vector3(field.LocalX(xx), y, field.LocalZ(zz)), Vector3.up, new Color(depth, shore, 0f, wet ? 1f : 0f));   // (a: fades out towards dry land - a soft edge, not the grid's steps)
+                    builder.AddVertex(new Vector3(field.LocalX(xx), y, field.LocalZ(zz)), Vector3.up, new Color(depth, shore, 0f, wet[k]));
                 }
                 builder.AddTriangle(v, v + 3, v + 2); builder.AddTriangle(v, v + 2, v + 1);
             }

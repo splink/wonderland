@@ -622,6 +622,22 @@ namespace Wonderland
 
         private float Ground(Vector3 p) => terrain.SurfaceAt(p.x, p.z) - 0.006f;
 
+        /// <summary>
+        /// Whether a pier, a bent or a trestle leg standing here would stand in a running stream (or right at its edge):
+        /// over a stream the water passes under the span, between supports on its banks. (A lake or a pond is another
+        /// matter: a viaduct may stand in it.)
+        /// </summary>
+        private bool KeepClear(Vector3 p)
+        {
+            const float margin = 0.012f;
+            for (int k = 0; k < 5; k++)
+            {
+                var q = new Vector2(p.x, p.z) + (k == 0 ? Vector2.zero : new Vector2(k == 1 ? margin : k == 2 ? -margin : 0f, k == 3 ? margin : k == 4 ? -margin : 0f));
+                if (waterLevel(q) >= 0f && terrain.WaterAt(q.x, q.y) < 0.5f) return true;
+            }
+            return false;
+        }
+
         private static void Slab(MeshBuilder b, List<Vector3> path, List<Vector3> right, float half, float thickness, Color top, Color side)
         {
             var profile = new[] { new Vector2(-half, -thickness), new Vector2(-half, 0f), new Vector2(half, 0f), new Vector2(half, -thickness) };
@@ -671,11 +687,22 @@ namespace Wonderland
                 }
             }
             float length = (n - 1) * 0.01f;
-            int arches = Mathf.Max(1, Mathf.RoundToInt(length / 0.08f));
-            float step = (n - 1) / (float)arches;
-            for (int k = 0; k <= arches; k++)
+            int count = Mathf.Max(1, Mathf.RoundToInt(length / 0.08f));
+            float step = (n - 1) / (float)count;
+            // The piers: evenly spaced, but none in a stream - moved onto its bank (or left out, the arch spanning on).
+            var piers = new List<int> { 0 };
+            for (int k = 1; k < count; k++)
             {
-                int i = Mathf.Clamp(Mathf.RoundToInt(k * step), 0, n - 1);
+                int i = Mathf.RoundToInt(k * step), best = -1;
+                for (int d = 0; d <= Mathf.FloorToInt(step * 0.45f) && best < 0; d++)
+                    foreach (int j in new[] { i - d, i + d })
+                        if (best < 0 && j > piers[^1] + 2 && j < n - 3 && !KeepClear(path[j])) best = j;
+                if (best >= 0) piers.Add(best);
+            }
+            piers.Add(n - 1);
+            int arches = piers.Count - 1;
+            foreach (int i in piers)
+            {
                 var p = path[i];
                 float ground = Ground(p), top = p.y - 0.012f, h = Mathf.Max(0.004f, top - ground);
                 b.Push(new Vector3(p.x, ground + h / 2f, p.z), Quaternion.LookRotation(Vector3.Cross(right[i], Vector3.up), Vector3.up));
@@ -685,7 +712,7 @@ namespace Wonderland
             }
             for (int k = 0; k < arches; k++)
             {
-                int ia = Mathf.RoundToInt(k * step), ib = Mathf.Min(n - 1, Mathf.RoundToInt((k + 1) * step));
+                int ia = piers[k], ib = piers[k + 1];
                 foreach (int side in new[] { -1, 1 })
                 {
                     const int seg = 8;
@@ -730,6 +757,7 @@ namespace Wonderland
             for (int i = 2; i < n - 1; i += 6)
             {
                 var p = path[i];
+                if (KeepClear(p)) continue;   // (no bent in a stream: the deck spans it)
                 float ground = Ground(p), h = Mathf.Max(0.004f, p.y - 0.004f - ground);
                 b.Push(new Vector3(p.x, ground, p.z), Quaternion.LookRotation(Vector3.Cross(right[i], Vector3.up), Vector3.up));
                 foreach (int side in new[] { -1, 1 })
@@ -783,8 +811,8 @@ namespace Wonderland
                 b.AddBox(Vector3.zero, new Vector3(half * 2f + 0.006f, hh, 0.016f), Pal.StoneDark, Pal.Stone, Pal.StoneDark);
                 b.Pop();
             }
-            // Long trusses rest on a pier in the middle.
-            if (n > 40)
+            // Long trusses rest on a pier in the middle (not in a stream).
+            if (n > 40 && !KeepClear(path[n / 2]))
             {
                 var p = path[n / 2];
                 float ground = Ground(p), hh = Mathf.Max(0.004f, p.y - 0.006f - ground);

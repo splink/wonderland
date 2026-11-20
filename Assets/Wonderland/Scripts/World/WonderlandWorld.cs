@@ -443,15 +443,30 @@ namespace Wonderland
             foreach (var p in path.points)
                 if (Buildings.Contains(new Vector2(p.x, p.z), StreamSystem.HalfWidth * width)) return "Streams flow around houses";
             Checkpoint();
-            // Drawn on from a stream's free end it carries that stream on (one stream, widening or narrowing gently).
-            var joined = StreamSystem.Carry(Streams.Streams, path, Terrain);
-            StreamSystem.Confluence(Streams.Streams, joined);   // (meeting another's side: curving in, its mouth widening)
-            StreamSystem.Mouths(joined, Terrain);                // (into a pond or a lake: opening out)
-            StreamSystem.Relevel(joined, Terrain, Streams.Streams);
-            Streams.Streams.Add(joined);
+            // Drawn along a stream it widens it; across one it stops at its banks (a tributary in, a branch out).
+            var parts = StreamSystem.Overlap(Streams.Streams, path, out var widened);
+            var changed = new List<StreamPath>(widened);
+            foreach (var part in parts)
+            {
+                // Drawn on from a stream's free end it carries that stream on (one stream, widening or narrowing gently).
+                var joined = StreamSystem.Carry(Streams.Streams, part, Terrain);
+                StreamSystem.Confluence(Streams.Streams, joined);   // (meeting another's side: curving in, its mouth widening)
+                StreamSystem.Mouths(joined, Terrain);                // (into a pond or a lake: opening out)
+                StreamSystem.Relevel(joined, Terrain, Streams.Streams);
+                Streams.Streams.Add(joined);
+                changed.Add(joined);
+            }
+            foreach (var st in widened) StreamSystem.Relevel(st, Terrain, Streams.Streams);
             StreamSystem.Join(Streams.Streams);   // (onto another stream it starts or ends at)
-            AfterStreamsChanged(StreamSystem.Carve(Terrain, joined, Streams.Streams));
-            return null;
+            RectInt? region = null;
+            foreach (var st in changed)
+            {
+                var r = StreamSystem.Carve(Terrain, st, Streams.Streams);
+                if (r.width <= 0) continue;
+                region = region is RectInt u ? new RectInt(Mathf.Min(u.xMin, r.xMin), Mathf.Min(u.yMin, r.yMin), Mathf.Max(u.xMax, r.xMax) - Mathf.Min(u.xMin, r.xMin), Mathf.Max(u.yMax, r.yMax) - Mathf.Min(u.yMin, r.yMin)) : r;
+            }
+            AfterStreamsChanged(region ?? new RectInt(0, 0, 0, 0));
+            return changed.Count > 0 ? null : "Draw a longer stream";
         }
 
         private void AfterStreamsChanged(RectInt region)
@@ -780,6 +795,8 @@ namespace Wonderland
             }, everything: true);
             System.Array.Copy(exact, Terrain.Height, exact.Length);
             Terrain.UpdateSurface(Terrain.All);
+            // A lake painted in strokes at different levels before water settled as one body: settled now.
+            if (Terrain.UnifyWater(Terrain.All, out var settled)) { TerrainView.Rebuild(settled); WaterView?.Rebuild(settled); }
             // Mending what an old fault left in a save: streams whose water level was never set, and the walls of land
             // they carved up to the ceiling.
             bool mend = false;

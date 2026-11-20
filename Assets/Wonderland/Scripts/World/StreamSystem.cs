@@ -173,6 +173,107 @@ namespace Wonderland
         }
 
         /// <summary>
+        /// A stroke drawn over streams already there. Where it runs along one (for 8 cm or more of that stream's course)
+        /// it widens that stream there - one water as wide as both, its course shifted to the middle of the two - rather
+        /// than laying a second stream over it. Where it only crosses or touches one, it stops at the bank: the parts on
+        /// either side are left to meet that stream as a tributary running in and a branch running out, so water never
+        /// flows two ways over the same ground. Where it runs on from a stream's end it is left as it is (it carries that
+        /// stream on: <see cref="Carry"/>). Returns the parts of the stroke still to build (at least 15 cm long; none when
+        /// it all went into widening) and the streams it widened.
+        /// </summary>
+        public static List<StreamPath> Overlap(List<StreamPath> all, StreamPath fresh, out List<StreamPath> widened)
+        {
+            widened = new List<StreamPath>();
+            int n = fresh.points.Count;
+            var on = new int[n]; var along = new float[n];
+            for (int i = 0; i < n; i++)
+            {
+                on[i] = -1;
+                var p = new Vector2(fresh.points[i].x, fresh.points[i].z);
+                float best = float.MaxValue;
+                for (int k = 0; k < all.Count; k++)
+                {
+                    var o = all[k];
+                    if (o.points.Count < 2) continue;
+                    float d = Nearest(o, p, out _, out float a);
+                    if (d < HalfWidth * (o.WidthAlong(a) + fresh.WidthAt(i) * 0.5f) && d < best) { best = d; on[i] = k; along[i] = a; }
+                }
+            }
+            var cut = new bool[n];
+            for (int start = 0; start < n;)
+            {
+                if (on[start] < 0) { start++; continue; }
+                int k = on[start], end = start;
+                while (end + 1 < n && on[end + 1] == k) end++;
+                var o = all[k];
+                float lo = float.MaxValue, hi = float.MinValue;
+                for (int i = start; i <= end; i++) { lo = Mathf.Min(lo, along[i]); hi = Mathf.Max(hi, along[i]); }
+                float length = (o.points.Count - 1) * Spacing;
+                bool atEnd = lo < 0.03f || hi > length - 0.03f;
+                bool most = end - start + 1 > n * 0.6f;
+                if (atEnd && !most) { start = end + 1; continue; }   // (carrying it on from its end, or passing its end: left as drawn)
+                if (hi - lo >= 0.08f) { Widen(o, fresh, start, end); if (!widened.Contains(o)) widened.Add(o); }
+                for (int i = start; i <= end; i++) cut[i] = true;
+                start = end + 1;
+            }
+            var parts = new List<StreamPath>();
+            for (int start = 0; start < n;)
+            {
+                if (cut[start]) { start++; continue; }
+                int end = start;
+                while (end + 1 < n && !cut[end + 1]) end++;
+                if ((end - start) * Spacing >= 0.15f)
+                {
+                    var part = new StreamPath { width = fresh.width };
+                    for (int i = start; i <= end; i++) { part.points.Add(fresh.points[i]); if (fresh.widths != null && fresh.widths.Count == n) part.widths.Add(fresh.widths[i]); }
+                    parts.Add(part);
+                }
+                start = end + 1;
+            }
+            return parts;
+        }
+
+        /// <summary>
+        /// Widens stream <paramref name="o"/> where points <paramref name="from"/>..<paramref name="to"/> of a stroke run
+        /// along it: at each of its points there, its water spans both its own and the stroke's (its course moved to the
+        /// middle of the two, its width the whole), eased in and out at either end of the stretch.
+        /// </summary>
+        private static void Widen(StreamPath o, StreamPath fresh, int from, int to)
+        {
+            int m = o.points.Count;
+            if (o.widths == null || o.widths.Count != m) { o.widths = new List<float>(); for (int i = 0; i < m; i++) o.widths.Add(o.Width); }
+            var stroke = new List<Vector2>();
+            for (int i = from; i <= to; i++) stroke.Add(new Vector2(fresh.points[i].x, fresh.points[i].z));
+            float lo = float.MaxValue, hi = float.MinValue;
+            foreach (var q in stroke) { Nearest(o, q, out _, out float a); lo = Mathf.Min(lo, a); hi = Mathf.Max(hi, a); }
+            int k0 = Mathf.Clamp(Mathf.FloorToInt(lo / Spacing), 0, m - 1), k1 = Mathf.Clamp(Mathf.CeilToInt(hi / Spacing), 0, m - 1);
+            float hf = HalfWidth * fresh.Width;
+            const int ease = 5;
+            var shifted = new Vector3[m]; var wide = new float[m];
+            for (int k = 0; k < m; k++) { shifted[k] = o.points[k]; wide[k] = o.widths[k]; }
+            for (int k = Mathf.Max(0, k0 - ease); k <= Mathf.Min(m - 1, k1 + ease); k++)
+            {
+                var p = o.points[k];
+                var t = o.points[Mathf.Min(k + 1, m - 1)] - o.points[Mathf.Max(k - 1, 0)]; t.y = 0f;
+                if (t.sqrMagnitude < 1e-10f) continue;
+                var normal = new Vector2(-t.z, t.x).normalized;
+                // Where the stroke is beside this point (the nearest of it, within the stretch).
+                var c = new Vector2(p.x, p.z);
+                float bestD = float.MaxValue; Vector2 near = c;
+                foreach (var q in stroke) { float d = (q - c).sqrMagnitude; if (d < bestD) { bestD = d; near = q; } }
+                float offset = Vector2.Dot(near - c, normal);
+                float h = HalfWidth * o.widths[k];
+                float left = Mathf.Min(-h, offset - hf), right = Mathf.Max(h, offset + hf);
+                float centre = (left + right) * 0.5f, half = Mathf.Min((right - left) * 0.5f, HalfWidth * 3.2f);
+                float inside = k < k0 ? (k - (k0 - ease)) / (float)ease : k > k1 ? ((k1 + ease) - k) / (float)ease : 1f;
+                float e = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(inside));
+                shifted[k] = p + new Vector3(normal.x, 0f, normal.y) * centre * e;
+                wide[k] = Mathf.Lerp(o.widths[k], Mathf.Max(o.widths[k], half / HalfWidth), e);
+            }
+            for (int k = 0; k < m; k++) { o.points[k] = shifted[k]; o.widths[k] = wide[k]; }
+        }
+
+        /// <summary>
         /// The new water on from the end of an old stream (<paramref name="old"/> ends at the joint, <paramref name="p"/>
         /// is the stroke starting near it): whatever of the stroke lies back over the old stream is dropped; the rest is
         /// joined on by a curve leaving the old end along the old stream's own heading and meeting the stroke a little way
@@ -655,7 +756,9 @@ namespace Wonderland
                 }
                 for (int pass = 0; pass < 2; pass++)
                 {
-                    float run = 0f;
+                    // (counted from where it went in: a stream that begins or ends in the water has gone in from one side
+                    // only - its tip out in the lake is far under, not just entering)
+                    float run = 1e6f;
                     for (int k = 0; k < n; k++)
                     {
                         int i = pass == 0 ? k : n - 1 - k;
@@ -676,7 +779,7 @@ namespace Wonderland
                         toWet[i] = pass == 0 ? run : Mathf.Min(toWet[i], run);
                     }
                 }
-                const float fade = 0.025f;
+                const float fade = 0.04f;
                 float startTaper = wet[0] || s.JoinsAtStart ? 0f : 0.05f, endTaper = wet[n - 1] || s.JoinsAtEnd ? 0f : 0.05f;
                 for (int i = 0; i < n; i++)
                 {
@@ -692,14 +795,20 @@ namespace Wonderland
                     float surface = wet[i] ? Mathf.Min(p.y, cover[i]) : p.y + 0.0004f;
                     float shown = wet[i] ? 1f - Mathf.Clamp01(under[i] / fade) : 1f;
                     if (wet[i]) rapids = 0f;
+                    // Nearing the water it runs into it slows to that water's stillness, and its banks' foam gives way.
+                    float calm = wet[i] ? 1f : 1f - Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(toWet[i] / 0.08f));
+                    float flow = Mathf.Lerp(0.5f + rapids * 0.5f, 0.06f, calm);
                     for (int k = 0; k <= across; k++)
                     {
                         float off = offs[k], u = (off + 1f) * 0.5f;
                         bool rim = Mathf.Abs(off) > 0.99f;
-                        float depth = (1f - off * off) * (wet[i] ? 0.3f : Mathf.Lerp(0.3f, 0.75f, Mathf.SmoothStep(0f, 1f, toWet[i] / 0.1f)));
-                        float shore = Mathf.Max(rim ? 1f : Mathf.Abs(off) > 0.6f ? 0.3f : 0f, rapids * 0.45f);   // (whitewater streaks along the edge, not a white block)
                         var at = new Vector3(p.x, surface - (rim ? 0.003f : 0f), p.z) + side * off * hw;
-                        int v = b.AddVertex(at, Vector3.up, new Color(depth, shore, 0.5f + rapids * 0.5f, rim ? 0f : shown));
+                        // Its colour from how deep the water is over the ground there - as a pond's is - so a stream and
+                        // the lake it runs into are the same water where they meet.
+                        float bedDepth = Terrain != null ? Mathf.Clamp01((surface - Terrain.SurfaceAt(at.x, at.z)) / TerrainField.PondDepth) : 0f;
+                        float depth = wet[i] ? bedDepth : Mathf.Max(bedDepth, 0.2f * (1f - off * off));
+                        float shore = Mathf.Max(rim ? 1f : Mathf.Abs(off) > 0.6f ? 0.3f : 0f, rapids * 0.45f) * (1f - calm);   // (whitewater streaks along the edge, not a white block)
+                        int v = b.AddVertex(at, Vector3.up, new Color(depth, shore, flow, rim ? 0f : shown));
                         b.Uvs[v] = new Vector2(u * 0.6f, along);
                     }
                     if (i > 0 && !(wet[i] && wet[i - 1] && under[i] > fade && under[i - 1] > fade))
