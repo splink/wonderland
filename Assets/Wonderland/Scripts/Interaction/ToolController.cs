@@ -23,6 +23,8 @@ namespace Wonderland
 
         public Tool Tool { get; private set; } = Tool.Terrain;
         public TerrainBrush TerrainMode { get; private set; } = TerrainBrush.Raise;
+        /// <summary>What the Terrain tool lays (see <see cref="TerrainField.Paving"/>; 0 takes it up), or -1 when it shapes the land.</summary>
+        public int PaveKind { get; set; } = -1;
         public bool ForestErase { get; private set; }
         /// <summary>What the forest brush plants.</summary>
         public ForestType ForestType { get; set; }
@@ -245,7 +247,7 @@ namespace Wonderland
             return go.transform;
         }
 
-        private bool LandMode => Tool == Tool.Terrain && (TerrainMode == TerrainBrush.Grow || TerrainMode == TerrainBrush.Trim);
+        private bool LandMode => Tool == Tool.Terrain && PaveKind < 0 && (TerrainMode == TerrainBrush.Grow || TerrainMode == TerrainBrush.Trim);
 
         public void Say(string text, float seconds = 3f) { message = text; messageUntil = Time.time + seconds; }
         public string LastMessage => message;
@@ -295,6 +297,7 @@ namespace Wonderland
 
         private string Hint() => Tool switch
         {
+            Tool.Terrain when PaveKind >= 0 => PaveKind == 0 ? "Hold trigger to take the paving up (grass again)  ·  left stick: size" : $"Hold trigger to lay {TerrainField.Paving[PaveKind].ToLower()}  ·  left stick: size  ·  B: undo",
             Tool.Terrain => TerrainMode switch
             {
                 TerrainBrush.Grow => "Grow: paint over the floor to extend the land anywhere in the room  ·  A: mode",
@@ -504,6 +507,7 @@ namespace Wonderland
         {
             switch (Tool)
             {
+                case Tool.Terrain when PaveKind >= 0: PaveKind = PaveKind % 4 + 1; Say(TerrainField.Paving[PaveKind]); RefreshOptions(); break;
                 case Tool.Terrain: TerrainMode = (TerrainBrush)(((int)TerrainMode + 1) % 7); Say(TerrainMode.ToString()); break;
                 case Tool.Forest: ForestErase = !ForestErase; Say(ForestErase ? "Erase trees" : "Paint trees"); break;
                 case Tool.Water:
@@ -541,6 +545,17 @@ namespace Wonderland
 
         private void TerrainTool(PointerInput input, bool hit, Vector3 local, float dt, ref Color colour)
         {
+            if (PaveKind >= 0)
+            {
+                // Laying the ground: paving, cobbles, asphalt, gravel - or grass again.
+                var ring = PaveKind == 0 ? new Color(0.55f, 1f, 0.5f) : new Color(0.95f, 0.85f, 0.6f);
+                colour = ring; colour.a = 0.8f;
+                if (hit) World.TerrainView.SetBrush(local, Radius, ring, 0.55f + (stroking ? 0.35f : 0f)); else World.TerrainView.HideBrush();
+                if (input.TriggerDown && hit) { World.Checkpoint(); stroking = true; }
+                if (stroking && input.Trigger && hit) { World.PaveStroke(local, Radius, (byte)PaveKind); Buzz(0.1f); }
+                if (stroking && (input.TriggerUp || !input.Trigger)) EndStroke();
+                return;
+            }
             colour = ModeColour(TerrainMode); colour.a = 0.8f;
             if (LandMode)
             {

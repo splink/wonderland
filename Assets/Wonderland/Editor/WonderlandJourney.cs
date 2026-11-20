@@ -157,6 +157,32 @@ namespace Wonderland.Editor
             var kinds = new HashSet<int>(); foreach (var tr in world.Forest.Trees) kinds.Add(tr.kind);
             Check(trees > 120, $"Forest brush paints clusters ({trees} trees, {kinds.Count} species)");
             Check(kinds.Count >= 4, "Painted forest mixes species");
+            // City ground: slabs, cobbles, asphalt and gravel laid on the land; trees give way; saved, loaded and undone.
+            world.Checkpoint();
+            Hold(() => world.PaintForest(new Vector3(0.45f, 0f, -0.45f), 0.14f, 0.9f, Dt), 0.8f);
+            world.Checkpoint();
+            var paved = new Vector2[4];
+            for (int k = 1; k <= 4; k++)
+            {
+                paved[k - 1] = new Vector2(0.33f + (k - 1) * 0.08f, -0.45f);
+                world.PaveStroke(new Vector3(paved[k - 1].x, 0f, paved[k - 1].y), 0.03f, (byte)k);
+            }
+            bool laid = true, cleared = true;
+            for (int k = 1; k <= 4; k++)
+            {
+                laid &= world.Terrain.PaveAt(paved[k - 1].x, paved[k - 1].y) == k;
+                foreach (var tr in world.Forest.Trees) cleared &= (new Vector2(tr.x, tr.z) - paved[k - 1]).magnitude > 0.025f;
+            }
+            var paveCopy = new GameObject("Paved copy").AddComponent<WonderlandWorld>();
+            paveCopy.transform.position = new Vector3(240f, 0f, 0f);
+            paveCopy.Deserialize(world.Serialize(), Materials());
+            bool kept = true; for (int k = 1; k <= 4; k++) kept &= paveCopy.Terrain.PaveAt(paved[k - 1].x, paved[k - 1].y) == k;
+            UnityEngine.Object.DestroyImmediate(paveCopy.gameObject);
+            world.Undo();
+            bool undone = true; for (int k = 1; k <= 4; k++) undone &= world.Terrain.PaveAt(paved[k - 1].x, paved[k - 1].y) == 0;
+            world.Undo();
+            Check(laid && cleared && kept && undone, $"The ground can be paved - slabs, cobbles, asphalt, gravel; trees give way, a save keeps it, undo takes it up (laid {laid}, trees cleared {cleared}, saved {kept}, undone {undone})");
+
             // Forest types: each plants its own kinds of tree (the orchard in rows); undone again afterwards.
             world.Checkpoint();
             var typed = new List<string>();

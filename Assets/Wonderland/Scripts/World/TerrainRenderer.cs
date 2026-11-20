@@ -30,6 +30,7 @@ namespace Wonderland
             public readonly Vector3[] Vertices = new Vector3[V * V];
             public readonly Vector3[] Normals = new Vector3[V * V];
             public readonly Color32[] Colours = new Color32[V * V];
+            public readonly System.Collections.Generic.List<Vector4> Paving = new(new Vector4[V * V]);   // per vertex: slabs, cobbles, asphalt, gravel
         }
 
         public void Init(TerrainField terrain, Material sharedMaterial)
@@ -164,6 +165,8 @@ namespace Wonderland
                 float laplacian = (hl + hr + hd + hu - 4f * h) / (cell * cell);
                 float cavity = Mathf.Clamp01(0.5f - laplacian * 0.05f);
                 c.Colours[v] = new Color32((byte)(Mathf.Clamp01(field.Soil[i]) * 255f), (byte)(field.Edge[i] * 255f), (byte)(cavity * 255f), (byte)(255 - (wet ? Beach(x, z) : 0f) * 255f));
+                int pave = field.Pave[i];
+                c.Paving[v] = pave switch { 1 => new Vector4(1f, 0f, 0f, 0f), 2 => new Vector4(0f, 1f, 0f, 0f), 3 => new Vector4(0f, 0f, 1f, 0f), 4 => new Vector4(0f, 0f, 0f, 1f), _ => Vector4.zero };
             }
             triangles.Clear();
             var edge = field.Edge;
@@ -185,6 +188,7 @@ namespace Wonderland
             mesh.SetVertices(c.Vertices);
             mesh.SetNormals(c.Normals);
             mesh.SetColors(c.Colours);
+            mesh.SetUVs(0, c.Paving);
             mesh.SetTriangles(triangles, 0, false);
             float cx = field.LocalX(c.X0) + c.W * cell * 0.5f, cz = field.LocalZ(c.Z0) + c.H * cell * 0.5f;
             mesh.bounds = new Bounds(new Vector3(cx, TerrainField.MaxHeight * 0.5f, cz), new Vector3(c.W * cell, TerrainField.MaxHeight + 0.02f, c.H * cell));

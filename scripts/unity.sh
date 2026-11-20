@@ -40,6 +40,7 @@ case "$task" in
   bayrender) method=Wonderland.Editor.WonderlandJourney.BayRenders; graphics=() ;;
   harbourrender) method=Wonderland.Editor.WonderlandJourney.HarbourRenders; graphics=() ;;
   shoprender) method=Wonderland.Editor.WonderlandRenders.ShopRenders; graphics=() ;;
+  groundrender) method=Wonderland.Editor.WonderlandJourney.GroundRenders; graphics=() ;;
   liftrender) method=Wonderland.Editor.WonderlandJourney.LiftRenders; graphics=() ;;
   saveprobe) method=Wonderland.Editor.WonderlandSaveProbe.Run; graphics=() ;;
   terrainrender) method=Wonderland.Editor.WonderlandJourney.TerrainModeRenders; graphics=() ;;

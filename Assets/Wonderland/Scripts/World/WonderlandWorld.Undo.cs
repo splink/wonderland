@@ -43,7 +43,7 @@ namespace Wonderland
         {
             public RectInt Span;   // global cells
             public float[] Height, WaterLevel;
-            public byte[] Land, Lock, Soil, Water;
+            public byte[] Land, Lock, Soil, Water, Pave;
         }
 
         private static byte Byte(float v) => (byte)Mathf.RoundToInt(Mathf.Clamp01(v) * 255f);
@@ -64,13 +64,13 @@ namespace Wonderland
                 long key = TerrainStore.Key(cx, cz);
                 if (lastGround.TryGetValue(key, out var before) && before.Span == span && Same(before)) { kept[key] = before; list.Add(before); continue; }
                 int count = span.width * span.height;
-                var c = new GroundCopy { Span = span, Height = new float[count], WaterLevel = new float[count], Land = new byte[count], Lock = new byte[count], Soil = new byte[count], Water = new byte[count] };
+                var c = new GroundCopy { Span = span, Height = new float[count], WaterLevel = new float[count], Land = new byte[count], Lock = new byte[count], Soil = new byte[count], Water = new byte[count], Pave = new byte[count] };
                 for (int z = 0; z < span.height; z++)
                 for (int x = 0; x < span.width; x++)
                 {
                     int i = (span.yMin + z - grid.yMin) * t.Nx + (span.xMin + x - grid.xMin), k = z * span.width + x;
                     c.Height[k] = t.Height[i]; c.WaterLevel[k] = t.WaterLevel[i];
-                    c.Land[k] = Byte(t.Land[i]); c.Lock[k] = Byte(t.Lock[i]); c.Soil[k] = Byte(t.Soil[i]); c.Water[k] = Byte(t.Water[i]);
+                    c.Land[k] = Byte(t.Land[i]); c.Lock[k] = Byte(t.Lock[i]); c.Soil[k] = Byte(t.Soil[i]); c.Water[k] = Byte(t.Water[i]); c.Pave[k] = t.Pave[i];
                 }
                 kept[key] = c; list.Add(c);
             }
@@ -84,7 +84,7 @@ namespace Wonderland
                 {
                     int i = (c.Span.yMin + z - grid.yMin) * t.Nx + (c.Span.xMin + x - grid.xMin), k = z * c.Span.width + x;
                     if (c.Height[k] != t.Height[i] || c.WaterLevel[k] != t.WaterLevel[i] || c.Land[k] != Byte(t.Land[i]) || c.Lock[k] != Byte(t.Lock[i])
-                        || c.Soil[k] != Byte(t.Soil[i]) || c.Water[k] != Byte(t.Water[i])) return false;
+                        || c.Soil[k] != Byte(t.Soil[i]) || c.Water[k] != Byte(t.Water[i]) || c.Pave[k] != t.Pave[i]) return false;
                 }
                 return true;
             }
@@ -121,7 +121,7 @@ namespace Wonderland
                 var changed = new List<RectInt>();
                 foreach (var g in s.Ground)
                 {
-                    var r = Terrain.WriteCells(g.Span, g.Height, g.WaterLevel, g.Land, g.Lock, g.Soil, g.Water);
+                    var r = Terrain.WriteCells(g.Span, g.Height, g.WaterLevel, g.Land, g.Lock, g.Soil, g.Water, g.Pave);
                     if (r.width > 0) changed.Add(r);
                 }
                 TerrainView.Rebuild(changed);

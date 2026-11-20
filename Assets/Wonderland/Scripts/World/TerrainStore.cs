@@ -15,13 +15,13 @@ namespace Wonderland
     {
         public const int Cells = 60;
         public const int CellCount = Cells * Cells;
-        private const int FileVersion = 1;
+        private const int FileVersion = 2;   // (2: the paving too; version 1 chunks read as unpaved)
 
         /// <summary>One chunk's ground, cell by cell (row by row, z then x, from its first global cell).</summary>
         public sealed class Chunk
         {
             public readonly float[] Height = new float[CellCount], Surface = new float[CellCount], WaterLevel = new float[CellCount];
-            public readonly byte[] Land = new byte[CellCount], Lock = new byte[CellCount], Soil = new byte[CellCount], Water = new byte[CellCount];
+            public readonly byte[] Land = new byte[CellCount], Lock = new byte[CellCount], Soil = new byte[CellCount], Water = new byte[CellCount], Pave = new byte[CellCount];
             public bool Dirty;   // changed since it was last written
         }
 
@@ -141,15 +141,18 @@ namespace Wonderland
             w.Write(FileVersion);
             foreach (var a in new[] { c.Height, c.Surface, c.WaterLevel }) foreach (float v in a) w.Write(v);
             foreach (var a in new[] { c.Land, c.Lock, c.Soil, c.Water }) w.Write(a);
+            w.Write(c.Pave);
         }
 
         private static Chunk ReadFrom(Stream stream)
         {
             using var r = new BinaryReader(stream);
-            if (r.ReadInt32() != FileVersion) return null;
+            int version = r.ReadInt32();
+            if (version < 1 || version > FileVersion) return null;
             var c = new Chunk();
             foreach (var a in new[] { c.Height, c.Surface, c.WaterLevel }) for (int i = 0; i < CellCount; i++) a[i] = r.ReadSingle();
             foreach (var a in new[] { c.Land, c.Lock, c.Soil, c.Water }) { var b = r.ReadBytes(CellCount); if (b.Length != CellCount) return null; Array.Copy(b, a, CellCount); }
+            if (version >= 2) { var b = r.ReadBytes(CellCount); if (b.Length != CellCount) return null; Array.Copy(b, c.Pave, CellCount); }
             return c;
         }
 

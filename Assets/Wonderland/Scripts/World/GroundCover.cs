@@ -172,7 +172,7 @@ namespace Wonderland
                             if (t.kind != 6) builder.AppendFast(meshes[11], new Vector3(t.x, terrain.SurfaceAt(t.x, t.z) - 0.0008f, t.z), Quaternion.Euler(0f, t.rotation, 0f), t.scale, new Color(t.tint, t.tint, t.tint));
                             continue;
                         }
-                        if (terrain.EdgeAt(t.x, t.z) < 0.3f || terrain.LockAt(t.x, t.z) > 0.1f || blocked(new Vector2(t.x, t.z))) continue;
+                        if (terrain.EdgeAt(t.x, t.z) < 0.3f || terrain.LockAt(t.x, t.z) > 0.1f || terrain.PaveAt(t.x, t.z) != 0 || blocked(new Vector2(t.x, t.z))) continue;
                         var normal = terrain.NormalAt(t.x, t.z);
                         float height = terrain.SurfaceAt(t.x, t.z);
                         // Mountains: boulders on scree and cliffs, alpine flowers up high, nothing but rocks in the snow.

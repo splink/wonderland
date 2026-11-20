@@ -382,6 +382,20 @@ namespace Wonderland
             if (any) RefreshBridges();
         }
 
+        /// <summary>
+        /// One frame of laying paving (see <see cref="TerrainField.Paving"/>; 0 takes it up): the ground under the brush;
+        /// trees and grass tufts give way to it.
+        /// </summary>
+        public void PaveStroke(Vector3 local, float radius, byte kind)
+        {
+            var centre = new Vector2(local.x, local.z);
+            var region = Terrain.PaveBrush(centre, radius, kind);
+            if (region.width == 0) return;
+            TerrainView.Rebuild(region);
+            Cover.MarkDirtyRegion(centre, radius);
+            if (kind != 0) Forest.RemoveWhere(t => (new Vector2(t.x, t.z) - centre).sqrMagnitude < radius * radius && Terrain.PaveAt(t.x, t.z) != 0);
+        }
+
         public void TerrainStroke(TerrainBrush brush, Vector3 local, float radius, float strength, float dt, float flattenTarget)
         {
             var centre = new Vector2(local.x, local.z);
@@ -585,7 +599,7 @@ namespace Wonderland
         public bool CanGrowTree(Vector2 p, float footprint)
         {
             if (Terrain.WaterAt(p.x, p.y) > 0.1f || Streams.IsWet(p, footprint * 0.5f + 0.008f)) return false;
-            if (Terrain.LockAt(p.x, p.y) > 0.25f) return false;
+            if (Terrain.LockAt(p.x, p.y) > 0.25f || Terrain.PaveAt(p.x, p.y) != 0) return false;   // (nothing grows through paving)
             if (Track.DistanceTo(new Vector3(p.x, 0f, p.y)) < TrackSystem.BedHalfWidth + footprint * 0.5f + 0.008f) return false;
             if (Paths.Covers(p, footprint * 0.5f)) return false;
             return !Buildings.Contains(p, footprint * 0.6f);
@@ -633,7 +647,7 @@ namespace Wonderland
             public int gx, gz, nx, nz;       // v2: the grid in global cells
             public float size;               // v1: island size (its grid spanned exactly this); v2: starting patch size
             public int seed;
-            public string height, land, locks, soil, water, waterLevel;
+            public string height, land, locks, soil, water, waterLevel, pave;
             public List<TreeInstance> trees;
             public List<HouseInstance> houses;
             public List<AnimalInstance> animals;
@@ -685,6 +699,7 @@ namespace Wonderland
             gx = Terrain.GX0, gz = Terrain.GZ0, nx = Terrain.Nx, nz = Terrain.Nz, size = Terrain.PatchSize, seed = Seed,
             height = chunked ? null : Pack(Terrain.Height), land = chunked ? null : Pack(Terrain.Land), locks = chunked ? null : Pack(Terrain.Lock), soil = chunked ? null : Pack(Terrain.Soil),
             water = chunked ? null : Pack(Terrain.Water), waterLevel = chunked ? null : Pack(Terrain.WaterLevel),
+            pave = chunked ? null : System.Convert.ToBase64String(Terrain.Pave),
             chunked = chunked, chunks = chunked ? null : ChunkTexts(),
             trees = new List<TreeInstance>(Forest.Trees), houses = new List<HouseInstance>(Buildings.Houses), animals = new List<AnimalInstance>(Animals.Animals), people = new List<PersonInstance>(People.Export()), streams = CopyStreams(Streams.Streams), paths = PathSystem.Copy(Paths.Lines), bridges = new List<BridgeChoice>(Bridges.Choices),
             network = Track.Network.ToData(), trains = Trains.ToData(), signals = new List<SignalInstance>(Track.Signals), switchMode = (int)Trains.Mode,
@@ -714,6 +729,7 @@ namespace Wonderland
             var d = JsonUtility.FromJson<SaveData>(json);
             if (d == null || d.size <= 0f || (d.version < 1 || d.version > 9)) throw new InvalidDataException("Not a Wonderland save.");
             float[] height = null, land = null, locks = null, soil = null, water = null, waterLevel = null;
+            byte[] pave = null;
             RectInt cells;
             if (d.chunked) cells = new RectInt(d.gx, d.gz, d.nx, d.nz);
             else if (d.version >= 2)
@@ -723,6 +739,7 @@ namespace Wonderland
                 if (d.nx < 8 || d.nz < 8 || d.nx > TerrainField.MaxCells * 2 || d.nz > TerrainField.MaxCells * 2) throw new InvalidDataException("Saved terrain grid is invalid.");
                 height = Unpack(d.height, count); land = Unpack(d.land, count); locks = Unpack(d.locks, count); soil = Unpack(d.soil, count);
                 if (!string.IsNullOrEmpty(d.water)) { water = Unpack(d.water, count); waterLevel = Unpack(d.waterLevel, count); }
+                if (!string.IsNullOrEmpty(d.pave)) { try { pave = System.Convert.FromBase64String(d.pave); } catch (System.FormatException) { pave = null; } }
             }
             else MigrateV1(d, out cells, out height, out land, out locks, out soil);
             // Saves before the railway network (v1 / v2) had one railway and at most one train: one piece of track.
@@ -749,7 +766,7 @@ namespace Wonderland
                 if (d.chunks != null) foreach (var c in d.chunks) Terrain.Store.Import(c.x, c.z, c.data);
             }
             Terrain.LoadFromStore(cells);
-            if (height != null) Terrain.CopyFrom(height, land, locks, soil, water, waterLevel);
+            if (height != null) Terrain.CopyFrom(height, land, locks, soil, water, waterLevel, pave);
             var exact = (float[])Terrain.Height.Clone();   // (as saved: putting the houses back mustn't re-grade their pads)
             TerrainView.Reinit();
             Cover.Scatter();

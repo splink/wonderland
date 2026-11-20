@@ -75,6 +75,7 @@ namespace Wonderland
                     t.Section("How to").Row("Terrain", "Shape (Raise, Lower, Smooth, Flatten, Peaks) or Land (Grow, Trim): hold the trigger and sweep")
                         .Row("Water", "Ponds: hold where it should be. Streams: draw a line - it flows downhill; draw on from its end to make it longer, from its side for a branch")
                         .Row("Forest", "Woods or Special: pick a kind (mixed, leafy, pine, birch, autumn, orchard, riverside, palms), sweep for trees; Density: how close; Clear: sweep them away")
+                        .Row("Ground", "Terrain > Ground: lay paving slabs, cobbles, asphalt or gravel where a town should stand (Grass takes it up)")
                         .Row("Brush", "left stick ↔ size, ↕ strength");
                     t.Section("Example").Line("Flatten a plot, dig a pond beside it, draw a stream from the hills into the pond.");
                     break;

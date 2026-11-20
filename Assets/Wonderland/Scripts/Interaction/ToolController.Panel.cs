@@ -40,9 +40,16 @@ namespace Wonderland
                 case Tool.Terrain:
                 {
                     caption = "Brush";
-                    var shape = new Group { Name = "Shape", About = "Raise hills, dig valleys, smooth and flatten the land", Opened = () => { if (TerrainMode is TerrainBrush.Grow or TerrainBrush.Trim) TerrainMode = TerrainBrush.Raise; } };
-                    var land = new Group { Name = "Land", About = "Make the land bigger or smaller", Opened = () => { if (TerrainMode is not (TerrainBrush.Grow or TerrainBrush.Trim)) TerrainMode = TerrainBrush.Grow; } };
-                    void Brush(Group g, TerrainBrush b, string about) => g.Rows.Add(Row(Choice(b.ToString(), TerrainMode == b, () => { TerrainMode = b; RefreshOptions(); }), about));
+                    var shape = new Group { Name = "Shape", About = "Raise hills, dig valleys, smooth and flatten the land", Opened = () => { PaveKind = -1; if (TerrainMode is TerrainBrush.Grow or TerrainBrush.Trim) TerrainMode = TerrainBrush.Raise; } };
+                    var land = new Group { Name = "Land", About = "Make the land bigger or smaller", Opened = () => { PaveKind = -1; if (TerrainMode is not (TerrainBrush.Grow or TerrainBrush.Trim)) TerrainMode = TerrainBrush.Grow; } };
+                    var ground = new Group { Name = "Ground", About = "Pave the ground for a town: slabs, cobbles, asphalt, gravel", Opened = () => { if (PaveKind < 0) PaveKind = 1; } };
+                    void Brush(Group g, TerrainBrush b, string about) => g.Rows.Add(Row(Choice(b.ToString(), PaveKind < 0 && TerrainMode == b, () => { PaveKind = -1; TerrainMode = b; RefreshOptions(); }), about));
+                    void Lay(int kind, string about) => ground.Rows.Add(Row(Choice(TerrainField.Paving[kind], PaveKind == kind, () => { PaveKind = kind; RefreshOptions(); }), about));
+                    Lay(1, "Square stone slabs with joints: squares, pavements, a market place");
+                    Lay(2, "Rounded cobbles: old town streets and courtyards");
+                    Lay(3, "Dark asphalt: yards, forecourts, a car park's ground");
+                    Lay(4, "Warm gravel: garden paths, a station yard, a farmyard");
+                    Lay(0, "Takes the paving up: grass grows back");
                     Brush(shape, TerrainBrush.Raise, "Lifts the land under the pointer: hold the trigger and sweep for a hill");
                     Brush(shape, TerrainBrush.Lower, "Pushes the land down: valleys, hollows, a basin for a pond");
                     Brush(shape, TerrainBrush.Smooth, "Softens bumps, steps and sharp edges");
@@ -50,8 +57,8 @@ namespace Wonderland
                     Brush(shape, TerrainBrush.Peaks, "Grows rugged mountains with craggy rock; high tops get snow");
                     Brush(land, TerrainBrush.Grow, "Paint over the floor beyond the shore: new land grows there");
                     Brush(land, TerrainBrush.Trim, "Paint along the shore: the land shrinks back");
-                    groups.Add(shape); groups.Add(land);
-                    open = TerrainMode is TerrainBrush.Grow or TerrainBrush.Trim ? 1 : 0;
+                    groups.Add(shape); groups.Add(land); groups.Add(ground);
+                    open = PaveKind >= 0 ? 2 : TerrainMode is TerrainBrush.Grow or TerrainBrush.Trim ? 1 : 0;
                     footer = $"Brush {Radius * 100f:0} cm, strength {strength * 100f:0}%  ·  left stick ↔ size, ↕ strength";
                     break;
                 }

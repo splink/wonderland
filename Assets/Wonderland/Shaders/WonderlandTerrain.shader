@@ -49,6 +49,7 @@ Shader "Wonderland/Terrain"
                 float4 positionOS : POSITION;
                 float3 normalOS : NORMAL;
                 half4 color : COLOR;
+                float4 paving : TEXCOORD0;   // slabs, cobbles, asphalt, gravel
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
@@ -59,6 +60,7 @@ Shader "Wonderland/Terrain"
                 float3 positionOS : TEXCOORD1;
                 half3 normalWS : TEXCOORD2;
                 half3 normalOS : TEXCOORD3;
+                half4 paving : TEXCOORD4;
                 half4 color : COLOR;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
                 UNITY_VERTEX_OUTPUT_STEREO
@@ -76,6 +78,7 @@ Shader "Wonderland/Terrain"
                 o.normalWS = TransformObjectToWorldNormal(v.normalOS);
                 o.normalOS = v.normalOS;
                 o.color = v.color;
+                o.paving = v.paving;
                 return o;
             }
 
@@ -154,7 +157,8 @@ Shader "Wonderland/Terrain"
                 float2 cellP = p * 95.0;
                 float2 cell = floor(cellP);
                 float r = WL_Hash(cell);
-                half density = _FlowerDensity * (0.35 + meadow * 1.6) * (1.0 - steep) * (1.0 - soil) * saturate(edge * 3.0 - 0.6) * (1.0 - alpine * 0.8) * (1.0 - snow) * (1.0 - sand);
+                half paved = saturate(i.paving.x + i.paving.y + i.paving.z + i.paving.w);
+                half density = _FlowerDensity * (0.35 + meadow * 1.6) * (1.0 - steep) * (1.0 - soil) * saturate(edge * 3.0 - 0.6) * (1.0 - alpine * 0.8) * (1.0 - snow) * (1.0 - sand) * (1.0 - paved);
             #if !defined(_WL_TERRAIN_SIMPLE)
                 if (r < density)
                 {
@@ -171,6 +175,29 @@ Shader "Wonderland/Terrain"
 
                 half soilMask = smoothstep(0.15, 0.85, soil + (n3 - 0.5) * 0.35);
                 albedo = lerp(albedo, path * (0.85 + 0.3 * n4), soilMask);
+
+                // Paving laid by hand: slabs with joints, cobbles, asphalt, gravel (blended at their edges).
+                if (paved > 0.01)
+                {
+                    // Slabs: 2 cm squares in rows offset by half, each a touch different, dark joints between.
+                    float2 sp = p / 0.02; sp.x += floor(sp.y) * 0.5;
+                    float2 sc = floor(sp); float2 sf = frac(sp);
+                    half joint = 1.0 - smoothstep(0.02, 0.07, min(min(sf.x, 1.0 - sf.x), min(sf.y, 1.0 - sf.y)));
+                    half3 slab = half3(0.78, 0.75, 0.69) * (0.9 + 0.16 * WL_Hash(sc)) * (0.94 + 0.08 * n4);
+                    slab = lerp(slab, half3(0.46, 0.44, 0.41), joint);
+                    // Cobbles: rounded stones about 6 mm across, dark between.
+                    float2 cp = p / 0.006; cp.x += floor(cp.y) * 0.5;
+                    float2 cc = floor(cp); float2 cf = frac(cp) - 0.5;
+                    half stone = smoothstep(0.5, 0.36, length(cf * float2(1.0, 1.15)));
+                    half3 cobble = lerp(half3(0.28, 0.27, 0.27), half3(0.56, 0.54, 0.52) * (0.82 + 0.3 * WL_Hash(cc)), stone);
+                    // Asphalt: dark, fine grit.
+                    half3 asphalt = half3(0.24, 0.24, 0.26) * (0.86 + 0.22 * n4 + 0.1 * n3);
+                    // Gravel: warm, speckled.
+                    half grit = WL_Hash(floor(p / 0.0015));
+                    half3 gravel = half3(0.72, 0.66, 0.56) * (0.88 + 0.16 * grit) * (0.92 + 0.1 * n3);
+                    half3 laid = (slab * i.paving.x + cobble * i.paving.y + asphalt * i.paving.z + gravel * i.paving.w) / max(paved, 0.001);
+                    albedo = lerp(albedo, laid, smoothstep(0.35, 0.65, paved));
+                }
 
                 // Rim: a little darker and earthier, then dissolving into the real floor.
                 half rimMix = smoothstep(0.32, 0.06, edge + (n2 - 0.5) * 0.12);
