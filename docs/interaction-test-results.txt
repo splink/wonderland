@@ -49,6 +49,9 @@ PASS  Pointing at a switch, the label says what it is and what the trigger does 
 PASS  The Track tool rings every free end and switch (2: 1 ends, 1 switches); Select doesn't
 PASS  Select a switch: its card says where each way leads, and Always left / Always right / Trains choose set it [card True, pinned True, free True]
 PASS  Select the track: its card's Bend button bends it, the trigger puts it down [card True, bending1 True] - Track reshaped
+PASS  A railway across a pond gets a bridge (track: ok; 1 bridges)
+PASS  Pointing at a bridge names it; Select's trigger on it opens its card with the styles that suit it, and Lift makes it a lift bridge [hint "Stone arch bridge  ·  trigger: its card - choose its style", card True (Lift bridge), lift True]
+PASS  A tap on the bridge with the Track tool takes the next style (Stone arch bridge), and draws no track
 PASS  A building's card has Remove; B brings it back [card True, removed True, back True]
 PASS  Save and Load keep several worlds: saved as World 2 and World 3, and World 2 loads back as it was (4 buildings)
 PASS  Help opens in 8 topics as tabs; Moving tells of the two-hand twist, Buildings has its own page with an example
@@ -73,6 +76,7 @@ PASS  The right stick scrolls the world the way the player faces (80 cm east in 
 PASS  ...and left and right (22 cm north for left, facing east)
 PASS  Grip and the right stick sideways turn the world about the window's middle (30 degrees in half a second)
 PASS  Both grips held and the hands twisted turn the world with them (40 of 40 degrees); one grip alone does not
+PASS  The right grip closing first on a building, the left a moment later: the building goes back and the world turns with the hands (40 of 40 degrees; picked up first: True, back: True)
 PASS  The World button opens one panel in tabs - Place, Turn, Height, Size - each with its own buttons
 PASS  Turn right turns the world 15 degrees
 PASS  Higher lifts the world 5 cm a tap (10 cm)
