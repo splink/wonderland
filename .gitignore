@@ -88,3 +88,6 @@ __pycache__.meta
 *.avi
 *.exr
 Tests/Saves/
+
+# Editor renders (scripts/unity.sh gallery, waterrender, ...): made locally, not kept in git
+docs/renders/
