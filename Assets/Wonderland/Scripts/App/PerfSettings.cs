@@ -52,6 +52,21 @@ namespace Wonderland
         public static readonly Setting Resolution = Make("Resolution", "resolution", 0, "the eye buffers' resolution", "100%", "90%", "80%", "70%");
         public static readonly Setting Foveation = Make("Foveation", "foveation", 0, "the edges of the view drawn at lower resolution", "High", "Highest", "Medium", "Off");
 
+        public static readonly Setting FrameRate = Make("Frame rate", "framerate", 0, "the headset's refresh rate: 72 Hz is the standard; higher is smoother but leaves less time for each frame. 60 Hz only where the headset offers it (not on Quest 3)", "72 Hz", "80 Hz", "90 Hz", "120 Hz", "60 Hz");
+        private static readonly float[] Rates = { 72f, 80f, 90f, 120f, 60f };
+
+        /// <summary>The refresh rate the headset actually runs at for the setting: the one chosen, or the nearest it offers below it.</summary>
+        public static float RateFor(float wanted, float[] available)
+        {
+            if (available == null || available.Length == 0) return wanted;
+            float best = -1f;
+            foreach (float r in available) if (Mathf.Abs(r - wanted) < 0.5f) return r;
+            foreach (float r in available) if (r < wanted && r > best) best = r;
+            if (best > 0f) return best;
+            foreach (float r in available) if (best < 0f || r < best) best = r;   // (nothing below: the lowest it has)
+            return best;
+        }
+
         public static bool SmartVillagers => Villagers.Value == 0;
         public static bool ReducedDetail => Detail.Value == 0;
         public static float GrassShare => Grass.Value switch { 0 => 1f, 1 => 0.5f, _ => 0f };
@@ -80,6 +95,16 @@ namespace Wonderland
                     2 => OVRManager.FoveatedRenderingLevel.Medium, _ => OVRManager.FoveatedRenderingLevel.Off,
                 };
                 OVRManager.useDynamicFoveatedRendering = Foveation.Value != 3;
+            }
+            catch (Exception) { }
+            try
+            {
+                var display = OVRManager.display;
+                if (display != null)
+                {
+                    float rate = RateFor(Rates[FrameRate.Value], display.displayFrequenciesAvailable);
+                    if (Mathf.Abs(display.displayFrequency - rate) > 0.5f) display.displayFrequency = rate;
+                }
             }
             catch (Exception) { }
         }

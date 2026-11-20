@@ -157,6 +157,11 @@ namespace Wonderland.Editor
             var kinds = new HashSet<int>(); foreach (var tr in world.Forest.Trees) kinds.Add(tr.kind);
             Check(trees > 120, $"Forest brush paints clusters ({trees} trees, {kinds.Count} species)");
             Check(kinds.Count >= 4, "Painted forest mixes species");
+            // The frame rate setting: the headset's rate if it has it, else the nearest below (Quest 3: no 60 Hz).
+            var quest3 = new[] { 72f, 80f, 90f, 120f };
+            Check(PerfSettings.RateFor(90f, quest3) == 90f && PerfSettings.RateFor(60f, quest3) == 72f && PerfSettings.RateFor(120f, new[] { 72f, 90f }) == 90f && PerfSettings.RateFor(60f, new[] { 60f, 72f }) == 60f,
+                "The frame rate setting picks the headset's rate, or the nearest it offers (60 Hz where there is none: 72)");
+
             // City ground: slabs, cobbles, asphalt and gravel laid on the land; trees give way; saved, loaded and undone.
             world.Checkpoint();
             Hold(() => world.PaintForest(new Vector3(0.45f, 0f, -0.45f), 0.14f, 0.9f, Dt), 0.8f);
