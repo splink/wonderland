@@ -126,6 +126,7 @@ namespace Wonderland
             }
             blink += dt; freightClock += dt;
             DrawLights(dt);
+            StepGates(dt);
             foreach (var v in Vehicles) Drive(v, dt);
             Return(dt);
             StepIncidents(dt);
@@ -545,6 +546,7 @@ namespace Wonderland
             var before = v.Position;
             v.Position += fwd * v.Speed * dt;
             WatchStopLines(v, before);
+            WatchGates(v, before);
             // Into a lay-by at a bus stop; else round anything standing at the side that reaches into the lane.
             v.ShiftTo = v.PullIn > 0f ? v.PullIn : -Swerve(v, fwd);
             v.Shift = Mathf.MoveTowards(v.Shift, v.ShiftTo, 0.05f * dt);
@@ -604,9 +606,9 @@ namespace Wonderland
             // People on the road just ahead.
             var look = v.Position + fwd * (half + 0.018f);
             if (patient && world.People.NearestPerson(look, 0.016f).HasValue) limit = 0f;
-            // A level crossing ahead with a train near it.
+            // A level crossing ahead with its barriers down (or a train near one without).
             var cross = v.Position + fwd * (half + 0.04f);
-            if (world.Paths.NearLevelCrossing(cross, 0.05f) && !world.Paths.NearLevelCrossing(v.Position, 0.03f) && TrainNear(cross, 0.3f)) { limit = 0f; CrossingWaits++; }
+            if (world.Paths.NearLevelCrossing(cross, 0.05f) && !world.Paths.NearLevelCrossing(v.Position, 0.03f) && CrossingClosed(cross)) { limit = 0f; CrossingWaits++; }
             // Traffic lights ahead (always obeyed: no edging on through a red).
             float light = LightAhead(v, fwd, half);
             v.AtLight = light < 0.002f;

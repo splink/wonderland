@@ -31,8 +31,12 @@ namespace Wonderland
         public static readonly string[] Names = { "Road", "Lane", "Path", "Trail", "Fence", "Hedge", "Wall", "Highway", "Security fence", "Service road" };
         public const float Spacing = 0.01f, Snap = 0.045f;
         public readonly List<PathLine> Lines = new();
+        /// <summary>A level crossing: where (on the track, at the bed's height), the way's direction and the track's there, the way's kind, and the piece of track and how far along it.</summary>
+        public struct LevelCrossing { public Vector3 at, dir, tangent; public int kind, edge; public float s; }
         /// <summary>Level crossings: centre and the way's direction there.</summary>
-        public readonly List<(Vector3 at, Vector3 dir, int kind)> LevelCrossings = new();
+        public readonly List<LevelCrossing> LevelCrossings = new();
+        /// <summary>Changes whenever the level crossings do (the barriers are built again).</summary>
+        public int CrossingsVersion { get; private set; }
         private TerrainField terrain;
         private Material material;
         private Mesh groundMesh, barrierMesh;
@@ -227,6 +231,14 @@ namespace Wonderland
         /// its asphalt, on a path's gravel - so feet stand on the ways instead of sinking into them.
         /// </summary>
         public float WalkLift(Vector2 p)
+        {
+            float lift = WayLift(p);
+            if (lift <= 0f || LevelCrossings.Count == 0) return lift;
+            float ground = terrain.SurfaceAt(p.x, p.y);
+            return OverCrossing(p, ground + lift) - ground;   // (up over the rails at a level crossing)
+        }
+
+        private float WayLift(Vector2 p)
         {
             if (Bays.Count > 0 && BayAt(p) != null) return RoadLift;   // (a lay-by or a driveway: level with the street)
             float d = Query(p, 0.09f, li => IsWay(Lines[li].kind), out int line);
@@ -448,6 +460,7 @@ namespace Wonderland
             graph = null;
             PiecesBuilt = 0;
             Index();
+            LocateLevelCrossings();   // (first: a way rises over the rails at its crossings)
             // The junctions: found again when the ways have changed, else only levelled again where the ground has.
             bool restructured = Restructured();
             if (restructured) FindJunctions(); else Relevel();
@@ -464,7 +477,7 @@ namespace Wonderland
             }
             Gather(barriers, pieces, p => p.Props);
             foreach (var l in Lines) if (IsBarrier(l.kind)) Barrier(barriers, l);
-            FindLevelCrossings(barriers);
+            CrossingPlanks(barriers);
             ForgetPieces();
             barriers.ToMesh("Fences and hedges", barrierMesh); barrierMesh.RecalculateBounds();
         }
@@ -512,6 +525,7 @@ namespace Wonderland
                     float u = k / (float)across * 2f - 1f;
                     var q = p + right * (u * hw * taper);
                     float y = (onDeck ? deckH : terrain.SurfaceAt(q.x, q.y)) + lift * (1f - 0.35f * Mathf.Abs(u));
+                    if (LevelCrossings.Count > 0) y = OverCrossing(q, y);   // (rising over the rails)
                     b.AddVertex(new Vector3(q.x, y, q.y), Vector3.up, WayColour(l.kind, q, u));
                 }
                 if (i > 0 && !(hidden[i] && hidden[i - 1]))
@@ -680,56 +694,78 @@ namespace Wonderland
             }
         }
 
-        /// <summary>Planks between the rails where a way crosses the railway, with crossbucks beside roads and lanes.</summary>
-        private void FindLevelCrossings(MeshBuilder b)
+        /// <summary>Finds where the ways cross the railway.</summary>
+        private void LocateLevelCrossings()
         {
-            LevelCrossings.Clear();
+            var found = new List<LevelCrossing>();
             var net = network?.Invoke();
-            if (net == null || net.Empty) return;
-            foreach (var l in Lines)
-            {
-                if (!IsWay(l.kind)) continue;
-                int n = l.points.Count;
-                bool wasOn = false;
-                for (int i = 0; i < n; i++)
+            if (net != null && !net.Empty)
+                foreach (var l in Lines)
                 {
-                    var p = l.points[i];
-                    bool on = net.Nearest(new Vector3(p.x, 0f, p.y), out int edge, out float s, out float d, 0.012f);
-                    if (on && !wasOn)
+                    if (!IsWay(l.kind)) continue;
+                    int n = l.points.Count;
+                    bool wasOn = false;
+                    for (int i = 0; i < n; i++)
                     {
-                        var layout = net.Edges[edge].Layout;
-                        var c = layout.Evaluate(s, out var tangent); tangent.y = 0f; tangent.Normalize();
-                        var dir = new Vector3(l.points[Mathf.Min(i + 1, n - 1)].x - l.points[Mathf.Max(i - 1, 0)].x, 0f, l.points[Mathf.Min(i + 1, n - 1)].y - l.points[Mathf.Max(i - 1, 0)].y).normalized;
-                        LevelCrossings.Add((c, dir, l.kind));
-                        // Planks laid along the rails, filling the way's width between and beside them.
-                        float hw = Mathf.Max(HalfWidth(l.kind), 0.014f);
-                        var right = Vector3.Cross(Vector3.up, tangent);
-                        for (float off = -hw; off <= hw + 0.0001f; off += 0.0055f)
+                        var p = l.points[i];
+                        bool on = net.Nearest(new Vector3(p.x, 0f, p.y), out int edge, out float s, out float d, 0.012f);
+                        if (on && !wasOn)
                         {
-                            b.Push(c + Vector3.up * (TrackSystem.RailTop - 0.0006f) + tangent * off, Quaternion.LookRotation(right, Vector3.up));
-                            b.AddBox(Vector3.zero, new Vector3(0.005f, 0.0012f, 0.05f), Pal.Shade(Pal.Hex("#8A6A4A"), 0.9f + 0.15f * Noise.Hash(Mathf.RoundToInt(off * 1000f), i, 3)));
-                            b.Pop();
+                            var layout = net.Edges[edge].Layout;
+                            var c = layout.Evaluate(s, out var tangent); tangent.y = 0f; tangent.Normalize();
+                            var dir = new Vector3(l.points[Mathf.Min(i + 1, n - 1)].x - l.points[Mathf.Max(i - 1, 0)].x, 0f, l.points[Mathf.Min(i + 1, n - 1)].y - l.points[Mathf.Max(i - 1, 0)].y).normalized;
+                            found.Add(new LevelCrossing { at = c, dir = dir, tangent = tangent, kind = l.kind, edge = edge, s = s });
                         }
-                        if (IsCarWay(l.kind))
-                            foreach (int side in new[] { -1, 1 })
-                            {
-                                // A crossbuck sign on each side, facing the way.
-                                var post = c + right * (side * 0.055f) + dir * (side * hw * 0.8f);
-                                post.y = terrain.SurfaceAt(post.x, post.z);
-                                b.AddBox(post + Vector3.up * 0.013f, new Vector3(0.0016f, 0.026f, 0.0016f), Pal.Hex("#F7F1E6"));
-                                b.Push(post + Vector3.up * 0.024f, Quaternion.LookRotation(dir * side, Vector3.up));
-                                foreach (float a in new[] { 40f, -40f })
-                                {
-                                    b.Push(new Vector3(0f, 0f, 0.0012f), Quaternion.Euler(0f, 0f, a));
-                                    b.AddBox(Vector3.zero, new Vector3(0.016f, 0.0028f, 0.0008f), Pal.Hex("#F7F1E6"));
-                                    b.AddBox(new Vector3(0f, 0f, 0.0005f), new Vector3(0.005f, 0.0029f, 0.0004f), Pal.Hex("#E25B4F"));
-                                    b.Pop();
-                                }
-                                b.Pop();
-                            }
+                        wasOn = on;
                     }
-                    wasOn = on;
                 }
+            bool same = found.Count == LevelCrossings.Count;
+            for (int k = 0; same && k < found.Count; k++) same = (found[k].at - LevelCrossings[k].at).sqrMagnitude < 1e-10f && found[k].kind == LevelCrossings[k].kind && found[k].edge == LevelCrossings[k].edge;
+            LevelCrossings.Clear(); LevelCrossings.AddRange(found);
+            if (!same) CrossingsVersion++;
+        }
+
+        /// <summary>How far along a way its crossing's planks reach either side of the track's middle, and how far beyond that it ramps back down.</summary>
+        public const float CrossingHalf = 0.026f, CrossingRamp = 0.04f;
+
+        /// <summary>
+        /// A way over the railway rises to the rails: across the crossing its surface lies just under the rail heads (the
+        /// planks flush with it, the rails just showing), ramping down to its own level either side. Returns the surface
+        /// height there given the way's own (<paramref name="own"/>), for the way's mesh, the walkers and the wheels alike.
+        /// </summary>
+        public float OverCrossing(Vector2 p, float own)
+        {
+            foreach (var c in LevelCrossings)
+            {
+                var d = new Vector2(p.x - c.at.x, p.y - c.at.z);
+                var dir = new Vector2(c.dir.x, c.dir.z);
+                float along = Mathf.Abs(Vector2.Dot(d, dir)), across = Mathf.Abs(Vector2.Dot(d, new Vector2(dir.y, -dir.x)));
+                if (along > CrossingHalf + CrossingRamp || across > HalfWidth(c.kind) + Pavement(c.kind) + 0.01f) continue;
+                float deck = c.at.y + TrackSystem.RailTop - 0.0004f;
+                float w = along <= CrossingHalf ? 1f : 1f - Mathf.SmoothStep(0f, 1f, (along - CrossingHalf) / CrossingRamp);
+                own = Mathf.Lerp(own, Mathf.Max(own, deck), w);
+            }
+            return own;
+        }
+
+        /// <summary>Planks between the rails where a way crosses the railway, with crossbucks beside roads and lanes.</summary>
+        private void CrossingPlanks(MeshBuilder b)
+        {
+            foreach (var x in LevelCrossings)
+            {
+                var c = x.at; var tangent = x.tangent; var dir = x.dir;
+                // Planks laid along the rails, filling the way's width between and beside them - their tops flush with
+                // the way, which has risen to just under the rail heads.
+                float hw = Mathf.Max(HalfWidth(x.kind), 0.014f);
+                var right = Vector3.Cross(Vector3.up, tangent);
+                int i = Mathf.RoundToInt(c.x * 1000f) ^ Mathf.RoundToInt(c.z * 1000f);
+                for (float off = -hw; off <= hw + 0.0001f; off += 0.0055f)
+                {
+                    b.Push(c + Vector3.up * (TrackSystem.RailTop - 0.0004f - 0.0006f) + tangent * off, Quaternion.LookRotation(right, Vector3.up));
+                    b.AddBox(Vector3.zero, new Vector3(0.005f, 0.0012f, CrossingHalf * 2f - 0.002f), Pal.Shade(Pal.Hex("#8A6A4A"), 0.9f + 0.15f * Noise.Hash(Mathf.RoundToInt(off * 1000f), i, 3)));
+                    b.Pop();
+                }
+                // (streets and lanes: crossbucks on the barriers' posts - see TrafficSystem)
             }
         }
 

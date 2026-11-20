@@ -680,6 +680,7 @@ namespace Wonderland
                 var right = new Vector2(t.y, -t.x);
                 float y = float.MinValue;
                 for (int k = -2; k <= 2; k++) y = Mathf.Max(y, RoadHeight(dense[i] + right * (hw * 0.5f * k), out _));
+                y = OverCrossing(dense[i], y + RoadLift) - RoadLift;   // (rising over the rails at a level crossing)
                 if (i > 0) s += (dense[i] - dense[i - 1]).magnitude;
                 samples.Add(new RoadSample { P = dense[i], T = t, Y = y, S = s });
             }

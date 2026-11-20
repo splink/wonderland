@@ -290,12 +290,34 @@ namespace Wonderland.Editor
             w.Traffic.Refresh(true);
             Check(rail.Ok && road == null && road2 == null && train == null && w.Paths.LevelCrossings.Count > 0 && w.Traffic.Vehicles.Count > 0,
                 $"A road crosses the railway at a level crossing; homes on both sides have vehicles ({ok} places, {w.Traffic.Vehicles.Count} vehicles){road ?? road2 ?? train ?? ""}");
+            // The road rises to the rails across each crossing: its surface just under the rail heads.
+            float flush = 0f;
+            foreach (var c in w.Paths.LevelCrossings) flush = Mathf.Max(flush, Mathf.Abs(w.People.GroundHeight(new Vector2(c.at.x, c.at.z)) - (c.at.y + TrackSystem.RailTop - 0.0004f)));
+            Check(w.Paths.LevelCrossings.Count > 0 && flush < 0.0005f, $"At a level crossing the road rises flush with the rails, the planks level with it ({flush * 1000f:0.00} mm off)");
+            w.Traffic.Step(Dt);   // (the barriers are put up as the traffic next moves)
+            Check(w.Traffic.GateCount == w.Paths.LevelCrossings.Count,
+                $"Every level crossing of a road has barriers ({w.Traffic.GateCount} for {w.Paths.LevelCrossings.Count} crossings)");
             w.Clock.Hour = 9f;
-            bool hit = false;
+            bool hit = false, upUnderTrain = false;
+            var down = new bool[w.Paths.LevelCrossings.Count]; var upAgain = new bool[down.Length];
             for (float s = 0f; s < 300f; s += 0.5f)
             {
                 if (w.Clock.Hour > 17f) w.Clock.Hour = 9f;
                 Town(w, 0.5f, true);
+                for (int k = 0; k < down.Length && k < w.Traffic.GateCount; k++)
+                {
+                    var c = w.Paths.LevelCrossings[k].at;
+                    bool on = false;
+                    foreach (var tr in w.Trains.Trains)
+                    {
+                        // (on it: the loco over it, or the crossing between its ends - the train's middle within half its length)
+                        var mid = w.Trains.CentrePosition(tr); var nose = w.Trains.LocoPosition(tr);
+                        if (new Vector2(nose.x - c.x, nose.z - c.z).magnitude < 0.03f || new Vector2(mid.x - c.x, mid.z - c.z).magnitude < tr.Length * 0.45f) on = true;
+                    }
+                    if (on && w.Traffic.GateLowered(k) < 0.95f) upUnderTrain = true;
+                    if (w.Traffic.GateLowered(k) > 0.99f) down[k] = true;
+                    if (down[k] && w.Traffic.GateLowered(k) == 0f) upAgain[k] = true;
+                }
                 foreach (var v in w.Traffic.Vehicles)
                 {
                     if (v.State != TrafficSystem.Mode.Driving) continue;
@@ -309,6 +331,8 @@ namespace Wonderland.Editor
                 }
             }
             Check(w.Traffic.CrossingWaits > 0 && !hit, $"Vehicles wait at the level crossing while a train goes by ({w.Traffic.CrossingWaits} waits, {w.Traffic.Trips} trips), and are never on it with the train");
+            Check(System.Array.TrueForAll(down, d => d) && System.Array.TrueForAll(upAgain, u => u) && !upUnderTrain && w.Traffic.GateRuns == 0,
+                $"The barriers come down for every train - before it reaches the crossing - and go up again after it ({string.Join(", ", System.Linq.Enumerable.Select(System.Linq.Enumerable.Range(0, down.Length), k => $"crossing {k}: down {down[k]}, up again {upAgain[k]}"))}; up with a train on it: {upUnderTrain}; vehicles onto a closed crossing: {w.Traffic.GateRuns})");
             UnityEngine.Object.DestroyImmediate(w.gameObject);
         }
 
