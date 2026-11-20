@@ -453,6 +453,9 @@ namespace Wonderland
             peekBoat = hit && looking && !small ? World.Boats.Nearest(local, 0.015f) : -1;
             // ...and a building: grip (trigger in the Life tool) opens its card - not in Build or Eraser, where these pick up or remove.
             peekHouse = looking && !small && peekBoat < 0 && Tool != Tool.Houses && Tool != Tool.Eraser ? houseHit : -1;
+            // ...and a bridge: found by its deck, which stands above the water the ray meets below it.
+            peekBridge = looking && !small && peekBoat < 0 && houseHit < 0 ? World.Bridges.PickRay(localOrigin, dirN, hit ? (local - localOrigin).magnitude + 0.02f : 3f, out _) : -1;
+            if (input.TriggerDown) pressBridge = peekBridge;
             ShowTarget();
             // Grip, in any tool: pick up what is pointed at (a building, a train, someone) or bend the track under it.
             if (looking && input.GripDown && GrabAt(input, hit, local, houseHit))
@@ -626,9 +629,10 @@ namespace Wonderland
             if (cam >= 0 && input.LeftStick.sqrMagnitude > 0.09f) TurnCamera(input.LeftStick.x * 70f * dt, -input.LeftStick.y * 40f * dt);
             bool target = peekPerson >= 0 || peekAnimal >= 0 || peekVehicle != null || peekTrain != null || peekHouse >= 0 || peekBoat >= 0;
             if (!input.TriggerDown || target) return;
+            if (peekBridge >= 0 && !(hit && RailFixtureAt(local))) { InspectBridge(peekBridge); return; }
             if (hit && SelectRail(local)) return;
             if (cam >= 0 && hit) { cctv.AimAt(cam, local); Say($"{cctv.NameOf(cam)} now looks this way"); Haptic(0.4f, 0.03f); cardTimer = 0f; return; }
-            Say("Point at something - a villager, a building, a train, a switch, the track - and pull the trigger to select it");
+            Say("Point at something - a villager, a building, a train, a bridge, a switch, the track - and pull the trigger to select it");
         }
 
         /// <summary>Turns the selected camera (on a pole) by <paramref name="yaw"/> and tilts it by <paramref name="pitch"/> degrees.</summary>
@@ -765,8 +769,7 @@ namespace Wonderland
                 if (TrackPlanner.Length(drawn) < 0.03f)
                 {
                     // A tap: on a bridge, try its next style.
-                    var bridge = World.CycleBridge(drawn[0]);
-                    if (bridge != null) { Say(bridge + " - tap again for another style"); Haptic(0.5f, 0.05f); }
+                    TapBridge(drawn[0]);
                     drawn.Clear();
                     return;
                 }
@@ -890,7 +893,7 @@ namespace Wonderland
                     int sig = World.Track.PickSignal(drawn[0], 0.03f);
                     if (joint >= 0) { Say(World.FlipSwitch(joint)); Haptic(0.5f, 0.04f); }
                     else if (sig >= 0) { bool red = World.ToggleSignal(sig); Say(SignalSaid(red)); Haptic(0.4f, 0.04f); }
-                    else { var bridge = World.CycleBridge(drawn[0]); if (bridge != null) { Say(bridge + " - tap again for another style"); Haptic(0.5f, 0.05f); } }
+                    else TapBridge(drawn[0]);
                     World.Track.HidePreview();
                     drawn.Clear();
                     return;

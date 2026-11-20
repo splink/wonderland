@@ -8,17 +8,47 @@ namespace Wonderland
     /// Remove for most things, Stop / Go, speed and carriages for a train, which way a switch sends trains, a signal's
     /// setting, bending a piece of track. Nothing needs grip or a particular tool: select it, press the button. Moving
     /// from a card works like grip, but the trigger puts it down.
-    /// Switches, signals and pieces of track have cards too (Select, trigger on them).
+    /// Switches, signals, pieces of track and bridges have cards too (Select, trigger on them); a bridge's buttons are the
+    /// styles that suit it.
     /// </summary>
     public sealed partial class ToolController
     {
-        private Vector3 followPoint;                 // a switch's, a signal's or a piece of track's point (kinds 6, 7, 8)
+        private Vector3 followPoint;                 // a switch's, a signal's, a piece of track's or a bridge's point (kinds 6, 7, 8, 9)
 
         private void InspectSwitch(int joint) { StopCameras(); followKind = 6; followPoint = World.Track.Network.Joints[joint].Position; cardTimer = 0f; Haptic(0.4f, 0.03f); }
 
         private void InspectSignal(int sig) { StopCameras(); followKind = 7; var g = World.Track.Signals[sig]; followPoint = new Vector3(g.x, 0f, g.z); cardTimer = 0f; Haptic(0.4f, 0.03f); }
 
         private void InspectTrack(int edge, float s) { StopCameras(); followKind = 8; followPoint = World.Track.Network.Edges[edge].Layout.Evaluate(s, out _); cardTimer = 0f; Haptic(0.4f, 0.03f); }
+
+        private void InspectBridge(int bridge) { StopCameras(); followKind = 9; var a = World.Bridges.Bridges[bridge].Anchor; followPoint = new Vector3(a.x, 0f, a.y); cardTimer = 0f; Haptic(0.4f, 0.03f); }
+
+        /// <summary>Whether a switch or a signal is at a point (they are picked before the bridge they stand on).</summary>
+        private bool RailFixtureAt(Vector3 local) => World.Track.HasTrack && (World.Track.PickJoint(local, 0.045f) >= 0 || World.Track.PickSignal(local, 0.03f) >= 0);
+
+        /// <summary>A tap with Roads or Track: the bridge pointed at (or under the point) takes its next style.</summary>
+        private void TapBridge(Vector3 at)
+        {
+            var bridge = World.CycleBridge(pressBridge >= 0 ? pressBridge : World.Bridges.Pick(new Vector2(at.x, at.z)));
+            if (bridge != null) { Say(bridge + " - tap again for another style (Select: its card lists them all)"); Haptic(0.5f, 0.05f); }
+        }
+
+        /// <summary>Which boats pass under a bridge with this much room.</summary>
+        private static string Passes(float room) =>
+            room >= BoatFactory.AirDraft(BoatKind.Sailing) ? "every boat and ship, sailing boats too"
+            : room >= HarbourSystem.AirDraft ? "rowing boats, steamers and container ships - not sailing boats"
+            : room >= BoatFactory.AirDraft(BoatKind.Rowing) ? "rowing boats only" : "nothing - it is too low for any boat";
+
+        private void SetBridge(BridgeStyle style)
+        {
+            int i = FollowedRail();
+            if (i < 0 || !World.SetBridgeStyle(i, style)) return;
+            i = World.Bridges.Find(new Vector2(followPoint.x, followPoint.z));
+            if (i >= 0) { var a = World.Bridges.Bridges[i].Anchor; followPoint = new Vector3(a.x, 0f, a.y); }
+            Say(BridgeSystem.Names[(int)style] + (i >= 0 ? " - under it: " + Passes(World.Bridges.ClearanceOf(i, true)) : ""));
+            Haptic(0.5f, 0.05f);
+            cardTimer = 0f;
+        }
 
         /// <summary>Select's trigger on the railway (nothing else under the pointer): a switch's, a signal's or the track's card.</summary>
         private bool SelectRail(Vector3 local)
@@ -38,6 +68,7 @@ namespace Wonderland
             var net = World.Track.Network;
             if (followKind == 6) return World.Track.PickJoint(followPoint, 0.01f);
             if (followKind == 7) return World.Track.PickSignal(followPoint, 0.01f);
+            if (followKind == 9) return World.Bridges.Find(new Vector2(followPoint.x, followPoint.z));
             return net.Nearest(followPoint, out int edge, out _, out _, 0.05f) ? edge : -1;
         }
 
@@ -94,6 +125,7 @@ namespace Wonderland
             var net = World.Track.Network;
             head = followPoint + Vector3.up * 0.04f;
             if (followKind == 6) head = net.Joints[i].Position + Vector3.up * 0.04f;
+            else if (followKind == 9) head = World.Bridges.Middle(i) + Vector3.up * 0.04f;
             else if (followKind == 8 && net.Nearest(followPoint, out int e, out float s, out _, 0.05f)) head = net.Edges[e].Layout.Evaluate(s, out _) + Vector3.up * 0.04f;
             if (!refresh) return;
             Pin(homePin, null); Pin(workPin, null);
@@ -117,6 +149,30 @@ namespace Wonderland
                 body.Section("Now").Row("Set", red ? "held at red - trains wait here" : "automatic");
                 body.Section("Settings").Row("Automatic", "red while a train is on the line just past it").Row("Held at red", "trains wait here until you let them go");
                 Palette.ShowCard("Signal", red ? "held at red" : "automatic", body.ToString(), null, CloseCard);
+            }
+            else if (followKind == 9)
+            {
+                var b = World.Bridges.Bridges[i];
+                string carries = b.Rail && b.Road ? "the railway and a road" : b.Rail ? b.Members.Count > 1 ? $"{b.Members.Count} tracks" : "the railway" : b.Road ? "a road" : "a path";
+                body.Section("This bridge").Row("Style", BridgeSystem.Names[(int)b.Style]).Row("Carries", carries).Row("Across", $"{b.Length * 100f:0} cm");
+                float room = World.Bridges.ClearanceOf(i);
+                if (room < float.MaxValue)
+                {
+                    body.Section("Under it");
+                    if (b.Lift != null)
+                    {
+                        float open = World.Bridges.ClearanceOf(i, true);
+                        body.Row("Room", $"{room * 100f:0.0} cm - {open * 100f:0.0} cm with the span up")
+                            .Row("Span", b.Lift.Up ? "up: a boat is passing, trains wait" : b.Lift.Height > 0f ? "moving" : "down: trains cross")
+                            .Row("Passes", Passes(open));
+                    }
+                    else body.Row("Room", $"{room * 100f:0.0} cm").Row("Passes", Passes(room), room < HarbourSystem.AirDraft ? CardText.Warn : null);
+                }
+                body.Section("Styles that suit it");
+                foreach (var st in BridgeSystem.Allowed(b)) body.Row(BridgeSystem.Short[(int)st], BridgeSystem.About[(int)st]);
+                if (b.Rail && !BridgeSystem.Allowed(b).Contains(BridgeStyle.Lift))
+                    body.Row("Lift", b.Members.TrueForAll(m => m.Track) ? "needs a longer crossing (16 cm or more)" : "only for a bridge that carries just the railway", CardText.Warn);
+                Palette.ShowCard(BridgeSystem.Names[(int)b.Style], "carries " + carries, body.ToString(), null, CloseCard);
             }
             else
             {
@@ -181,6 +237,12 @@ namespace Wonderland
                     o.Add(new PaletteUI.Option("Automatic", !red, () => SetSignal(FollowedRail(), false)));
                     o.Add(new PaletteUI.Option("Hold at red", red, () => SetSignal(FollowedRail(), true)));
                     o.Add(new PaletteUI.Option("Remove", false, RemoveFromCard));
+                    break;
+                }
+                case 9:
+                {
+                    var b = World.Bridges.Bridges[i];
+                    foreach (var st in BridgeSystem.Allowed(b)) { var style = st; o.Add(new PaletteUI.Option(BridgeSystem.Short[(int)st], b.Style == st, () => SetBridge(style))); }
                     break;
                 }
                 case 8:

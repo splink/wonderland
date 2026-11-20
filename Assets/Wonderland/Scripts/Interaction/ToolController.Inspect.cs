@@ -15,7 +15,7 @@ namespace Wonderland
     /// </summary>
     public sealed partial class ToolController
     {
-        private int hoverAnimal = -1, peekPerson = -1, peekAnimal = -1, peekHouse = -1, peekBoat = -1;
+        private int hoverAnimal = -1, peekPerson = -1, peekAnimal = -1, peekHouse = -1, peekBoat = -1, peekBridge = -1, pressBridge = -1;
         private TrafficSystem.Vehicle peekVehicle, followVehicle;
         private Train peekTrain, followTrain;
         private bool trainCamera;                   // the followed train's card shows its camera
@@ -26,7 +26,8 @@ namespace Wonderland
         private string Peek()
         {
             int key = peekPerson >= 0 ? peekPerson : peekAnimal >= 0 ? 100000 + peekAnimal : peekVehicle != null ? 400000 + peekVehicle.Id
-                : peekTrain != null ? 500000 + World.Trains.Trains.IndexOf(peekTrain) : peekBoat >= 0 ? 300000 + peekBoat : peekHouse >= 0 ? 200000 + peekHouse : -1;
+                : peekTrain != null ? 500000 + World.Trains.Trains.IndexOf(peekTrain) : peekBoat >= 0 ? 300000 + peekBoat : peekHouse >= 0 ? 200000 + peekHouse
+                : peekBridge >= 0 ? 600000 + peekBridge * 8 + (int)World.Bridges.Bridges[peekBridge].Style : -1;
             if (key == peekKey && Time.time < peekUntil) return peekText;   // (worked out a few times a second, not every frame)
             peekKey = key; peekUntil = Time.time + 0.3f;
             return peekText = PeekNow();
@@ -50,6 +51,9 @@ namespace Wonderland
                 string crowd = !c.Home && c.Visitors > 0 ? $"{c.Visitors} here" : null;
                 return string.Join(" · ", new[] { c.Name, state, crowd }.Where(x => x != null)) + PeekDo(true);
             }
+            if (peekBridge >= 0 && peekBridge < World.Bridges.Bridges.Count)
+                return BridgeSystem.Names[(int)World.Bridges.Bridges[peekBridge].Style] + (Tool == Tool.Select ? "  ·  trigger: its card - choose its style"
+                    : Tool is Tool.Track or Tool.Paths ? "  ·  tap: another style  ·  Select: its card" : "  ·  Select: its card - choose its style");
             return null;
         }
         /// <summary>What a kind of place takes part in, in a few words ("makes produce · its lorry delivers it").</summary>
@@ -68,7 +72,7 @@ namespace Wonderland
         private string PeekDo(bool movable, string card = "its card") =>
             Tool == Tool.Select ? $"  ·  trigger: {card}" + (movable ? "  ·  grip: move it" : "") : movable ? "  ·  grip: move it  ·  Select: " + card : "  ·  Select: " + card;
 
-        private int followSeed, followKind;          // kind: 0 nobody, 1 a villager, 2 an animal, 3 a building, 4 a train, 5 a vehicle
+        private int followSeed, followKind;          // kind: 0 nobody, 1 a villager, 2 an animal, 3 a building, 4 a train, 5 a vehicle (6-9: Cards)
         private Vector2 followHouse;                 // the building's position (buildings are kept by where they stand)
         private float cardTimer, infoTimer;
         private int infoMode;                        // 0 closed, 1 stats, 2 help, 3 performance
@@ -215,7 +219,7 @@ namespace Wonderland
             SyncViewer();
             if (followKind == 0) return;
             int i = Followed();
-            if (i < 0) { Say(followKind == 1 ? "They have left the world" : followKind == 3 ? "It was taken down" : followKind >= 6 ? "That part of the railway has changed" : "It has gone"); CloseCard(); return; }
+            if (i < 0) { Say(followKind == 1 ? "They have left the world" : followKind == 3 ? "It was taken down" : followKind == 9 ? "The bridge has gone" : followKind >= 6 ? "That part of the railway has changed" : "It has gone"); CloseCard(); return; }
             EnsureMarkers();
             var root = World.transform;
             Vector3 head;
@@ -356,6 +360,7 @@ namespace Wonderland
             else if (peekVehicle != null) { at = new Vector3(peekVehicle.Position.x, peekVehicle.Height, peekVehicle.Position.y); r = VehicleFactory.Length(peekVehicle.Kind) * 0.62f; }
             else if (peekTrain != null) { var c = World.Trains.LocoPosition(peekTrain); at = c; r = 0.04f; }
             else if (peekHouse >= 0) { var h = World.Buildings.Houses[peekHouse]; var e = Catalog.Get(h.variant).Half; at = new Vector3(h.x, World.Terrain.SurfaceAt(h.x, h.z), h.z); r = Mathf.Max(e.x, e.y) + 0.01f; }
+            else if (peekBridge >= 0 && Tool == Tool.Select) { at = World.Bridges.Middle(peekBridge); r = 0.03f; }
             if (targetRing == null)
             {
                 var b = new MeshBuilder();

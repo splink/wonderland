@@ -471,14 +471,26 @@ namespace Wonderland
         }
 
         /// <summary>Tap on a bridge: the next style that suits it (checkpointed). Returns its name, or null if there is no bridge.</summary>
-        public string CycleBridge(Vector3 local)
+        public string CycleBridge(Vector3 local) => CycleBridge(Bridges.Pick(new Vector2(local.x, local.z)));
+
+        /// <summary>Bridge <paramref name="i"/> takes its next style (checkpointed). Returns its name, or null if there is no such bridge.</summary>
+        public string CycleBridge(int i)
         {
-            int i = Bridges.Pick(new Vector2(local.x, local.z));
-            if (i < 0) return null;
+            if (i < 0 || i >= Bridges.Bridges.Count) return null;
             Checkpoint();
             var style = Bridges.Cycle(i);
             RefreshBridges();
             return BridgeSystem.Names[(int)style];
+        }
+
+        /// <summary>Bridge <paramref name="i"/> in a style of its own choosing (checkpointed). False if it doesn't suit it.</summary>
+        public bool SetBridgeStyle(int i, BridgeStyle style)
+        {
+            if (i < 0 || i >= Bridges.Bridges.Count || Bridges.Bridges[i].Style == style || !BridgeSystem.Allowed(Bridges.Bridges[i]).Contains(style)) return false;
+            Checkpoint();
+            Bridges.Choose(i, style);
+            RefreshBridges();
+            return true;
         }
 
         /// <summary>Where a grip on a piece of track would bend it to (no change yet): an error, and the preview line.</summary>

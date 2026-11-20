@@ -447,6 +447,7 @@ namespace Wonderland.Editor
                     Check(trackCard && bending1 && !tools.Holding && tools.LastMessage == "Track reshaped", $"Select the track: its card's Bend button bends it, the trigger puts it down [card {trackCard}, bending1 {bending1}] - {tools.LastMessage}");
                     world.Undo();
                 }
+                BridgeCard(hand);
             }
             // A building's card: Move (trigger puts it down), Remove (B brings it back).
             {
@@ -749,6 +750,51 @@ namespace Wonderland.Editor
             Check(world.Lift == 0f && !tools.PlacingWorld && !palette.InfoShown && Mathf.Abs(world.PlacementPosition.y - floorY) < 1e-3f, "Floor puts it back on the floor, Close puts it down and closes the panel");
             world.UseWindow(false);
             UnityEngine.Object.DestroyImmediate(head.gameObject);
+        }
+
+        /// <summary>
+        /// A railway across a pond gets a bridge: pointing at its deck names it; Select's trigger on it opens its card, whose
+        /// buttons are the styles that suit it (Lift among them); a tap on the deck with the Track tool, from the side,
+        /// takes the next style. All undone afterwards.
+        /// </summary>
+        private static void BridgeCard(Vector3 hand)
+        {
+            var t = world.Terrain;
+            var pond = new Vector3(-0.45f, 0f, 0.5f);
+            world.Checkpoint();
+            float lvl = world.WaterLevelForStroke(pond);
+            for (float s = 0f; s < 1.6f; s += Dt) world.WaterStroke(pond, 0.15f, 1f, Dt, lvl, false);
+            var line = new List<Vector3>();
+            for (float x = -0.34f; x <= 0.341f; x += 0.02f) line.Add(t.PointAt(pond.x + x, pond.z));
+            var plan = world.BuildTrack(line);
+            int bi = world.Bridges.Find(new Vector2(pond.x, pond.z));
+            Check(plan.Ok && bi >= 0, $"A railway across a pond gets a bridge (track: {plan.Error ?? "ok"}; {world.Bridges.Bridges.Count} bridges)");
+            if (!plan.Ok || bi < 0) { world.Undo(); if (plan.Ok) world.Undo(); return; }
+            string was = BridgeSystem.Names[(int)world.Bridges.Bridges[bi].Style];
+            ClickButton(hand, "Select");
+            tools.CloseCards();
+            var deck = world.transform.TransformPoint(world.Bridges.Middle(bi));
+            Frame(hand, deck, false); Frame(hand, deck, false);
+            string hint = palette.HintText ?? "";
+            Frame(hand, deck, true); Frame(hand, deck, false);
+            bool card = palette.CardShown && palette.CardTitle == was && Find("Lift") != null && Find("Steel truss") != null;
+            ClickButton(hand, "Lift");
+            for (int i = 0; i < 3; i++) Frame(hand, hand + Vector3.forward, false);
+            bi = world.Bridges.Find(new Vector2(pond.x, pond.z));
+            bool lift = bi >= 0 && world.Bridges.Bridges[bi].Style == BridgeStyle.Lift && palette.CardTitle == "Lift bridge";
+            Check(hint.Contains(was) && card && lift,
+                $"Pointing at a bridge names it; Select's trigger on it opens its card with the styles that suit it, and Lift makes it a lift bridge [hint \"{hint}\", card {card} ({palette.CardTitle}), lift {lift}]");
+            // A tap from the side with the Track tool: the deck is found by the ray, not the water under it.
+            tools.CloseCards();
+            ClickButton(hand, "Track");
+            var side = world.transform.TransformPoint(world.Bridges.Middle(bi) + new Vector3(0f, 0f, -0.01f));
+            int edges = world.Track.Network.Edges.Count;
+            Frame(hand, side, false); Frame(hand, side, true); Frame(hand, side, false);
+            bi = world.Bridges.Find(new Vector2(pond.x, pond.z));
+            var after = bi >= 0 ? world.Bridges.Bridges[bi].Style : BridgeStyle.Lift;
+            Check(after != BridgeStyle.Lift && world.Track.Network.Edges.Count == edges, $"A tap on the bridge with the Track tool takes the next style ({BridgeSystem.Names[(int)after]}), and draws no track");
+            ClickButton(hand, "Select");
+            for (int k = 0; k < 4; k++) world.Undo();
         }
 
         private static void ClickButton(Vector3 hand, string label)

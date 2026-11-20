@@ -32,6 +32,14 @@ namespace Wonderland
     public sealed class BridgeSystem : MonoBehaviour
     {
         public static readonly string[] Names = { "Stone arch bridge", "Timber trestle", "Steel truss bridge", "Suspension bridge", "Covered bridge", "Footbridge", "Stepping stones", "Lift bridge" };
+        /// <summary>The styles' names on a card's buttons, and what each is.</summary>
+        public static readonly string[] Short = { "Stone arch", "Timber", "Steel truss", "Suspension", "Covered", "Footbridge", "Stones", "Lift" };
+        public static readonly string[] About =
+        {
+            "arches of stone", "a wooden trestle", "steel girders, for long crossings", "hung from two towers, for wide water",
+            "a wooden bridge with a roof", "a light deck for walkers", "stones to step across - nothing sails past",
+            "its middle span goes up for ships and tall boats; trains wait while it is up",
+        };
         public const int Bank = 4, RoadBank = 16;   // points of approach on each bank (1 cm apart): a path's, a road's
         /// <summary>A lift span rises this far, this fast; trains keep this far short of it while it is not down.</summary>
         public const float LiftRise = 0.065f, LiftSpeed = 0.022f, LiftApproach = 0.03f;
@@ -396,12 +404,77 @@ namespace Wonderland
         /// <summary>Changes a bridge to the next style that suits it and remembers the choice. Returns the new style.</summary>
         public BridgeStyle Cycle(int bridge)
         {
-            var b = Bridges[bridge];
-            var allowed = Allowed(b);
-            var next = allowed[(allowed.IndexOf(b.Style) + 1) % allowed.Count];
-            Choices.RemoveAll(c => (new Vector2(c.x, c.z) - b.Anchor).magnitude < 0.12f);
-            Choices.Add(new BridgeChoice { x = b.Anchor.x, z = b.Anchor.y, style = (int)next });
+            var allowed = Allowed(Bridges[bridge]);
+            var next = allowed[(allowed.IndexOf(Bridges[bridge].Style) + 1) % allowed.Count];
+            Choose(bridge, next);
             return next;
+        }
+
+        /// <summary>Remembers a style for a bridge (it takes on the next rebuild). False if the style doesn't suit it.</summary>
+        public bool Choose(int bridge, BridgeStyle style)
+        {
+            var b = Bridges[bridge];
+            if (!Allowed(b).Contains(style)) return false;
+            Choices.RemoveAll(c => (new Vector2(c.x, c.z) - b.Anchor).magnitude < 0.12f);
+            Choices.Add(new BridgeChoice { x = b.Anchor.x, z = b.Anchor.y, style = (int)style });
+            return true;
+        }
+
+        /// <summary>The bridge whose anchor is nearest a point (within 12 cm: a rebuild may move it a little), or -1.</summary>
+        public int Find(Vector2 anchor)
+        {
+            int best = -1; float bestD = 0.12f;
+            for (int i = 0; i < Bridges.Count; i++) { float d = (Bridges[i].Anchor - anchor).magnitude; if (d < bestD) { bestD = d; best = i; } }
+            return best;
+        }
+
+        /// <summary>
+        /// The bridge a ray (local, normalised) points at - the first deck it passes within reach of - or -1. Its deck
+        /// stands above the water, so the point where the ray meets the land below is off to one side of it.
+        /// </summary>
+        public int PickRay(Vector3 origin, Vector3 dir, float reach, out float distance)
+        {
+            int best = -1; distance = reach;
+            for (int bi = 0; bi < Bridges.Count; bi++)
+                foreach (var m in Bridges[bi].Members)
+                {
+                    float r = m.HalfWidth + 0.006f;
+                    foreach (var q in m.Points)
+                    {
+                        float t = Vector3.Dot(q - origin, dir);
+                        if (t <= 0f || t >= distance) continue;
+                        if ((origin + dir * t - q).sqrMagnitude < r * r) { distance = t; best = bi; }
+                    }
+                }
+            return best;
+        }
+
+        /// <summary>The middle of a bridge's deck (local), for a marker over it.</summary>
+        public Vector3 Middle(int bridge)
+        {
+            var pts = Bridges[bridge].Members[Bridges[bridge].Spine].Points;
+            return pts[pts.Count / 2];
+        }
+
+        /// <summary>
+        /// The least room under a bridge over its water (metres, water to the underside of the deck); a lift span counts as
+        /// it is when up if <paramref name="open"/>. <see cref="float.MaxValue"/> where it crosses no water.
+        /// </summary>
+        public float ClearanceOf(int bridge, bool open = false)
+        {
+            var b = Bridges[bridge];
+            float room = float.MaxValue;
+            foreach (var m in b.Members)
+                for (int i = 0; i < m.Points.Count; i++)
+                {
+                    var q = m.Points[i];
+                    float level = waterLevel(new Vector2(q.x, q.z));
+                    if (level < 0f) continue;
+                    float under = b.Style == BridgeStyle.Stones ? level : q.y - (m.Track ? 0.01f : 0.006f);
+                    if (m.Lift != null && i >= m.Lift0 && i <= m.Lift1) under += open ? LiftRise : m.Lift.Height;
+                    room = Mathf.Min(room, Mathf.Max(0f, under - level));
+                }
+            return room;
         }
 
         // ------------------------------------------------------------------ decks for paths and walkers
